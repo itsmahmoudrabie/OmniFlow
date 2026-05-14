@@ -1,0 +1,237 @@
+/**
+ * Shopify OAuth + Webhooks module for OmniFlow
+ * ----------------------------------------------
+ * Multi-store install flow for Shopify App Store / Custom Apps.
+ *
+ * Usage in index.js:
+ *   const { mountShopifyOAuth, verifyShopifyWebhook, getShopToken } = require('./shopify-oauth');
+ *   mountShopifyOAuth(app, CONFIG);
+ *
+ * Env vars required:
+ *   SHOPIFY_API_KEY        — from Partners dashboard (Client ID)
+ *   SHOPIFY_API_SECRET     — from Partners dashboard (Client Secret)
+ *   SHOPIFY_APP_URL        — public HTTPS URL of this server (Railway URL)
+ *   SHOPIFY_SCOPES         — comma-separated, e.g. read_products,read_orders,write_orders,read_customers
+ */
+const crypto = require('crypto');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+const SHOPS_FILE = path.join(__dirname, 'shops.json');
+
+// ─── Shop registry (persisted) ───
+const loadShops = () => {
+    if (!fs.existsSync(SHOPS_FILE)) return {};
+    try { return JSON.parse(fs.readFileSync(SHOPS_FILE, 'utf8') || '{}'); }
+    catch { return {}; }
+};
+const saveShops = (data) => fs.writeFileSync(SHOPS_FILE, JSON.stringify(data, null, 2));
+
+const getShopToken = (shop) => {
+    const shops = loadShops();
+    return shops[shop]?.access_token || null;
+};
+
+const setShopToken = (shop, access_token, scope) => {
+    const shops = loadShops();
+    shops[shop] = {
+        access_token,
+        scope,
+        installed_at: shops[shop]?.installed_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+    saveShops(shops);
+};
+
+// ─── HMAC verification ───
+const verifyOAuthHmac = (query, secret) => {
+    const { hmac, signature, ...rest } = query;
+    if (!hmac) return false;
+    const message = Object.keys(rest)
+        .sort()
+        .map(k => `${k}=${Array.isArray(rest[k]) ? rest[k].join(',') : rest[k]}`)
+        .join('&');
+    const generated = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return crypto.timingSafeEqual(Buffer.from(hmac, 'utf8'), Buffer.from(generated, 'utf8'));
+};
+
+const verifyShopifyWebhook = (rawBody, hmacHeader, secret) => {
+    if (!hmacHeader) return false;
+    const generated = crypto
+        .createHmac('sha256', secret)
+        .update(rawBody, 'utf8')
+        .digest('base64');
+    try {
+        return crypto.timingSafeEqual(Buffer.from(hmacHeader), Buffer.from(generated));
+    } catch { return false; }
+};
+
+const isValidShopDomain = (shop) =>
+    typeof shop === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop);
+
+// ─── Mount OAuth routes onto Express app ───
+const mountShopifyOAuth = (app, CONFIG = {}) => {
+    const API_KEY    = process.env.SHOPIFY_API_KEY || '';
+    const API_SECRET = process.env.SHOPIFY_API_SECRET || '';
+    const APP_URL    = (process.env.SHOPIFY_APP_URL || process.env.HOST || '').replace(/\/$/, '');
+    const SCOPES     = (process.env.SHOPIFY_SCOPES ||
+        'read_products,read_orders,write_orders,read_customers,read_inventory,read_fulfillments,write_fulfillments').trim();
+
+    if (!API_KEY || !API_SECRET || !APP_URL) {
+        console.warn('[Shopify OAuth] Missing SHOPIFY_API_KEY / SHOPIFY_API_SECRET / SHOPIFY_APP_URL — OAuth disabled.');
+    }
+
+    // 1) Install entry: /auth?shop=YOUR-SHOP.myshopify.com
+    app.get('/auth', (req, res) => {
+        const shop = String(req.query.shop || '').toLowerCase();
+        if (!isValidShopDomain(shop)) return res.status(400).send('Invalid shop domain');
+        const state = crypto.randomBytes(16).toString('hex');
+        res.cookie?.('shopify_oauth_state', state, { httpOnly: true, sameSite: 'none', secure: true });
+
+        const redirectUri = `${APP_URL}/auth/callback`;
+        const installUrl =
+            `https://${shop}/admin/oauth/authorize` +
+            `?client_id=${encodeURIComponent(API_KEY)}` +
+            `&scope=${encodeURIComponent(SCOPES)}` +
+            `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+            `&state=${encodeURIComponent(state)}` +
+            `&grant_options[]=per-user`.replace('per-user', ''); // offline access token
+
+        res.redirect(installUrl);
+    });
+
+    // 2) Callback: Shopify redirects here after merchant approves
+    app.get('/auth/callback', async (req, res) => {
+        const { shop, hmac, code, state } = req.query;
+
+        if (!isValidShopDomain(shop)) return res.status(400).send('Invalid shop');
+        if (!hmac || !code) return res.status(400).send('Missing hmac/code');
+        if (!verifyOAuthHmac(req.query, API_SECRET)) return res.status(400).send('HMAC verification failed');
+
+        try {
+            // Exchange code for access token
+            const tokenRes = await axios.post(`https://${shop}/admin/oauth/access_token`, {
+                client_id: API_KEY,
+                client_secret: API_SECRET,
+                code
+            });
+            const { access_token, scope } = tokenRes.data;
+            setShopToken(shop, access_token, scope);
+
+            // Backwards-compat: update single-store CONFIG so existing endpoints work
+            if (CONFIG && typeof CONFIG === 'object') {
+                CONFIG.shopify_url = `https://${shop}`;
+                CONFIG.shopify_access_token = access_token;
+            }
+
+            // Register mandatory webhooks (best-effort)
+            await registerWebhooks(shop, access_token, APP_URL).catch(e =>
+                console.warn('[Shopify] Webhook registration warning:', e.message)
+            );
+
+            // Redirect into the embedded app inside Shopify admin
+            const host = req.query.host
+                ? `&host=${encodeURIComponent(req.query.host)}`
+                : '';
+            res.redirect(`/?shop=${encodeURIComponent(shop)}${host}`);
+        } catch (err) {
+            console.error('[Shopify OAuth] Token exchange failed:', err.response?.data || err.message);
+            res.status(500).send('OAuth token exchange failed');
+        }
+    });
+
+    // 3) Webhook receiver (raw body required for HMAC).
+    //    IMPORTANT: mount `app.use('/webhooks/shopify', express.raw({ type: 'application/json' }))`
+    //    BEFORE bodyParser.json in your main file — see index.js patch in setup guide.
+    app.post('/webhooks/shopify/:topic', (req, res) => {
+        const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
+        const shop = req.get('X-Shopify-Shop-Domain');
+        const topic = req.params.topic;
+
+        const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+        if (!verifyShopifyWebhook(rawBody, hmacHeader, API_SECRET)) {
+            return res.status(401).send('Invalid HMAC');
+        }
+        const payload = JSON.parse(rawBody.toString('utf8'));
+
+        // GDPR mandatory webhooks
+        if (['customers/data_request', 'customers/redact', 'shop/redact'].includes(topic)) {
+            console.log(`[GDPR] ${topic} from ${shop}`);
+            return res.sendStatus(200);
+        }
+
+        // App uninstalled — clean up stored token
+        if (topic === 'app/uninstalled') {
+            const shops = loadShops();
+            delete shops[shop];
+            saveShops(shops);
+            console.log(`[Shopify] Uninstalled: ${shop}`);
+            return res.sendStatus(200);
+        }
+
+        // Order created → forward to OmniFlow's internal handler if defined
+        console.log(`[Webhook] ${topic} from ${shop} (id=${payload.id})`);
+        try { app.emit('shopify:webhook', { topic, shop, payload }); } catch {}
+        res.sendStatus(200);
+    });
+
+    // 4) Helper: shop status (for the dashboard)
+    app.get('/api/shopify/connection', (req, res) => {
+        const shops = loadShops();
+        const list = Object.entries(shops).map(([shop, info]) => ({
+            shop,
+            scope: info.scope,
+            installed_at: info.installed_at
+        }));
+        res.json({ connected: list.length > 0, shops: list });
+    });
+
+    console.log(`[Shopify OAuth] Routes mounted. Install URL: ${APP_URL}/auth?shop=YOUR-STORE.myshopify.com`);
+};
+
+// ─── Webhook auto-registration ───
+async function registerWebhooks(shop, token, appUrl) {
+    const topics = [
+        'orders/create',
+        'orders/updated',
+        'orders/fulfilled',
+        'orders/cancelled',
+        'checkouts/create',
+        'checkouts/update',
+        'customers/create',
+        'app/uninstalled',
+        'customers/data_request',
+        'customers/redact',
+        'shop/redact'
+    ];
+    const url = `https://${shop}/admin/api/2024-10/webhooks.json`;
+    for (const topic of topics) {
+        try {
+            await axios.post(url, {
+                webhook: {
+                    topic,
+                    address: `${appUrl}/webhooks/shopify/${topic.replace('/', '_')}`,
+                    format: 'json'
+                }
+            }, {
+                headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
+            });
+        } catch (e) {
+            // 422 = already exists; ignore
+            if (e.response?.status !== 422) {
+                console.warn(`[Webhook] Failed to register ${topic}: ${e.response?.data?.errors || e.message}`);
+            }
+        }
+    }
+}
+
+module.exports = {
+    mountShopifyOAuth,
+    verifyShopifyWebhook,
+    verifyOAuthHmac,
+    getShopToken,
+    setShopToken,
+    loadShops,
+    isValidShopDomain
+};

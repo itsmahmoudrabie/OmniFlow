@@ -1,0 +1,56 @@
+# Shopify App configuration — managed by Shopify CLI
+# Run `shopify app config link` after creating the app in Partners dashboard.
+# Docs: https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
+
+client_id = "YOUR_CLIENT_ID_HERE"
+name = "OmniFlow"
+handle = "omniflow"
+application_url = "https://YOUR-APP.up.railway.app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "your-dev-store.myshopify.com"
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2024-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/shopify/app_uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create", "orders/updated", "orders/fulfilled", "orders/cancelled" ]
+  uri = "/webhooks/shopify/orders"
+
+  [[webhooks.subscriptions]]
+  topics = [ "checkouts/create", "checkouts/update" ]
+  uri = "/webhooks/shopify/checkouts"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/create" ]
+  uri = "/webhooks/shopify/customers_create"
+
+  # GDPR mandatory compliance webhooks
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/shopify/gdpr"
+
+[access_scopes]
+# Permissions requested at install time
+scopes = "read_products,read_orders,write_orders,read_customers,read_inventory,read_fulfillments,write_fulfillments,read_checkouts"
+
+[auth]
+redirect_urls = [
+  "https://YOUR-APP.up.railway.app/auth/callback",
+  "https://YOUR-APP.up.railway.app/auth/shopify/callback"
+]
+
+[pos]
+embedded = false
+
+[app_proxy]
+url = "https://YOUR-APP.up.railway.app/proxy"
+subpath = "omniflow"
+prefix = "apps"
