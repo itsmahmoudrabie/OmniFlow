@@ -4091,6 +4091,10 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                 className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all text-sm">
                                 {isEn ? "Let's start →" : 'هيا نبدأ ←'}
                             </button>
+                            <button onClick={() => onComplete('')}
+                                className="w-full py-2 rounded-xl text-[11px] font-bold text-brand-muted hover:text-brand-egg transition-all">
+                                {isEn ? 'Skip for now →' : 'تخطي الآن ←'}
+                            </button>
                         </div>
                     )}
 
