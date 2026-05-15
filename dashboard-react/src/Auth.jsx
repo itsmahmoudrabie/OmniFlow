@@ -352,24 +352,31 @@ export const RegisterPage = ({ lang = 'ar', selectedPlan = 'starter', onSuccess,
 
 // ── Shopify Login Page ────────────────────────────────────────────────────────
 export const LoginPage = ({ lang = 'ar', onLogin }) => {
-    const isEn = lang === 'en';
     const [shop, setShop] = React.useState('');
     const [langState, setLangState] = React.useState(lang);
     const en = langState === 'en';
 
-    // Clean shop input: remove https://, trailing slashes, spaces
-    const cleanShop = (val) => {
-        return val.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+    // Auto-detect shop from URL ?shop= param (when opened from Shopify admin)
+    const urlShop = React.useMemo(() => {
+        const p = new URLSearchParams(window.location.search);
+        return p.get('shop') || '';
+    }, []);
+
+    const cleanShop = (val) =>
+        val.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+
+    const doOAuth = (shopDomain) => {
+        let s = cleanShop(shopDomain);
+        if (!s.endsWith('.myshopify.com')) s = `${s}.myshopify.com`;
+        const target = `/auth?shop=${encodeURIComponent(s)}`;
+        // Break out of Shopify iframe if needed
+        if (window.top !== window.self) window.top.location.href = target;
+        else window.location.href = target;
     };
 
     const handleConnect = (e) => {
         e.preventDefault();
-        let s = cleanShop(shop);
-        if (!s) return;
-        // Append .myshopify.com if missing
-        if (!s.endsWith('.myshopify.com')) s = `${s}.myshopify.com`;
-        // Redirect to server Shopify OAuth
-        window.location.href = `/auth?shop=${encodeURIComponent(s)}`;
+        doOAuth(urlShop || shop);
     };
 
     return (
@@ -409,26 +416,33 @@ export const LoginPage = ({ lang = 'ar', onLogin }) => {
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider">
-                            {en ? 'Your Shopify store URL' : 'رابط متجر Shopify'}
-                        </label>
-                        <div className="relative" dir="ltr">
-                            <input
-                                value={shop}
-                                onChange={e => setShop(e.target.value)}
-                                placeholder="my-store.myshopify.com"
-                                required
-                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-accent text-brand-egg pr-36"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted font-bold opacity-50">
-                                .myshopify.com
-                            </span>
+                    {/* If shop detected from URL, show it — otherwise show input */}
+                    {urlShop ? (
+                        <div className="rounded-xl px-4 py-3 text-sm text-brand-egg font-bold" style={{background:'rgba(150,191,72,0.1)', border:'1px solid rgba(150,191,72,0.3)'}}>
+                            🏪 {urlShop}
                         </div>
-                        <p className="text-[10px] text-brand-muted">
-                            {en ? 'e.g. my-store or my-store.myshopify.com' : 'مثال: my-store أو my-store.myshopify.com'}
-                        </p>
-                    </div>
+                    ) : (
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider">
+                                {en ? 'Your Shopify store URL' : 'رابط متجر Shopify'}
+                            </label>
+                            <div className="relative" dir="ltr">
+                                <input
+                                    value={shop}
+                                    onChange={e => setShop(e.target.value)}
+                                    placeholder="my-store.myshopify.com"
+                                    required
+                                    className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-accent text-brand-egg pr-36"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted font-bold opacity-50">
+                                    .myshopify.com
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-brand-muted">
+                                {en ? 'e.g. my-store or my-store.myshopify.com' : 'مثال: my-store أو my-store.myshopify.com'}
+                            </p>
+                        </div>
+                    )}
 
                     <button type="submit"
                         className="w-full py-3 rounded-xl font-black text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2"
