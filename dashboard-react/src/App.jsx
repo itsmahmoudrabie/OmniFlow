@@ -585,7 +585,9 @@ const App = () => {
         return <RegisterPage plan={plan} onSuccess={handleLogin} onBack={() => setAuthScreen('pricing')} />;
     }
 
-    if (showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={() => setShowPricing(false)} />;
+    // New users (no charge yet) must pick a plan before accessing the dashboard
+    const needsPlan = authTenant && !authTenant.shopifyChargeId && authTenant._id !== 'dev-admin-001';
+    if (needsPlan || showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={showPricing ? () => setShowPricing(false) : null} />;
 
     if (!isConfigured) {
         return <OnboardingScreen lang={lang} onLangChange={setLang} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
