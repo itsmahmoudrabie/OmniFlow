@@ -235,8 +235,8 @@ export const RegisterPage = ({ lang = 'ar', selectedPlan = 'starter', onSuccess,
         onSuccess(token, tenant);
     };
 
-    const InputField = ({ k, label, type = 'text', placeholder }) => (
-        <div className="space-y-1">
+    const renderField = ({ k, label, type = 'text', placeholder }) => (
+        <div className="space-y-1" key={k}>
             <label className="text-xs font-bold text-brand-muted">{label}</label>
             <div dir="ltr">
                 <input type={type} value={form[k]} onChange={e => set(k, e.target.value)}
@@ -295,10 +295,10 @@ export const RegisterPage = ({ lang = 'ar', selectedPlan = 'starter', onSuccess,
                 {/* Step 1 — Account */}
                 {step === 1 && (
                     <form onSubmit={handleRegister} className="glass rounded-2xl p-6 space-y-4">
-                        <InputField k="name" label={isEn ? 'Full name' : 'الاسم الكامل'} placeholder={isEn ? 'Ahmed Mohamed' : 'أحمد محمد'} />
-                        <InputField k="email" label={isEn ? 'Email' : 'البريد الإلكتروني'} type="email" placeholder="ahmed@company.com" />
-                        <InputField k="password" label={isEn ? 'Password' : 'كلمة المرور'} type="password" placeholder="••••••••" />
-                        <InputField k="confirmPassword" label={isEn ? 'Confirm password' : 'تأكيد كلمة المرور'} type="password" placeholder="••••••••" />
+                        {renderField({ k:"name", label:isEn ? 'Full name' : 'الاسم الكامل', placeholder:isEn ? 'Ahmed Mohamed' : 'أحمد محمد' })}
+                        {renderField({ k:"email", label:isEn ? 'Email' : 'البريد الإلكتروني', type:"email", placeholder:"ahmed@company.com" })}
+                        {renderField({ k:"password", label:isEn ? 'Password' : 'كلمة المرور', type:"password", placeholder:"••••••••" })}
+                        {renderField({ k:"confirmPassword", label:isEn ? 'Confirm password' : 'تأكيد كلمة المرور', type:"password", placeholder:"••••••••" })}
 
                         {error && <p className="text-red-400 text-xs font-bold text-center">{error}</p>}
 

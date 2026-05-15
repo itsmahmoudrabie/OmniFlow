@@ -4583,8 +4583,8 @@ const SetupManager = ({ showToast, lang, onSave }) => {
         </div>
     );
 
-    const Toggle = ({ label, field, description }) => (
-        <div className="flex items-center justify-between py-2.5 border-b border-brand-border/10 last:border-0">
+    const renderToggle = ({ label, field, description }) => (
+        <div key={field} className="flex items-center justify-between py-2.5 border-b border-brand-border/10 last:border-0">
             <div>
                 <p className="text-[12px] font-semibold text-brand-egg">{label}</p>
                 {description && <p className="text-[10px] text-brand-muted mt-0.5">{description}</p>}
@@ -4600,7 +4600,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     const avatarColor = (name) => avatarColors[name?.charCodeAt(0) % avatarColors.length] || '#8CC850';
 
     // ── Integration status card ──────────────────────────────────────────────
-    const IntCard = ({ icon: Icon, iconBg, name, subtitle, stat, connectedAt, status }) => (
+    const renderIntCard = ({ icon: Icon, iconBg, name, subtitle, stat, connectedAt, status }) => (
         <div className="glass rounded-2xl p-4 flex flex-col gap-3">
             <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -4684,27 +4684,9 @@ const SetupManager = ({ showToast, lang, onSave }) => {
 
                 {/* 3 integration status cards */}
                 <div className="grid grid-cols-3 gap-3">
-                    <IntCard
-                        icon={MessageCircle} iconBg="#25D366"
-                        name="WhatsApp Cloud" subtitle={ws.wa_phone || (isEn ? 'Not connected' : 'غير متصل')}
-                        stat={waConnected ? (isEn ? 'Official Meta API connected' : 'Meta API متصل') : (isEn ? 'Add credentials to connect' : 'أضف بيانات الاتصال')}
-                        connectedAt={integrations.wa?.connected_at || null}
-                        status={waConnected ? 'connected' : 'disconnected'}
-                    />
-                    <IntCard
-                        icon={ShoppingCart} iconBg="#96BF48"
-                        name="Shopify" subtitle={ws.shopify_store || (isEn ? 'Not connected' : 'غير متصل')}
-                        stat={integrations.shopify ? `${integrations.shopify.products || 0} ${isEn ? 'products' : 'منتج'} · ${integrations.shopify.orders || 0} ${isEn ? 'orders' : 'طلب'}` : (isEn ? 'Add store URL to connect' : 'أضف رابط المتجر')}
-                        connectedAt={integrations.shopify?.connected_at || null}
-                        status={shopConnected ? 'synced' : 'disconnected'}
-                    />
-                    <IntCard
-                        icon={Sparkles} iconBg="#FF6B35"
-                        name="AI Assistant"
-                        stat={aiActive ? (isEn ? 'AI assistant active' : 'مساعد AI نشط') : (isEn ? 'AI assistant disabled' : 'مساعد AI معطل')}
-                        connectedAt={integrations.ai?.connected_at || null}
-                        status={aiActive ? 'active' : 'disconnected'}
-                    />
+                    {renderIntCard({ icon:MessageCircle, iconBg:"#25D366", name:"WhatsApp Cloud", subtitle:ws.wa_phone||(isEn?'Not connected':'غير متصل'), stat:waConnected?(isEn?'Official Meta API connected':'Meta API متصل'):(isEn?'Add credentials to connect':'أضف بيانات الاتصال'), connectedAt:integrations.wa?.connected_at||null, status:waConnected?'connected':'disconnected' })}
+                    {renderIntCard({ icon:ShoppingCart, iconBg:"#96BF48", name:"Shopify", subtitle:ws.shopify_store||(isEn?'Not connected':'غير متصل'), stat:integrations.shopify?`${integrations.shopify.products||0} ${isEn?'products':'منتج'} · ${integrations.shopify.orders||0} ${isEn?'orders':'طلب'}`:(isEn?'Add store URL to connect':'أضف رابط المتجر'), connectedAt:integrations.shopify?.connected_at||null, status:shopConnected?'synced':'disconnected' })}
+                    {renderIntCard({ icon:Sparkles, iconBg:"#FF6B35", name:"AI Assistant", stat:aiActive?(isEn?'AI assistant active':'مساعد AI نشط'):(isEn?'AI assistant disabled':'مساعد AI معطل'), connectedAt:integrations.ai?.connected_at||null, status:aiActive?'active':'disconnected' })}
                 </div>
 
                 {/* Team & AI side by side */}
@@ -4759,11 +4741,11 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                             </span>
                         </div>
                         <div>
-                            <Toggle label={isEn ? 'Auto-reply unknown questions' : 'رد تلقائي على الأسئلة'} field="ai_auto_reply" />
-                            <Toggle label={isEn ? 'Draft replies for agent approval' : 'مسودة ردود للموافقة'} field="ai_draft_mode" />
-                            <Toggle label={isEn ? 'Auto-tag VIP customers' : 'تصنيف VIP تلقائي'} field="ai_auto_tag_vip" />
-                            <Toggle label={isEn ? 'Send recovery messages' : 'إرسال رسائل استرداد'} field="ai_send_recovery" />
-                            <Toggle label={isEn ? 'Escalate negative sentiment' : 'تصعيد المشاعر السلبية'} field="ai_escalate_negative" />
+                            {renderToggle({label:isEn?'Auto-reply unknown questions':'رد تلقائي على الأسئلة', field:"ai_auto_reply"})}
+                            {renderToggle({label:isEn?'Draft replies for agent approval':'مسودة ردود للموافقة', field:"ai_draft_mode"})}
+                            {renderToggle({label:isEn?'Auto-tag VIP customers':'تصنيف VIP تلقائي', field:"ai_auto_tag_vip"})}
+                            {renderToggle({label:isEn?'Send recovery messages':'إرسال رسائل استرداد', field:"ai_send_recovery"})}
+                            {renderToggle({label:isEn?'Escalate negative sentiment':'تصعيد المشاعر السلبية', field:"ai_escalate_negative"})}
                         </div>
                         <button onClick={() => setSection('ai')} className="mt-3 w-full py-2 rounded-xl text-[10px] font-black text-brand-muted glass border border-brand-border/20 hover:text-brand-accent tracking-widest uppercase">
                             ⚙ {isEn ? 'Safety & advanced' : 'الأمان والمتقدم'}
@@ -4850,7 +4832,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                             <p className="text-[10px] text-brand-muted uppercase">POWERED BY GROQ</p>
                         </div>
                         <div className="ml-auto">
-                            <Toggle label="" field="ai_enabled" />
+                            {renderToggle({label:"", field:"ai_enabled"})}
                         </div>
                     </div>
                     <div className="space-y-1.5">
@@ -4862,16 +4844,11 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 </div>
                 <div className="glass rounded-2xl p-6">
                     <p className="text-[13px] font-black text-brand-egg mb-4">{isEn ? 'Behaviour toggles' : 'إعدادات السلوك'}</p>
-                    <Toggle label={isEn ? 'Auto-reply unknown questions' : 'رد تلقائي على الأسئلة المجهولة'} field="ai_auto_reply"
-                        description={isEn ? 'AI answers questions it recognises' : 'يجيب AI على الأسئلة التي يعرفها'} />
-                    <Toggle label={isEn ? 'Draft replies for agent approval' : 'مسودة ردود للموافقة البشرية'} field="ai_draft_mode"
-                        description={isEn ? 'Show AI reply as draft before sending' : 'عرض رد AI كمسودة قبل الإرسال'} />
-                    <Toggle label={isEn ? 'Auto-tag VIP customers' : 'تصنيف عملاء VIP تلقائياً'} field="ai_auto_tag_vip"
-                        description={isEn ? 'Tag high-value customers automatically' : 'يصنف العملاء ذوي القيمة تلقائياً'} />
-                    <Toggle label={isEn ? 'Send recovery messages' : 'إرسال رسائل استرداد السلة'} field="ai_send_recovery"
-                        description={isEn ? 'Auto-send cart recovery on trigger' : 'إرسال استرداد السلة تلقائياً'} />
-                    <Toggle label={isEn ? 'Escalate negative sentiment' : 'تصعيد المشاعر السلبية'} field="ai_escalate_negative"
-                        description={isEn ? 'Route angry/upset customers to human' : 'توجيه العملاء الغاضبين للبشر'} />
+                    {renderToggle({label:isEn?'Auto-reply unknown questions':'رد تلقائي على الأسئلة المجهولة', field:"ai_auto_reply", description:isEn?'AI answers questions it recognises':'يجيب AI على الأسئلة التي يعرفها'})}
+                    {renderToggle({label:isEn?'Draft replies for agent approval':'مسودة ردود للموافقة البشرية', field:"ai_draft_mode", description:isEn?'Show AI reply as draft before sending':'عرض رد AI كمسودة قبل الإرسال'})}
+                    {renderToggle({label:isEn?'Auto-tag VIP customers':'تصنيف عملاء VIP تلقائياً', field:"ai_auto_tag_vip", description:isEn?'Tag high-value customers automatically':'يصنف العملاء ذوي القيمة تلقائياً'})}
+                    {renderToggle({label:isEn?'Send recovery messages':'إرسال رسائل استرداد السلة', field:"ai_send_recovery", description:isEn?'Auto-send cart recovery on trigger':'إرسال استرداد السلة تلقائياً'})}
+                    {renderToggle({label:isEn?'Escalate negative sentiment':'تصعيد المشاعر السلبية', field:"ai_escalate_negative", description:isEn?'Route angry/upset customers to human':'توجيه العملاء الغاضبين للبشر'})}
                 </div>
             </div>
         );
