@@ -2009,8 +2009,6 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                             }
                                         }}
                                         placeholder={isEn ? `Reply to ${activeChat.name}...` : `الرد على ${activeChat.name}...`}
-                                        dir="auto"
-                                        style={{ direction: 'ltr', textAlign: 'left' }}
                                         className={`w-full bg-brand-input/80 border border-brand-accent/15 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-accent/40 placeholder-brand-muted/50 transition-colors`}
                                     />
                                 </div>
@@ -2149,7 +2147,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                     ))}
                                 </div>
                                 <div className="space-y-2 pt-1">
-                                    <textarea dir="auto"  value={noteText} onChange={e => setNoteText(e.target.value)}
+                                    <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
                                         placeholder={isEn ? 'Add internal note...' : 'أضف ملاحظة داخلية...'}
                                         rows={3}
                                         className="w-full bg-brand-input border border-brand-border rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar" />
@@ -3028,7 +3026,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
                         {/* Message */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Message' : 'الرسالة'}</label>
-                            <textarea dir="auto"  value={form.text} onChange={e => setForm(p => ({ ...p, text: e.target.value }))}
+                            <textarea value={form.text} onChange={e => setForm(p => ({ ...p, text: e.target.value }))}
                                 placeholder={isEn ? 'Hi {name}! Your order #{order_id} is confirmed...' : 'مرحباً {name}! تم تأكيد طلبك...'}
                                 rows={5} className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar text-brand-egg" />
                         </div>
@@ -3889,7 +3887,7 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
                     {/* Message */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <p className="text-[10px] font-mono text-brand-muted uppercase tracking-wider mb-2 shrink-0">{isEn?'MESSAGE':'الرسالة'}</p>
-                        <textarea dir="auto" 
+                        <textarea
                             value={customNote || (selected ? buildMessage(selected) : '')}
                             onChange={e=>setCustomNote(e.target.value)}
                             placeholder={isEn?'Message will appear here after selecting a product...':'ستظهر الرسالة هنا بعد اختيار المنتج...'}
@@ -4857,7 +4855,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'System Instruction' : 'تعليمات النظام'}</label>
-                        <textarea dir="auto"  value={ws.ai_instruction} onChange={e => set('ai_instruction', e.target.value)}
+                        <textarea value={ws.ai_instruction} onChange={e => set('ai_instruction', e.target.value)}
                             rows={5} placeholder={isEn ? 'You are a helpful assistant for...' : 'أنت مساعد مفيد لـ...'}
                             className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none resize-none text-brand-egg" />
                     </div>

@@ -29,15 +29,9 @@
     font-family: 'Alexandria', sans-serif !important;
   }
 
-  input:not([type="file"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]) {
-    direction: ltr !important;
-    text-align: left !important;
-    unicode-bidi: normal !important;
-  }
-
+  input:not([type="file"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]),
   textarea {
     direction: ltr !important;
-    text-align: left !important;
     unicode-bidi: normal !important;
   }
 
