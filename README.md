@@ -2,7 +2,8 @@
 
 > Turn store visitors into repeat buyers. Manage orders, conversations, abandoned carts, and broadcasts from one glass screen — powered by official WhatsApp Cloud API + Shopify Admin API.
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/itsmahmoudrabie/OmniFlow)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/itsmahmoudrabie/OmniFlow)
 [![Shopify App](https://img.shields.io/badge/Shopify-App-95BF47?logo=shopify&logoColor=white)](https://shopify.dev)
 
 ---

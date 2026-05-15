@@ -29,6 +29,18 @@
     font-family: 'Alexandria', sans-serif !important;
   }
 
+  input:not([type="file"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]) {
+    direction: ltr !important;
+    text-align: left !important;
+    unicode-bidi: normal !important;
+  }
+
+  textarea {
+    direction: ltr !important;
+    text-align: left !important;
+    unicode-bidi: normal !important;
+  }
+
   .theme-light {
     --color-brand-bg: #F5EBE1;
     --color-brand-sidebar: #FFFFFF;
@@ -91,10 +103,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     transition-property: all;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 200ms;
+  }
+  .nav-item.text-brand-egg.font-semibold {
+    background: rgba(140, 200, 80, 0.12);
   }
 
   .custom-scrollbar::-webkit-scrollbar {

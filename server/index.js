@@ -7,6 +7,11 @@ const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 const FormData = require('form-data');
+const mongoose = require('mongoose');
+
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/omniflow';
+mongoose.connect(MONGODB_URI).then(() => console.log('MongoDB connected')).catch(e => console.error('MongoDB error:', e.message));
 
 
 const app = express();
@@ -82,6 +87,10 @@ const CONFIG = {
 
 // Mount Shopify OAuth routes synchronously now that CONFIG exists.
 mountShopifyOAuth(app, CONFIG);
+
+// Auth & subscription routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/paymob', require('./routes/paymob'));
 
 const DB_FILE = path.join(__dirname, 'orders.json');
 const INBOX_FILE = path.join(__dirname, 'inbox.json');
@@ -280,6 +289,39 @@ app.post('/api/config/setup', (req, res) => {
 
     fs.writeFileSync(envPath, envContent, 'utf8');
     res.json({ success: true, business_name: CONFIG.business_name });
+});
+
+// Test WhatsApp connection
+app.post('/api/config/test-whatsapp', async (req, res) => {
+    const { access_token, phone_number_id } = req.body;
+    if (!access_token || !phone_number_id) return res.status(400).json({ error: 'Missing credentials' });
+    try {
+        const r = await axios.get(
+            `https://graph.facebook.com/v25.0/${phone_number_id}`,
+            { headers: { Authorization: `Bearer ${access_token}` }, timeout: 8000 }
+        );
+        res.json({ ok: true, name: r.data?.verified_name || r.data?.display_phone_number || 'Connected' });
+    } catch (e) {
+        const msg = e.response?.data?.error?.message || 'Invalid token or Phone ID';
+        res.status(400).json({ error: msg });
+    }
+});
+
+// Test Shopify connection
+app.post('/api/config/test-shopify', async (req, res) => {
+    const { shopify_url, shopify_access_token } = req.body;
+    if (!shopify_url || !shopify_access_token) return res.status(400).json({ error: 'Missing credentials' });
+    const domain = shopify_url.replace(/https?:\/\//, '').replace(/\/$/, '');
+    try {
+        const r = await axios.get(
+            `https://${domain}/admin/api/2024-01/shop.json`,
+            { headers: { 'X-Shopify-Access-Token': shopify_access_token }, timeout: 8000 }
+        );
+        res.json({ ok: true, shop: r.data?.shop?.name || domain });
+    } catch (e) {
+        const msg = e.response?.data?.errors || 'Invalid store URL or token';
+        res.status(400).json({ error: typeof msg === 'string' ? msg : 'Connection failed' });
+    }
 });
 
 app.get('/api/config/catalog', (req, res) => {

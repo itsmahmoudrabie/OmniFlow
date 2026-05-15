@@ -49,8 +49,16 @@ import {
     MessageSquareQuote,
     Download,
     Star,
-    Brain
+    Brain,
+    Palette,
+    UserPlus,
+    Bell,
+    CheckCircle,
+    Copy,
+    ExternalLink,
+    LogOut,
 } from 'lucide-react';
+import { PricingPage, RegisterPage, LoginPage } from './Auth';
 
 const API_URL = import.meta.env.VITE_API_URL
     ? `${import.meta.env.VITE_API_URL}/api`
@@ -64,7 +72,248 @@ const OmniFlowMark = ({ size = 24, bg = '#F5EBE1', fg = '#003223', pulse = '#FF6
     </svg>
 );
 
+
+// ── Professional notification sound (Web Audio API) ──────────────────────────
+const playNotifSound = (type = 'message') => {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const freqs = type === 'order'
+            ? [[660, 880, 0.12], [880, 1100, 0.12]]   // two rising tones for orders
+            : [[880, 660, 0.10], [1320, 880, 0.10]];   // descending chime for messages
+        freqs.forEach(([from, to, dur], i) => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(from, ctx.currentTime + i * 0.13);
+            osc.frequency.exponentialRampToValueAtTime(to, ctx.currentTime + i * 0.13 + dur);
+            gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.13);
+            gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.13 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + dur + 0.3);
+            osc.start(ctx.currentTime + i * 0.13);
+            osc.stop(ctx.currentTime + i * 0.13 + dur + 0.35);
+        });
+    } catch(e) {}
+};
+
+// ── Notification Center ───────────────────────────────────────────────────────
+const NotificationCenter = ({ notifications, onRead, onClear, onNavigate, lang }) => {
+    const isEn = lang === 'en';
+    const unread = notifications.filter(n => !n.read).length;
+
+    const iconFor = (type) => {
+        if (type === 'order')    return <ShoppingCart size={13} className="text-brand-accent" />;
+        if (type === 'cart')     return <RefreshCcw size={13} className="text-brand-gold" />;
+        if (type === 'message')  return <MessageCircle size={13} className="text-blue-400" />;
+        return <Zap size={13} className="text-brand-muted" />;
+    };
+
+    const timeAgo = (iso) => {
+        const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+        if (d < 60)   return isEn ? `${d}s ago` : `منذ ${d}ث`;
+        if (d < 3600) return isEn ? `${Math.floor(d/60)}m ago` : `منذ ${Math.floor(d/60)}د`;
+        return isEn ? `${Math.floor(d/3600)}h ago` : `منذ ${Math.floor(d/3600)}س`;
+    };
+
+    return (
+        <div className="absolute top-full mt-2 right-0 w-80 glass rounded-2xl shadow-2xl z-50 overflow-hidden border border-brand-border/20 animate-in slide-in-from-top-2 fade-in duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border/15">
+                <div className="flex items-center gap-2">
+                    <Bell size={14} className="text-brand-accent" />
+                    <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Notifications' : 'الإشعارات'}</span>
+                    {unread > 0 && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-brand-accent text-brand-bg">{unread}</span>}
+                </div>
+                {notifications.length > 0 && (
+                    <button onClick={onClear} className="text-[10px] text-brand-muted hover:text-brand-accent font-bold transition-colors">
+                        {isEn ? 'Clear all' : 'مسح الكل'}
+                    </button>
+                )}
+            </div>
+
+            {/* List */}
+            <div className="max-h-80 overflow-y-auto custom-scrollbar divide-y divide-brand-border/10">
+                {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center py-10 text-brand-muted opacity-50">
+                        <Bell size={28} className="mb-2 opacity-30" />
+                        <p className="text-xs font-bold">{isEn ? 'All caught up!' : 'لا توجد إشعارات'}</p>
+                    </div>
+                ) : notifications.map(n => (
+                    <div key={n.id} onClick={() => { onRead(n.id); onNavigate(n.tab); }}
+                        className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.04] transition-colors ${!n.read ? 'bg-brand-accent/5' : ''}`}>
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${!n.read ? 'bg-brand-accent/15' : 'bg-brand-border/20'}`}>
+                            {iconFor(n.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-bold text-brand-egg truncate">{n.title}</p>
+                            <p className="text-[11px] text-brand-muted leading-relaxed mt-0.5 line-clamp-2">{n.body}</p>
+                            <p className="text-[9px] text-brand-muted/60 mt-1">{timeAgo(n.time)}</p>
+                        </div>
+                        {!n.read && <span className="w-2 h-2 rounded-full bg-brand-accent shrink-0 mt-1.5" />}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ── Global Search ─────────────────────────────────────────────────────────────
+const GlobalSearch = ({ inbox, orders, quickReplies, navItems, onNavigate, onOpenChat, onClose, lang }) => {
+    const isEn = lang === 'en';
+    const [q, setQ] = React.useState('');
+    const inputRef = React.useRef(null);
+
+    React.useEffect(() => { inputRef.current?.focus(); }, []);
+
+    // Keyboard: Escape to close
+    React.useEffect(() => {
+        const h = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', h);
+        return () => window.removeEventListener('keydown', h);
+    }, [onClose]);
+
+    const results = React.useMemo(() => {
+        if (!q.trim() || q.length < 2) return [];
+        const ql = q.toLowerCase();
+        const out = [];
+
+        // Navigation
+        navItems.filter(n => n.label.toLowerCase().includes(ql)).forEach(n => {
+            out.push({ type: 'nav', icon: n.icon, title: n.label, sub: isEn ? 'Go to section' : 'اذهب إلى القسم', action: () => { onNavigate(n.id); onClose(); } });
+        });
+
+        // Chats
+        (inbox || []).filter(c => c.name?.toLowerCase().includes(ql) || c.phone?.includes(ql)).slice(0,4).forEach(c => {
+            const lastMsg = c.messages?.[c.messages.length-1]?.text || '';
+            out.push({ type: 'chat', icon: MessageCircle, title: c.name || c.phone, sub: lastMsg || c.phone, action: () => { onOpenChat(c.phone); onNavigate('chat'); onClose(); } });
+        });
+
+        // Orders
+        (orders || []).filter(o => {
+            const name = `${o.customer?.first_name||''} ${o.customer?.last_name||''}`.toLowerCase();
+            return name.includes(ql) || String(o.order_number||'').includes(ql) || String(o.id||'').includes(ql);
+        }).slice(0,4).forEach(o => {
+            const name = `${o.customer?.first_name||''} ${o.customer?.last_name||''}`.trim() || '—';
+            out.push({ type: 'order', icon: ShoppingCart, title: `#${o.order_number || o.id}`, sub: `${name} · EGP ${o.total_price || 0}`, action: () => { onNavigate('shop'); onClose(); } });
+        });
+
+        // Quick Replies
+        (quickReplies || []).filter(r => r.title?.toLowerCase().includes(ql) || r.text?.toLowerCase().includes(ql)).slice(0,3).forEach(r => {
+            out.push({ type: 'reply', icon: MessageSquareQuote, title: `/${r.title}`, sub: r.text, action: () => { onNavigate('quick-replies'); onClose(); } });
+        });
+
+        return out;
+    }, [q, inbox, orders, quickReplies, navItems, isEn]);
+
+    const typeLabel = { nav: isEn?'Navigation':'تنقل', chat: isEn?'Chats':'محادثات', order: isEn?'Orders':'طلبات', reply: isEn?'Quick Replies':'ردود سريعة' };
+    const typeColor = { nav: 'text-brand-accent', chat: 'text-blue-400', order: 'text-brand-gold', reply: 'text-purple-400' };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24" style={{background:'rgba(0,0,0,0.6)'}} onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="w-full max-w-xl glass rounded-2xl shadow-2xl overflow-hidden border border-brand-border/20 animate-in slide-in-from-top-4 fade-in duration-200">
+                {/* Search input */}
+                <div className="flex items-center gap-3 px-4 py-3.5 border-b border-brand-border/15">
+                    <Search size={16} className="text-brand-accent shrink-0" />
+                    <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)}
+                        placeholder={isEn ? 'Search chats, orders, features...' : 'ابحث في المحادثات، الطلبات، المزايا...'}
+                        className="flex-1 bg-transparent text-sm outline-none text-brand-egg placeholder-brand-muted/50" />
+                    <kbd className="text-[10px] text-brand-muted font-mono bg-brand-border/20 px-1.5 py-0.5 rounded">ESC</kbd>
+                </div>
+
+                {/* Results */}
+                {q.length >= 2 && (
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                        {results.length === 0 ? (
+                            <div className="flex flex-col items-center py-10 text-brand-muted opacity-50">
+                                <Search size={24} className="mb-2 opacity-30" />
+                                <p className="text-sm font-bold">{isEn ? 'No results' : 'لا توجد نتائج'}</p>
+                            </div>
+                        ) : (() => {
+                            const groups = {};
+                            results.forEach(r => { if (!groups[r.type]) groups[r.type] = []; groups[r.type].push(r); });
+                            return Object.entries(groups).map(([type, items]) => (
+                                <div key={type}>
+                                    <p className="text-[9px] font-black text-brand-muted tracking-widest uppercase px-4 py-2 border-b border-brand-border/10">{typeLabel[type]}</p>
+                                    {items.map((item, i) => (
+                                        <button key={i} onClick={item.action}
+                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.05] transition-colors text-left border-b border-brand-border/10 last:border-0">
+                                            <div className={`w-7 h-7 rounded-lg glass flex items-center justify-center shrink-0 ${typeColor[type]}`}>
+                                                <item.icon size={13} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-[12px] font-bold ${typeColor[type]}`}>{item.title}</p>
+                                                <p className="text-[11px] text-brand-muted truncate">{item.sub}</p>
+                                            </div>
+                                            <ChevronLeft size={13} className="text-brand-muted rotate-180 shrink-0" />
+                                        </button>
+                                    ))}
+                                </div>
+                            ));
+                        })()}
+                    </div>
+                )}
+
+                {q.length < 2 && (
+                    <div className="px-4 py-4 grid grid-cols-2 gap-2">
+                        {[
+                            { label: isEn?'Chats':'محادثات', id:'chat', icon: MessageCircle, color:'text-blue-400' },
+                            { label: isEn?'Orders':'الطلبات', id:'shop', icon: ShoppingCart, color:'text-brand-gold' },
+                            { label: isEn?'Broadcasts':'البث', id:'campaigns', icon: Megaphone, color:'text-brand-accent' },
+                            { label: isEn?'Analytics':'التقارير', id:'logs', icon: Calendar, color:'text-purple-400' },
+                        ].map(s => (
+                            <button key={s.id} onClick={() => { onNavigate(s.id); onClose(); }}
+                                className="flex items-center gap-2.5 px-3 py-2.5 glass-subtle rounded-xl text-[11px] font-bold text-brand-muted hover:text-brand-egg transition-colors border border-brand-border/15">
+                                <s.icon size={13} className={s.color} />
+                                {s.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const App = () => {
+    // ── Auth state ───────────────────────────────────────────────────────────
+    const [authScreen, setAuthScreen] = useState(() => {
+        const token = localStorage.getItem('omni_token');
+        return token ? null : 'login';
+    });
+    const [authTenant, setAuthTenant] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('omni_tenant') || 'null'); } catch { return null; }
+    });
+
+    const handleLogin = (token, tenant) => {
+        localStorage.setItem('omni_token', token);
+        localStorage.setItem('omni_tenant', JSON.stringify(tenant));
+        setAuthTenant(tenant);
+        setAuthScreen(null);
+    };
+    const handleLogout = () => {
+        localStorage.removeItem('omni_token');
+        localStorage.removeItem('omni_tenant');
+        setAuthTenant(null);
+        setAuthScreen('login');
+    };
+
+    // Inject auth token into all axios requests
+    useEffect(() => {
+        const id = axios.interceptors.request.use(cfg => {
+            const t = localStorage.getItem('omni_token');
+            if (t) cfg.headers.Authorization = `Bearer ${t}`;
+            return cfg;
+        });
+        const rid = axios.interceptors.response.use(r => r, err => {
+            if (err.response?.status === 402) {
+                handleLogout();
+                setAuthScreen('pricing');
+            }
+            return Promise.reject(err);
+        });
+        return () => { axios.interceptors.request.eject(id); axios.interceptors.response.eject(rid); };
+    }, []);
+
     const [activeTab, setActiveTab] = useState('dash');
     const [orders, setOrders] = useState([]);
     const [inbox, setInbox] = useState([]);
@@ -73,6 +322,43 @@ const App = () => {
     const [catalogId, setCatalogId] = useState('');
     const [businessName, setBusinessName] = useState('');
     const [isConfigured, setIsConfigured] = useState(true);
+
+    // ── Notifications + Search state ────────────────────────────────────────
+    const [notifications, setNotifications] = React.useState([]);
+    const [showNotifs, setShowNotifs] = React.useState(false);
+    const [showSearch, setShowSearch] = React.useState(false);
+    const [quickRepliesGlobal, setQuickRepliesGlobal] = React.useState([]);
+    const prevInboxLen = React.useRef(0);
+    const prevOrdersLen = React.useRef(0);
+    const notifIdRef = React.useRef(0);
+
+    const addNotif = React.useCallback((type, title, body, tab) => {
+        const id = ++notifIdRef.current;
+        setNotifications(p => [{ id, type, title, body, tab, time: new Date().toISOString(), read: false }, ...p].slice(0, 50));
+        playNotifSound(type);
+        if (Notification?.permission === 'granted') {
+            new Notification(title, { body, icon: '/favicon.ico' });
+        }
+    }, []);
+
+    // Global keyboard shortcut Ctrl+K / Cmd+K
+    React.useEffect(() => {
+        const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowSearch(p => !p); } };
+        window.addEventListener('keydown', h);
+        return () => window.removeEventListener('keydown', h);
+    }, []);
+
+    // Load quick replies for global search
+    React.useEffect(() => {
+        axios.get(`${API_URL}/quick-replies`).then(r => setQuickRepliesGlobal(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    }, []);
+
+    // Request notification permission
+    React.useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    }, []);
+
+
     const [branding, setBranding] = useState({ brand_color: '#d5aa65', logo_url: null });
     const [loading, setLoading] = useState(false);
     const [activeChatPhone, setActiveChatPhone] = useState(null);
@@ -202,16 +488,48 @@ const App = () => {
         fetchBranding();
         fetchSettings();
 
-        const interval = setInterval(() => {
-            fetchInbox();
-            fetchOrders();
-            fetchAbandonedCarts();
+        const interval = setInterval(async () => {
+            const prevI = prevInboxLen.current;
+            const prevO = prevOrdersLen.current;
+            await fetchInbox();
+            await fetchOrders();
+            await fetchAbandonedCarts();
+            // Detect new inbox messages
+            setInbox(cur => {
+                const newLen = cur.length;
+                if (prevI > 0 && newLen > prevI) {
+                    const newest = cur[0];
+                    addNotif('message', newest?.name || newest?.phone || 'New message',
+                        newest?.messages?.[newest.messages.length-1]?.text || '...', 'chat');
+                }
+                prevInboxLen.current = newLen;
+                return cur;
+            });
+            setOrders(cur => {
+                const newLen = cur.length;
+                if (prevO > 0 && newLen > prevO) {
+                    const newest = cur[0];
+                    addNotif('order',
+                        `New order #${newest?.order_number || newest?.id}`,
+                        `${newest?.customer?.first_name || ''} · EGP ${newest?.total_price || 0}`, 'shop');
+                }
+                prevOrdersLen.current = newLen;
+                return cur;
+            });
         }, 5000);
         return () => clearInterval(interval);
     }, []);
 
     useEffect(() => { localStorage.setItem('omni_lang', lang); }, [lang]);
     useEffect(() => { localStorage.setItem('omni_theme', theme); }, [theme]);
+
+    // Auth gate
+    if (authScreen === 'pricing') return <PricingPage onSelectPlan={(plan) => setAuthScreen('register:' + plan)} onLogin={() => setAuthScreen('login')} />;
+    if (authScreen === 'login') return <LoginPage onLogin={handleLogin} onRegister={() => setAuthScreen('pricing')} />;
+    if (authScreen && authScreen.startsWith('register')) {
+        const plan = authScreen.split(':')[1] || 'starter';
+        return <RegisterPage plan={plan} onSuccess={handleLogin} onBack={() => setAuthScreen('pricing')} />;
+    }
 
     if (!isConfigured) {
         return <OnboardingScreen lang={lang} onLangChange={setLang} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
@@ -223,7 +541,7 @@ const App = () => {
             dir={lang === 'en' ? 'ltr' : 'rtl'}
         >
             {/* Sidebar */}
-            <aside className="w-[200px] rounded-2xl flex flex-col shrink-0 p-4" style={{background:'color-mix(in srgb, var(--color-brand-card) 60%, transparent)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',border:'1px solid rgba(245,235,225,0.08)'}}>
+            <aside className="w-[200px] rounded-2xl flex flex-col shrink-0 p-4" style={{background:'color-mix(in srgb, var(--color-brand-card) 80%, transparent)'}}>
                 <div className={`${lang === 'en' ? 'pl-1' : 'pr-1'}`}>
                     {branding.logo_url ? (
                         <img src={`http://localhost:8765${branding.logo_url}`} alt="logo" className="h-5 w-auto object-contain mb-1" />
@@ -246,7 +564,7 @@ const App = () => {
                                 key={item.id}
                                 onClick={() => setActiveTab(item.id)}
                                 className={`nav-item w-full group ${isActive
-                                        ? 'glass-strong text-brand-egg font-semibold'
+                                        ? 'text-brand-egg font-semibold'
                                         : 'text-brand-egg-mute hover:text-brand-egg hover:bg-brand-green-soft/40'
                                     }`}
                             >
@@ -282,6 +600,13 @@ const App = () => {
                         >
                             {lang === 'en' ? 'عربي' : 'EN'}
                         </button>
+                        <button
+                            onClick={handleLogout}
+                            title={lang === 'en' ? 'Logout' : 'تسجيل خروج'}
+                            className="w-6 h-6 rounded-md glass-subtle flex items-center justify-center hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all"
+                        >
+                            <LogOut size={12} />
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -301,23 +626,70 @@ const App = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* Global Search trigger */}
+                        <button onClick={() => setShowSearch(true)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl glass-subtle border border-brand-border/30 text-[11px] font-bold text-brand-muted hover:text-brand-egg hover:border-brand-accent/30 transition-all">
+                            <Search size={13} className="text-brand-accent" />
+                            <span className="hidden sm:inline">{lang === 'en' ? 'Search...' : 'بحث...'}</span>
+                            <kbd className="hidden sm:inline text-[9px] font-mono bg-brand-border/30 px-1.5 py-0.5 rounded text-brand-muted/70">⌘K</kbd>
+                        </button>
+
+                        {/* Train assistant */}
                         <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-subtle border border-brand-border/30 text-[11px] font-bold text-brand-egg-mute hover:border-brand-accent/30 transition-all">
                             <Brain size={13} className="text-brand-accent" />
                             {lang === 'en' ? 'Train assistant' : 'تدريب المساعد'}
                         </button>
+
+                        {/* Notifications bell */}
+                        <div className="relative">
+                            <button onClick={() => setShowNotifs(p => !p)}
+                                className="relative flex items-center justify-center w-9 h-9 rounded-xl glass-subtle border border-brand-border/30 hover:border-brand-accent/30 transition-all">
+                                <Bell size={15} className={notifications.some(n=>!n.read) ? 'text-brand-accent' : 'text-brand-muted'} />
+                                {notifications.filter(n=>!n.read).length > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-accent text-[9px] font-black text-brand-bg flex items-center justify-center">
+                                        {Math.min(notifications.filter(n=>!n.read).length, 9)}
+                                    </span>
+                                )}
+                            </button>
+                            {showNotifs && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setShowNotifs(false)} />
+                                    <div className="relative z-50">
+                                        <NotificationCenter
+                                            notifications={notifications}
+                                            lang={lang}
+                                            onRead={id => setNotifications(p => p.map(n => n.id===id ? {...n,read:true} : n))}
+                                            onClear={() => { setNotifications([]); setShowNotifs(false); }}
+                                            onNavigate={tab => { setActiveTab(tab); setShowNotifs(false); }}
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* AI toggle */}
                         <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass-subtle border border-brand-border/30">
                             <span className={`w-2 h-2 rounded-full ${aiEnabled ? 'bg-brand-accent shadow-[0_0_6px_#8CC850]' : 'bg-brand-muted'}`}></span>
                             <span className="text-[11px] font-bold text-brand-egg-mute">{lang === 'en' ? 'AI Auto-Reply' : 'الرد التلقائي'}</span>
                             <span className="text-[11px] font-bold text-brand-accent">·</span>
                             <span className={`text-[11px] font-bold ${aiEnabled ? 'text-brand-accent' : 'text-brand-muted'}`}>{aiEnabled ? (lang === 'en' ? 'ON' : 'مفعل') : (lang === 'en' ? 'OFF' : 'معطل')}</span>
-                            <button
-                                onClick={toggleAI}
-                                className={`w-9 h-[18px] rounded-full relative transition-all duration-300 ${aiEnabled ? 'bg-brand-accent shadow-[0_0_8px_rgba(140,200,80,0.35)]' : 'bg-brand-muted/30'}`}
-                            >
-                                <div className={`absolute top-[3px] w-3 h-3 rounded-full bg-white transition-all duration-300 ${lang === 'en' ? (aiEnabled ? 'right-[3px]' : 'left-[3px]') : (aiEnabled ? 'left-[3px]' : 'right-[3px]')}`}></div>
+                            <button onClick={toggleAI}
+                                className={`w-9 h-[18px] rounded-full relative transition-all duration-300 ${aiEnabled ? 'bg-brand-accent shadow-[0_0_8px_rgba(140,200,80,0.35)]' : 'bg-brand-muted/30'}`}>
+                                <div className={`absolute top-[3px] w-3 h-3 rounded-full bg-white transition-all duration-300 ${lang === 'en' ? (aiEnabled ? 'right-[3px]' : 'left-[3px]') : (aiEnabled ? 'left-[3px]' : 'right-[3px]')}`} />
                             </button>
                         </div>
                     </div>
+                    {/* Global Search overlay */}
+                    {showSearch && (
+                        <GlobalSearch
+                            inbox={inbox} orders={orders} quickReplies={quickRepliesGlobal}
+                            navItems={navItems}
+                            onNavigate={tab => setActiveTab(tab)}
+                            onOpenChat={phone => { setActiveChatPhone(phone); setActiveTab('chat'); }}
+                            onClose={() => setShowSearch(false)}
+                            lang={lang}
+                        />
+                    )}
                 </header>
 
                 {/* Page Content */}
@@ -355,160 +727,329 @@ const App = () => {
 // --- Sub Components ---
 
 const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
-    const [localTemplates, setLocalTemplates] = useState({});
-    const [saving, setSaving] = useState(false);
     const isEn = lang === 'en';
+    const isArabic = (s) => /[؀-ۿ]/.test(s || '');
 
-    useEffect(() => {
-        setLocalTemplates(templates);
+    // Normalise templates object → array
+    const tplArray = React.useMemo(() => {
+        if (!templates || typeof templates !== 'object') return [];
+        return Object.entries(templates).map(([key, t]) => {
+            const hasAr = isArabic(t.preview || '') || isArabic(t.title || '');
+            const langBadge = hasAr ? (t.preview && !isArabic(t.preview) ? 'AR + EN' : 'AR') : 'EN';
+            const status = t.meta_name ? 'approved' : (t.under_review ? 'review' : 'draft');
+            return {
+                key,
+                name: t.meta_name || key,
+                title: t.title || key,
+                preview: t.preview || '',
+                category: t.category || 'UTILITY',
+                lang: t.lang || langBadge,
+                status,
+                meta_name: t.meta_name || '',
+                variables: t.variables || [],
+                buttons: t.buttons || [],
+                params_count: t.params_count || 0,
+                has_header_image: !!t.has_header_image,
+                approved_date: t.approved_date || null,
+                used_count: t.used_count || 0,
+                color: t.color || '8CC850',
+            };
+        });
     }, [templates]);
 
-    const handleSave = async () => {
+    const [filter, setFilter] = React.useState('all');
+    const [selected, setSelected] = React.useState(null);
+    const [saving, setSaving] = React.useState(false);
+    const [showNew, setShowNew] = React.useState(false);
+    const [newForm, setNewForm] = React.useState({ name: '', title: '', preview: '', category: 'UTILITY', lang: 'AR + EN' });
+
+    const counts = React.useMemo(() => ({
+        all: tplArray.length,
+        approved: tplArray.filter(t => t.status === 'approved').length,
+        review: tplArray.filter(t => t.status === 'review').length,
+        draft: tplArray.filter(t => t.status === 'draft').length,
+    }), [tplArray]);
+
+    const filtered = filter === 'all' ? tplArray
+        : tplArray.filter(t => t.status === filter);
+
+    const selectedTpl = tplArray.find(t => t.key === selected) || filtered[0] || null;
+
+    // Select first on load
+    React.useEffect(() => {
+        if (!selected && tplArray.length) setSelected(tplArray[0].key);
+    }, [tplArray]);
+
+    const handleSyncMeta = async () => {
+        showToast(isEn ? 'Syncing from Meta...' : 'جاري المزامنة مع Meta...', 'info');
+        try {
+            await axios.post(`${API_URL}/templates/sync`);
+            await fetchTemplates();
+            showToast(isEn ? 'Synced!' : 'تمت المزامنة!');
+        } catch { showToast(isEn ? 'Sync failed' : 'فشلت المزامنة', 'error'); }
+    };
+
+    const handleNewTemplate = async () => {
+        if (!newForm.name.trim()) return showToast(isEn ? 'Name required' : 'الاسم مطلوب', 'error');
         setSaving(true);
         try {
-            await axios.post(`${API_URL}/templates`, localTemplates);
+            await axios.post(`${API_URL}/templates`, { [newForm.name]: { title: newForm.title, preview: newForm.preview, category: newForm.category, lang: newForm.lang } });
             await fetchTemplates();
-            showToast(isEn ? 'Templates saved successfully' : 'تم حفظ القوالب بنجاح');
-        } catch (e) {
-            showToast(isEn ? 'Error saving templates' : 'حدث خطأ أثناء حفظ القوالب', 'error');
-        }
+            setShowNew(false);
+            showToast(isEn ? 'Template created!' : 'تم إنشاء القالب!');
+        } catch { showToast(isEn ? 'Failed' : 'فشل', 'error'); }
         setSaving(false);
     };
 
-    const updateTemplate = (key, field, value) => {
-        setLocalTemplates(prev => ({
-            ...prev,
-            [key]: { ...prev[key], [field]: value }
-        }));
+    const statusBadge = (status) => {
+        if (status === 'approved') return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(140,200,80,0.12)',color:'#8CC850',borderColor:'rgba(140,200,80,0.3)'}}>✓ {isEn ? 'Approved' : 'معتمد'}</span>;
+        if (status === 'review')   return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(255,107,53,0.12)',color:'#FF6B35',borderColor:'rgba(255,107,53,0.3)'}}>⊙ {isEn ? 'Under review' : 'قيد المراجعة'}</span>;
+        return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(100,100,100,0.12)',color:'#9CA3AF',borderColor:'rgba(100,100,100,0.3)'}}>○ {isEn ? 'Draft' : 'مسودة'}</span>;
     };
 
     return (
-        <div className="space-y-4 max-w-5xl mx-auto animate-in fade-in duration-500">
-            <div className="flex items-center justify-between">
+        <div className={`animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Templates' : 'القوالب'}</h2>
-                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">{isEn ? 'META VERIFIED · OFFICIAL TEMPLATES LIBRARY' : 'Meta متحقق · مكتبة القوالب'}</p>
+                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5 uppercase">
+                        {isEn
+                            ? `META BUSINESS TEMPLATES · ${counts.approved} ACTIVE · ${counts.review} UNDER REVIEW`
+                            : `قوالب Meta · ${counts.approved} نشط · ${counts.review} قيد المراجعة`}
+                    </p>
                 </div>
-                <button onClick={handleSave} disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all" style={{background:'#8CC850',color:'#001A11'}}>
-                    {saving ? '...' : (isEn ? 'Save Changes' : 'حفظ التعديلات')}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={handleSyncMeta}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                        <RefreshCcw size={12} /> {isEn ? 'Sync from Meta' : 'مزامنة Meta'}
+                    </button>
+                    <button onClick={() => setShowNew(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold transition-all"
+                        style={{background:'#FF6B35',color:'#fff'}}>
+                        <Plus size={13} /> {isEn ? 'New template' : 'قالب جديد'}
+                    </button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
-                {[
-                    { label: isEn ? 'ACTIVE TEMPLATES' : 'قوالب نشطة', value: Object.keys(localTemplates).length.toString() },
-                    { label: isEn ? 'WITH IMAGE' : 'تحتوي صورة', value: Object.values(localTemplates).filter(t => t.has_header_image).length.toString() },
-                    { label: isEn ? 'WITH VARIABLES' : 'تحتوي متغيرات', value: Object.values(localTemplates).filter(t => (t.params_count||0) > 0).length.toString() },
-                    { label: isEn ? 'META APPROVED' : 'معتمد Meta', value: Object.values(localTemplates).filter(t => t.meta_name).length.toString(), gold: true },
-                ].map((s, i) => (
-                    <div key={i} className="glass rounded-2xl p-4">
-                        <p className="text-[10px] font-bold text-brand-muted tracking-wider">{s.label}</p>
-                        <p className={`text-2xl font-black mt-1 ${s.gold ? 'text-brand-gold' : 'text-brand-egg'}`}>{s.value}</p>
-                    </div>
-                ))}
+            {/* 4 stat cards */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
+                <div className="glass rounded-2xl p-4">
+                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Approved' : 'معتمد'}</p>
+                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.approved}</p>
+                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'ready to send' : 'جاهز للإرسال'}</p>
+                </div>
+                <div className="glass rounded-2xl p-4">
+                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Under Review' : 'قيد المراجعة'}</p>
+                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.review}</p>
+                    <p className="text-[11px] text-brand-muted mt-1">{counts.review > 0 ? '~24h ETA' : (isEn ? 'none pending' : 'لا يوجد')}</p>
+                </div>
+                <div className="glass rounded-2xl p-4">
+                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Drafts' : 'مسودات'}</p>
+                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.draft}</p>
+                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'not submitted' : 'لم ترسل بعد'}</p>
+                </div>
+                <div className="glass rounded-2xl p-4">
+                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Total' : 'الإجمالي'}</p>
+                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.all}</p>
+                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'in library' : 'في المكتبة'}</p>
+                </div>
             </div>
 
-            <div className="grid gap-4" style={{gridTemplateColumns:'1fr 300px'}}>
-                <div className="glass rounded-2xl overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-brand-border/20 flex items-center justify-between">
-                        <span className="text-sm font-black text-brand-egg">{isEn ? 'Template Library' : 'مكتبة القوالب'}</span>
-                        <span className="text-[10px] text-brand-muted font-bold">{isEn ? 'META CLOUD API' : 'Meta Cloud API'}</span>
+            {/* Main 2-column */}
+            <div className="grid gap-3" style={{gridTemplateColumns:'1fr 340px'}}>
+
+                {/* LEFT: Library */}
+                <div className="glass rounded-2xl overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-brand-border/20 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[13px] font-black text-brand-egg">{isEn ? 'Library' : 'المكتبة'}</span>
+                            <span className="text-[10px] text-brand-muted font-bold uppercase ml-2">{isEn ? 'ALL TEMPLATES' : 'كل القوالب'}</span>
+                        </div>
+                        <div className="flex items-center gap-1 glass-subtle rounded-xl p-1 border border-brand-border/20">
+                            {[
+                                ['all',      `${isEn?'All':'الكل'}·${counts.all}`],
+                                ['approved', `${isEn?'Approved':'معتمد'}·${counts.approved}`],
+                                ['review',   `${isEn?'Review':'مراجعة'}·${counts.review}`],
+                                ['draft',    `${isEn?'Draft':'مسودة'}·${counts.draft}`],
+                            ].map(([v, label]) => (
+                                <button key={v} onClick={() => setFilter(v)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${filter === v ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted hover:text-brand-egg'}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="divide-y divide-brand-border/10">
-                        {Object.entries(localTemplates).map(([key, tpl]) => (
-                            <div key={key} className="px-5 py-4 hover:bg-white/[0.02] transition-colors">
-                                <div className="flex items-start gap-4">
-                                    <div className="w-2 h-2 rounded-full mt-2 shrink-0" style={{background: tpl.color ? `#${tpl.color}` : '#8CC850'}}></div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <p className="text-[13px] font-black text-brand-egg">{tpl.title}</p>
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tpl.meta_name ? 'bg-brand-accent/15 text-brand-accent border border-brand-accent/30' : 'bg-brand-muted/15 text-brand-muted border border-brand-border/20'}`}>
-                                                {tpl.meta_name ? (isEn ? 'APPROVED' : 'معتمد') : (isEn ? 'NOT SET' : 'غير معين')}
-                                            </span>
-                                            {tpl.has_header_image && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/15 text-brand-gold border border-brand-gold/30">{isEn ? 'IMAGE' : 'صورة'}</span>}
-                                            {(tpl.params_count || 0) > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30">{tpl.params_count} {isEn ? 'vars' : 'متغير'}</span>}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="text-[10px] text-brand-muted font-bold">{isEn ? 'Meta Template Name' : 'اسم القالب في Meta'}</label>
-                                                <input value={tpl.meta_name || ''} onChange={e => updateTemplate(key, 'meta_name', e.target.value)}
-                                                    className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-1.5 text-xs focus:border-brand-accent outline-none mt-1"
-                                                    dir="ltr" disabled={key === 'shipping'} placeholder="template_name_here" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] text-brand-muted font-bold">{isEn ? 'Message Preview' : 'معاينة الرسالة'}</label>
-                                                <input value={tpl.preview || ''} onChange={e => updateTemplate(key, 'preview', e.target.value)}
-                                                    className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-1.5 text-xs focus:border-brand-accent outline-none mt-1"
-                                                    placeholder={isEn ? 'Preview text...' : 'نص المعاينة...'} />
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4 mt-2">
-                                            <div>
-                                                <label className="text-[10px] text-brand-muted font-bold">{isEn ? 'Vars count' : 'عدد المتغيرات'}</label>
-                                                <input type="number" min="0" max="5" value={tpl.params_count ?? 0}
-                                                    onChange={e => updateTemplate(key, 'params_count', parseInt(e.target.value) || 0)}
-                                                    className="w-16 bg-brand-input border border-brand-border/30 rounded-xl px-2 py-1.5 text-xs focus:border-brand-accent outline-none mt-1" dir="ltr" />
-                                            </div>
-                                            <div className="flex items-center gap-2 mt-4">
-                                                <input type="checkbox" id={`hdr-${key}`} checked={!!tpl.has_header_image}
-                                                    onChange={e => updateTemplate(key, 'has_header_image', e.target.checked)}
-                                                    className="w-4 h-4 accent-brand-accent" />
-                                                <label htmlFor={`hdr-${key}`} className="text-[11px] text-brand-muted cursor-pointer">{isEn ? 'Has image header' : 'يحتوي صورة'}</label>
-                                            </div>
-                                        </div>
+
+                    <div className="divide-y divide-brand-border/10 overflow-y-auto flex-1 custom-scrollbar" style={{maxHeight:480}}>
+                        {filtered.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-brand-muted">
+                                <FileText size={36} className="mb-3 opacity-20" />
+                                <p className="text-sm font-bold">{isEn ? 'No templates yet' : 'لا توجد قوالب بعد'}</p>
+                                <button onClick={() => setShowNew(true)} className="mt-3 text-brand-accent text-xs font-bold hover:underline">
+                                    + {isEn ? 'Create first template' : 'أنشئ أول قالب'}
+                                </button>
+                            </div>
+                        ) : filtered.map(t => (
+                            <div key={t.key} onClick={() => setSelected(t.key)}
+                                className={`flex items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-white/[0.03] transition-colors ${selected === t.key ? 'bg-brand-accent/5 border-l-2 border-brand-accent' : ''}`}>
+                                {/* Name + preview */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-[13px] font-black text-brand-accent">{t.name}</span>
                                     </div>
+                                    <p className="text-[11px] text-brand-muted truncate">{t.preview || t.title}</p>
                                 </div>
+                                {/* Lang badge */}
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0" style={{background:'rgba(140,200,80,0.1)',color:'#8CC850',border:'1px solid rgba(140,200,80,0.2)'}}>{t.lang}</span>
+                                {/* Category */}
+                                <span className="text-[10px] font-bold text-brand-muted uppercase shrink-0 w-28 text-right">{t.category}</span>
+                                {/* Status */}
+                                <div className="shrink-0">{statusBadge(t.status)}</div>
+                                {/* Usage */}
+                                {t.used_count > 0 && <span className="text-[10px] text-brand-muted font-bold shrink-0">{t.used_count.toLocaleString()}×</span>}
                             </div>
                         ))}
                     </div>
                 </div>
 
+                {/* RIGHT: Preview panel */}
                 <div className="glass rounded-2xl flex flex-col overflow-hidden self-start">
-                    <div className="px-4 py-3.5 border-b border-brand-border/20">
-                        <span className="text-[12px] font-black text-brand-egg">{isEn ? 'WA Business Preview' : 'معاينة WA'}</span>
-                    </div>
-                    <div className="p-4">
-                        <div className="rounded-2xl p-3" style={{background:'rgba(0,40,20,0.6)',border:'1px solid rgba(140,200,80,0.1)'}}>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center shrink-0">
-                                    <span className="text-[9px] font-black text-brand-bg">LH</span>
-                                </div>
-                                <div>
-                                    <p className="text-[11px] font-bold text-brand-egg">Linenhouse Cairo</p>
-                                    <p className="text-[10px] text-brand-muted">business · verified ✓</p>
-                                </div>
+                    {selectedTpl ? (<>
+                        {/* Header */}
+                        <div className="px-4 py-3 border-b border-brand-border/20">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Preview' : 'معاينة'}</span>
+                                <span className="text-brand-muted">·</span>
+                                <span className="text-[12px] font-black text-brand-accent">{selectedTpl.name}</span>
+                                <span className="text-brand-muted text-[10px]">· {selectedTpl.category} · {selectedTpl.lang}</span>
                             </div>
-                            {Object.values(localTemplates).slice(0,1).map((t, i) => (
-                                <div key={i}>
-                                    {t.has_header_image && (
-                                        <div className="rounded-xl mb-2 h-20 flex items-end p-3" style={{background:'#FF6400'}}>
-                                            <p className="text-white font-black text-sm">{t.title?.toUpperCase()}</p>
-                                        </div>
-                                    )}
-                                    <p className="text-[12px] text-brand-egg mb-1.5">{t.preview || (isEn ? 'Hello {first_name},' : 'مرحباً {first_name},')}</p>
+                            <div className="mt-1">{statusBadge(selectedTpl.status)}</div>
+                        </div>
+
+                        <div className="p-4 space-y-4 flex-1">
+                            {/* Variables */}
+                            {selectedTpl.params_count > 0 && (
+                                <div>
+                                    <p className="text-[9px] font-bold text-brand-muted tracking-widest uppercase mb-1">Variables</p>
+                                    <p className="text-[12px] text-brand-egg">
+                                        {Array.from({length: selectedTpl.params_count}, (_,i) =>
+                                            <span key={i}>{i > 0 && ' · '}<span className="text-brand-accent">{`{{${i+1}}}`}</span></span>
+                                        )}
+                                    </p>
                                 </div>
-                            ))}
-                            <div className="border-t border-brand-border/20 mt-2 pt-2 flex items-center justify-between">
-                                <span className="text-[10px] text-brand-muted">{isEn ? 'WhatsApp Business' : 'WhatsApp أعمال'}</span>
-                                <span className="text-[10px] text-brand-muted">14:02 ✓✓</span>
+                            )}
+
+                            {/* Buttons */}
+                            {selectedTpl.buttons?.length > 0 && (
+                                <div>
+                                    <p className="text-[9px] font-bold text-brand-muted tracking-widest uppercase mb-1">Buttons</p>
+                                    <p className="text-[12px] text-brand-egg">{selectedTpl.buttons.join(' · ')}</p>
+                                </div>
+                            )}
+
+                            {/* Approved date */}
+                            {selectedTpl.status === 'approved' && selectedTpl.approved_date && (
+                                <div>
+                                    <p className="text-[9px] font-bold text-brand-muted tracking-widest uppercase mb-1">Approved</p>
+                                    <p className="text-[12px] text-brand-egg">{selectedTpl.approved_date}</p>
+                                </div>
+                            )}
+
+                            {/* WA Business Preview mockup */}
+                            <div className="rounded-2xl overflow-hidden" style={{background:'#0a1f14',border:'1px solid rgba(140,200,80,0.15)'}}>
+                                <div className="px-3 py-2 border-b border-brand-border/10 flex items-center justify-between">
+                                    <span className="text-[9px] font-black text-brand-muted tracking-widest uppercase">WA · BUSINESS PREVIEW</span>
+                                    {selectedTpl.status === 'approved' && <span className="text-[9px] font-bold text-brand-accent">✓ approved</span>}
+                                </div>
+                                <div className="p-3">
+                                    <div className="rounded-xl p-3" style={{background:'#fff',color:'#111'}}>
+                                        {selectedTpl.has_header_image && (
+                                            <div className="rounded-lg mb-2 h-16 flex items-center justify-center" style={{background:'#FF6400'}}>
+                                                <span className="text-white font-black text-xs uppercase">{selectedTpl.title}</span>
+                                            </div>
+                                        )}
+                                        <p className="text-[12px] leading-relaxed" style={{color:'#111'}}>
+                                            {selectedTpl.preview || selectedTpl.title || (isEn ? 'Message preview...' : 'معاينة الرسالة...')}
+                                        </p>
+                                        {selectedTpl.buttons?.length > 0 && (
+                                            <div className="mt-2 pt-2 space-y-1.5" style={{borderTop:'1px solid #e5e7eb'}}>
+                                                {selectedTpl.buttons.map((btn, i) => (
+                                                    <div key={i} className="text-center text-[12px] font-bold py-1" style={{color:'#00a884'}}>✓ {btn}</div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="mt-3 space-y-2">
-                            {[
-                                { label: isEn ? 'Templates' : 'القوالب', value: Object.keys(localTemplates).length },
-                                { label: isEn ? 'Approved' : 'معتمد', value: Object.values(localTemplates).filter(t=>t.meta_name).length },
-                                { label: 'API', value: 'Meta Cloud v20', text: true },
-                            ].map((m, i) => (
-                                <div key={i} className="flex items-center justify-between glass-subtle rounded-xl px-3 py-2">
-                                    <span className="text-[11px] text-brand-muted font-bold">{m.label}</span>
-                                    <span className="text-[11px] font-black text-brand-egg">{m.value}</span>
-                                </div>
-                            ))}
+
+                        {/* Action buttons */}
+                        <div className="px-4 py-3 border-t border-brand-border/20 flex items-center gap-2">
+                            <button className="flex-1 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                                {isEn ? 'Duplicate' : 'نسخ'}
+                            </button>
+                            <button className="flex-1 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                                {isEn ? 'Edit copy' : 'تعديل'}
+                            </button>
+                            <button className="flex-1 py-2 rounded-xl text-[11px] font-bold text-brand-bg transition-all" style={{background:'#8CC850'}}>
+                                {isEn ? 'Use in flow' : 'استخدم في flow'}
+                            </button>
+                        </div>
+                    </>) : (
+                        <div className="flex items-center justify-center h-64 text-brand-muted">
+                            <p className="text-sm">{isEn ? 'Select a template' : 'اختر قالباً'}</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* New template modal */}
+            {showNew && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:'rgba(0,0,0,0.7)'}}>
+                    <div className="glass rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-brand-egg">{isEn ? 'New Template' : 'قالب جديد'}</h3>
+                            <button onClick={() => setShowNew(false)} className="text-brand-muted hover:text-brand-egg">✕</button>
+                        </div>
+                        {[
+                            ['name',     isEn ? 'Template key (snake_case)' : 'مفتاح القالب', 'text', 'ltr'],
+                            ['title',    isEn ? 'Display title' : 'العنوان', 'text', ''],
+                            ['preview',  isEn ? 'Message preview text' : 'نص المعاينة', 'text', ''],
+                        ].map(([f, lbl, type, dir]) => (
+                            <div key={f}>
+                                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{lbl}</label>
+                                <input value={newForm[f]} onChange={e => setNewForm(p => ({...p, [f]: e.target.value}))}
+                                    type={type} dir={dir || undefined}
+                                    className="w-full mt-1 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs outline-none focus:border-brand-accent text-brand-egg" />
+                            </div>
+                        ))}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{isEn ? 'Category' : 'الفئة'}</label>
+                                <select value={newForm.category} onChange={e => setNewForm(p => ({...p, category: e.target.value}))}
+                                    className="w-full mt-1 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs outline-none text-brand-egg">
+                                    {['UTILITY','MARKETING','AUTHENTICATION'].map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{isEn ? 'Language' : 'اللغة'}</label>
+                                <select value={newForm.lang} onChange={e => setNewForm(p => ({...p, lang: e.target.value}))}
+                                    className="w-full mt-1 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs outline-none text-brand-egg">
+                                    {['AR + EN','EN','AR'].map(l => <option key={l} value={l}>{l}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                            <button onClick={() => setShowNew(false)} className="flex-1 py-2.5 rounded-xl text-xs font-bold glass border border-brand-border/30 text-brand-muted">{isEn ? 'Cancel' : 'إلغاء'}</button>
+                            <button onClick={handleNewTemplate} disabled={saving}
+                                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-brand-bg disabled:opacity-50" style={{background:'#8CC850'}}>
+                                {saving ? '...' : (isEn ? 'Create' : 'إنشاء')}
+                            </button>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
@@ -620,7 +1161,7 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
 
             {/* Filter chips + sort */}
             <div className="flex items-center justify-between">
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex gap-1 overflow-x-auto">
                     {[
                         { id:'all',       label:isEn?'All':'الكل',         count:orders.length,  dot:null },
                         { id:'confirmed', label:isEn?'Confirmed':'مؤكد',   count:confirmedCount, dot:'bg-green-400' },
@@ -1212,13 +1753,13 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
     return (
         <div className={`flex flex-1 min-h-0 gap-3 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
             {/* Chat List */}
-            <div className={`w-80 flex flex-col glass rounded-2xl overflow-hidden shrink-0`}>
+            <div className="flex flex-col glass rounded-2xl overflow-hidden shrink-0" style={{width:272}}>
                 <div className="p-4 border-b border-brand-accent/10 space-y-3">
                     <div>
                         <h3 className="font-bold text-lg">{isEn ? 'Inbox' : 'المحادثات'}</h3>
                         <p className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">{isEn ? 'ALL CONVERSATIONS' : 'كل المحادثات'} · {displayInbox.length} {isEn ? 'OPEN' : 'مفتوحة'}</p>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex gap-1">
                         {[
                             { id: 'all', label: isEn ? 'All' : 'الكل', count: displayInbox.length },
                             { id: 'live', label: isEn ? 'Live' : 'مباشر', count: liveCount, dot: 'bg-brand-accent' },
@@ -1226,7 +1767,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                             { id: 'mine', label: isEn ? 'Mine' : 'لي', count: mineCount },
                         ].map(f => (
                             <button key={f.id} onClick={() => setChatFilter(f.id)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${chatFilter === f.id ? 'bg-brand-accent text-brand-bg' : 'bg-brand-bg/60 text-brand-muted hover:bg-brand-accent/10 border border-brand-accent/10'}`}>
+                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${chatFilter === f.id ? 'bg-brand-accent text-brand-bg' : 'bg-white/5 text-brand-muted hover:bg-brand-accent/10 border border-brand-border/20'}`}>
                                 {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`}></span>}
                                 {f.label} · {f.count}
                             </button>
@@ -1309,7 +1850,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                 </button>
                                 <button onClick={() => setShowTeamPanel(p => !p)}
                                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showTeamPanel ? 'bg-brand-accent text-brand-bg' : 'bg-brand-green-soft border border-brand-border/50 text-brand-egg hover:bg-brand-green-mid'}`}>
-                                    <Star size={14} /> {isEn ? 'Tag' : 'تصنيف'}
+                                    <Star size={13} /> {isEn ? 'Tag VIP' : 'VIP'}
                                 </button>
                             </div>
                         </div>
@@ -1370,7 +1911,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2 text-[10px] font-mono text-brand-accent tracking-wider uppercase font-bold">
                                             <Sparkles size={11} className="text-brand-accent" />
-                                            {isEn ? 'GEMINI · SMART REPLY' : 'جيميني · رد ذكي'}
+                                            {isEn ? 'AI · SMART REPLY' : 'ذكاء اصطناعي · رد ذكي'}
                                         </div>
                                         <span className="text-[10px] font-mono text-brand-muted">1.4s · 92% {isEn ? 'confidence' : 'دقة'}</span>
                                     </div>
@@ -1468,6 +2009,8 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                             }
                                         }}
                                         placeholder={isEn ? `Reply to ${activeChat.name}...` : `الرد على ${activeChat.name}...`}
+                                        dir="auto"
+                                        style={{ direction: 'ltr', textAlign: 'left' }}
                                         className={`w-full bg-brand-input/80 border border-brand-accent/15 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-accent/40 placeholder-brand-muted/50 transition-colors`}
                                     />
                                 </div>
@@ -1499,7 +2042,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                         </div>
                         <h4 className="font-bold text-brand-text text-base">{activeChat.name}</h4>
                         <p className="text-[11px] text-brand-muted font-mono mt-1 dir-ltr">{maskedPhone}</p>
-                        {customerOrders.length >= 3 && (
+                        {customerOrders.length >= 2 && (
                             <span className="mt-2 px-3 py-1 rounded-full text-[10px] font-bold border border-brand-gold/30 text-brand-gold bg-brand-gold/10">VIP · Gold</span>
                         )}
                     </div>
@@ -1524,7 +2067,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                         )}
                         <div className="flex justify-between text-xs">
                             <span className="text-brand-muted">{isEn ? 'Loyalty pts' : 'نقاط الولاء'}</span>
-                            <span className="font-bold text-brand-accent">{(customerOrders.length * 120 + Math.floor(customerLTV / 10)).toLocaleString()}</span>
+                            <span className="font-bold text-brand-accent">{customerOrders.length > 0 ? Math.floor(customerLTV / 10).toLocaleString() : "—"}</span>
                         </div>
                     </div>
 
@@ -1544,7 +2087,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-xs font-bold truncate text-brand-text">{productName}</p>
                                             </div>
-                                            <span className="text-[10px] text-brand-muted font-mono shrink-0">أ—{qty}</span>
+                                            <span className="text-[10px] text-brand-muted font-bold shrink-0">×{qty}</span>
                                         </div>
                                     );
                                 })}
@@ -1606,7 +2149,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                     ))}
                                 </div>
                                 <div className="space-y-2 pt-1">
-                                    <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+                                    <textarea dir="auto"  value={noteText} onChange={e => setNoteText(e.target.value)}
                                         placeholder={isEn ? 'Add internal note...' : 'أضف ملاحظة داخلية...'}
                                         rows={3}
                                         className="w-full bg-brand-input border border-brand-border rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar" />
@@ -1621,18 +2164,18 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                     )}
 
                     {/* Recent items from orders */}
-                    {customerOrders.length > 0 && !showTeamPanel && (
+                    {customerOrders.length > 0 && (
                         <div className="p-4 space-y-3">
-                            <p className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">{isEn ? 'RECENT ITEMS' : 'العناصر الأخيرة'}</p>
+                            <p className="text-[10px] font-bold text-brand-muted tracking-widest uppercase mb-1">{isEn ? 'RECENT ITEMS' : 'آخر المنتجات'}</p>
                             {customerOrders.slice(0, 3).map((o, i) => (
-                                <div key={i} className="flex items-center gap-3 py-2">
-                                    <div className="w-10 h-10 rounded-lg bg-brand-green-soft border border-brand-border/50 flex items-center justify-center shrink-0">
-                                        <Package size={16} className="text-brand-accent" />
+                                <div key={i} className="flex items-center gap-3 py-2.5">
+                                    <div className="w-9 h-9 rounded-xl glass border border-brand-border/30 flex items-center justify-center shrink-0">
+                                        <Package size={14} className="text-brand-accent" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold text-brand-text truncate">{o.line_items?.[0]?.name || `Order #${o.order_number || o.id}`}</p>
+                                        <p className="text-[12px] font-bold text-brand-egg truncate">{o.line_items?.[0]?.name || `Order #${o.order_number || o.id}`}</p>
                                     </div>
-                                    <span className="text-[10px] text-brand-muted shrink-0">أ—{o.line_items?.[0]?.quantity || 1}</span>
+                                    <span className="text-[10px] text-brand-muted font-bold shrink-0">×{o.line_items?.[0]?.quantity || 1}</span>
                                 </div>
                             ))}
                         </div>
@@ -2216,174 +2759,304 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
 
 const QuickRepliesManager = ({ showToast, lang }) => {
     const isEn = lang === 'en';
-    const [list, setList] = useState([]);
-    const [form, setForm] = useState({ title: '', text: '' });
-    const [editing, setEditing] = useState(null);
-    const [saving, setSaving] = useState(false);
-    const [search, setSearch] = useState('');
+    const [list, setList] = React.useState([]);
+    const [selectedGroup, setSelectedGroup] = React.useState('__all__');
+    const [langFilter, setLangFilter] = React.useState('all');
+    const [selectedSnippet, setSelectedSnippet] = React.useState(null);
+    const [form, setForm] = React.useState({ shortcut: '', name: '', text: '', group: '' });
+    const [saving, setSaving] = React.useState(false);
+    const [showNewGroupInput, setShowNewGroupInput] = React.useState(false);
+    const [newGroupName, setNewGroupName] = React.useState('');
+
+    const isArabic = (str) => /[؀-ۿ]/.test(str || '');
 
     useEffect(() => {
-        axios.get(`${API_URL}/quick-replies`).then(r => setList(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+        axios.get(`${API_URL}/quick-replies`)
+            .then(r => setList(Array.isArray(r.data) ? r.data : []))
+            .catch(() => {});
     }, []);
 
+    // Derive groups from real data
+    const groups = React.useMemo(() => {
+        const map = {};
+        list.forEach(r => {
+            const g = r.group || (isEn ? 'General' : 'عام');
+            map[g] = (map[g] || 0) + 1;
+        });
+        return Object.entries(map).map(([label, count]) => ({ label, count }));
+    }, [list, isEn]);
+
+    const filtered = React.useMemo(() => {
+        return list.filter(r => {
+            const groupMatch = selectedGroup === '__all__' || (r.group || (isEn ? 'General' : 'عام')) === selectedGroup;
+            const ar = isArabic(r.text);
+            const langMatch = langFilter === 'all' || (langFilter === 'ar' ? ar : !ar);
+            return groupMatch && langMatch;
+        });
+    }, [list, selectedGroup, langFilter, isEn]);
+
+    const handleSelect = (r) => {
+        setSelectedSnippet(r.id);
+        setForm({ shortcut: r.shortcut || r.title || '', name: r.name || r.title || '', text: r.text || '', group: r.group || '' });
+    };
+
+    const handleNew = () => {
+        setSelectedSnippet(null);
+        setForm({ shortcut: '', name: '', text: '', group: selectedGroup === '__all__' ? '' : selectedGroup });
+    };
+
     const handleSave = async () => {
-        if (!form.title.trim() || !form.text.trim()) return showToast(isEn ? 'Title and message are required' : 'العنوان والرسالة مطلوبان', 'error');
+        if (!form.shortcut.trim() || !form.text.trim()) return showToast(isEn ? 'Shortcut and message are required' : 'الاختصار والرسالة مطلوبان', 'error');
         setSaving(true);
         try {
-            if (editing) {
-                const res = await axios.put(`${API_URL}/quick-replies/${editing}`, form);
-                setList(p => p.map(r => r.id === editing ? res.data : r));
+            const payload = { title: form.shortcut.trim(), name: form.name.trim() || form.shortcut.trim(), text: form.text, group: form.group };
+            if (selectedSnippet) {
+                const res = await axios.put(`${API_URL}/quick-replies/${selectedSnippet}`, payload);
+                setList(p => p.map(r => r.id === selectedSnippet ? { ...r, ...res.data } : r));
                 showToast(isEn ? 'Updated!' : 'تم التحديث!');
             } else {
-                const res = await axios.post(`${API_URL}/quick-replies`, form);
+                const res = await axios.post(`${API_URL}/quick-replies`, payload);
                 setList(p => [...p, res.data]);
-                showToast(isEn ? 'Quick reply added!' : 'تمت إضافة الرد السريع!');
+                setSelectedSnippet(res.data.id);
+                showToast(isEn ? 'Snippet saved!' : 'تم حفظ الرد!');
             }
-            setForm({ title: '', text: '' });
-            setEditing(null);
         } catch (e) { showToast(e.response?.data?.error || (isEn ? 'Failed to save' : 'فشل الحفظ'), 'error'); }
         setSaving(false);
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id, e) => {
+        e.stopPropagation();
         try {
             await axios.delete(`${API_URL}/quick-replies/${id}`);
             setList(p => p.filter(r => r.id !== id));
+            if (selectedSnippet === id) { setSelectedSnippet(null); setForm({ shortcut: '', name: '', text: '', group: '' }); }
             showToast(isEn ? 'Deleted' : 'تم الحذف');
         } catch { showToast(isEn ? 'Delete failed' : 'فشل الحذف', 'error'); }
     };
 
-    const handleEdit = (r) => { setEditing(r.id); setForm({ title: r.title, text: r.text }); };
-    const handleCancel = () => { setEditing(null); setForm({ title: '', text: '' }); };
+    const handleAddGroup = () => {
+        if (!newGroupName.trim()) return;
+        setSelectedGroup(newGroupName.trim());
+        setShowNewGroupInput(false);
+        setNewGroupName('');
+    };
 
-    const filtered = list.filter(r =>
-        !search || r.title.toLowerCase().includes(search.toLowerCase()) || r.text.toLowerCase().includes(search.toLowerCase())
-    );
+    const varChips = ['{name}', '{order_id}', '{total}', '{tracking_url}', '{shop_name}'];
 
-    const mockGroups = [
-        { id:'g1', label: isEn ? 'All' : 'الكل', count: list.length || 8 },
-        { id:'g2', label: isEn ? 'Greetings' : 'التحيات', count: 3 },
-        { id:'g3', label: isEn ? 'Shipping' : 'الشحن', count: 2 },
-        { id:'g4', label: isEn ? 'Returns' : 'الإرجاع', count: 1 },
-        { id:'g5', label: isEn ? 'Promotions' : 'العروض', count: 2 },
-    ];
-    const [activeGroup, setActiveGroup] = React.useState('g1');
-    const varChips = ['{first_name}', '{order_id}', '{shop_name}', '{tracking_url}'];
+    const activeSnippet = list.find(r => r.id === selectedSnippet);
 
     return (
         <div className={`animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Header */}
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Quick Replies' : 'الردود السريعة'}</h2>
-                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">
-                        {list.length} {isEn ? 'SNIPPETS · TYPE / IN CHAT TO INSERT' : 'رد · اكتب / في المحادثة للإدراج'}
+                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5 uppercase">
+                        {list.length} {isEn ? 'SNIPPETS · BILINGUAL · KEYBOARD SHORTCUTS' : 'رد · ثنائي اللغة · اختصارات'}
                     </p>
                 </div>
-                <button onClick={() => { setEditing(null); setForm({ title: '', text: '' }); }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all" style={{background:'#8CC850',color:'#001A11'}}>
-                    <Plus size={13} /> {isEn ? 'New Snippet' : 'رد جديد'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                        <Sparkles size={12} /> {isEn ? 'AI-suggest new' : 'اقتراح AI'}
+                    </button>
+                    <button onClick={handleNew}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                        style={{background:'#FF6B35',color:'#fff'}}>
+                        <Plus size={13} /> {isEn ? 'New snippet' : 'رد جديد'}
+                    </button>
+                </div>
             </div>
 
-            <div className="grid gap-3" style={{gridTemplateColumns:'180px 1fr 340px'}}>
-                <div className="glass rounded-2xl p-3 space-y-1 self-start">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider px-2 pb-2">{isEn ? 'GROUPS' : 'المجموعات'}</p>
-                    {mockGroups.map(g => (
-                        <button key={g.id} onClick={() => setActiveGroup(g.id)}
-                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-bold transition-all ${activeGroup === g.id ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted hover:text-brand-egg hover:bg-white/5'}`}>
-                            <span>{g.label}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeGroup === g.id ? 'bg-brand-bg/20' : 'bg-brand-border/30'}`}>{g.count}</span>
+            {/* 3-column grid */}
+            <div className="grid gap-3" style={{gridTemplateColumns:'200px 1fr 320px', minHeight:'520px'}}>
+
+                {/* LEFT: Groups */}
+                <div className="flex flex-col gap-2">
+                    <div className="glass rounded-2xl p-3 space-y-0.5 flex-1">
+                        <p className="text-[10px] font-bold text-brand-muted tracking-wider px-2 pb-2 uppercase">{isEn ? 'Groups' : 'المجموعات'}</p>
+
+                        <button onClick={() => setSelectedGroup('__all__')}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-bold transition-all ${selectedGroup === '__all__' ? 'bg-brand-accent/15 text-brand-accent' : 'text-brand-muted hover:text-brand-egg hover:bg-white/5'}`}>
+                            <span>{isEn ? 'All snippets' : 'الكل'}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${selectedGroup === '__all__' ? 'bg-brand-accent/20 text-brand-accent' : 'bg-brand-border/30 text-brand-muted'}`}>{list.length}</span>
                         </button>
-                    ))}
-                    <div className="border-t border-brand-border/20 pt-2 mt-2">
-                        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-brand-muted hover:text-brand-accent transition-all">
-                            <Plus size={12} /> {isEn ? 'New Group' : 'مجموعة جديدة'}
-                        </button>
+
+                        {groups.map(g => (
+                            <button key={g.label} onClick={() => setSelectedGroup(g.label)}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-bold transition-all ${selectedGroup === g.label ? 'bg-brand-accent/15 text-brand-accent' : 'text-brand-muted hover:text-brand-egg hover:bg-white/5'}`}>
+                                <span className="truncate text-left">{g.label}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ml-1 ${selectedGroup === g.label ? 'bg-brand-accent/20 text-brand-accent' : 'bg-brand-border/30 text-brand-muted'}`}>{g.count}</span>
+                            </button>
+                        ))}
+
+                        <div className="border-t border-brand-border/20 pt-2 mt-2">
+                            {showNewGroupInput ? (
+                                <div className="flex gap-1 px-2">
+                                    <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleAddGroup()}
+                                        placeholder={isEn ? 'Group name' : 'اسم المجموعة'}
+                                        className="flex-1 bg-brand-input border border-brand-border/30 rounded-lg px-2 py-1 text-[11px] outline-none text-brand-egg" autoFocus />
+                                    <button onClick={handleAddGroup} className="text-brand-accent text-[11px] font-bold px-1">+</button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setShowNewGroupInput(true)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold text-brand-muted hover:text-brand-accent transition-all">
+                                    <Plus size={12} /> {isEn ? 'New Group' : 'مجموعة جديدة'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Tip box */}
+                    <div className="glass rounded-2xl p-3 border border-brand-accent/10">
+                        <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[9px] font-black tracking-widest text-brand-accent uppercase px-1.5 py-0.5 rounded-md" style={{background:'rgba(140,200,80,0.15)'}}>TIP</span>
+                        </div>
+                        <p className="text-[11px] text-brand-muted leading-relaxed">
+                            {isEn ? 'Type / in any chat to quickly insert a saved snippet.' : 'اكتب / في أي محادثة لإدراج رد سريع محفوظ.'}
+                        </p>
                     </div>
                 </div>
 
-                <div className="glass rounded-2xl overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-brand-border/20">
-                        <div className="relative flex-1">
-                            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
-                            <input value={search} onChange={e => setSearch(e.target.value)}
-                                placeholder={isEn ? 'Search snippets...' : 'ابحث في الردود...'}
-                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl pl-8 pr-3 py-2 text-xs focus:border-brand-accent outline-none" />
+                {/* MIDDLE: Snippets list */}
+                <div className="glass rounded-2xl overflow-hidden flex flex-col">
+                    {/* Middle header */}
+                    <div className="px-4 py-3 border-b border-brand-border/20 flex items-center justify-between gap-3">
+                        <div>
+                            <span className="text-[13px] font-black text-brand-egg">
+                                {selectedGroup === '__all__' ? (isEn ? 'All snippets' : 'الكل') : selectedGroup}
+                                {' '}
+                                <span className="text-brand-muted font-bold">· {filtered.length}</span>
+                            </span>
+                            <p className="text-[9px] font-bold text-brand-muted tracking-wider uppercase mt-0.5">{isEn ? 'MOST USED FIRST' : 'الأكثر استخداماً'}</p>
                         </div>
-                        <span className="text-[10px] text-brand-muted font-bold shrink-0">{list.length} {isEn ? 'total' : 'رد'}</span>
+                        <div className="flex items-center gap-1 glass-subtle rounded-xl p-1 border border-brand-border/20">
+                            {[['all', 'All'], ['en', 'EN'], ['ar', 'عربي']].map(([v, label]) => (
+                                <button key={v} onClick={() => setLangFilter(v)}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${langFilter === v ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted hover:text-brand-egg'}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="divide-y divide-brand-border/10">
+
+                    {/* Snippet rows */}
+                    <div className="divide-y divide-brand-border/10 overflow-y-auto flex-1 custom-scrollbar">
                         {filtered.length === 0 ? (
-                            <div className="text-center py-12 text-brand-muted">
-                                <MessageSquareQuote size={36} className="mx-auto mb-3 opacity-20" />
+                            <div className="flex flex-col items-center justify-center py-16 text-brand-muted">
+                                <MessageSquareQuote size={36} className="mb-3 opacity-20" />
                                 <p className="text-sm font-bold">{isEn ? 'No snippets yet' : 'لا توجد ردود بعد'}</p>
-                                <p className="text-xs mt-1 opacity-60">{isEn ? 'Create your first quick reply.' : 'أضف أول رد سريع.'}</p>
-                            </div>
-                        ) : filtered.map(r => (
-                            <div key={r.id} onClick={() => handleEdit(r)}
-                                className={`flex items-start gap-3 px-4 py-3.5 hover:bg-white/[0.03] transition-colors cursor-pointer ${editing === r.id ? 'bg-brand-accent/5 border-l-2 border-brand-accent' : ''}`}>
-                                <div className="w-8 h-8 rounded-xl bg-brand-accent/10 flex items-center justify-center shrink-0 mt-0.5">
-                                    <span className="text-brand-accent font-black text-sm">/</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-[13px] font-bold text-brand-accent">/{r.title}</p>
-                                    <p className="text-[12px] text-brand-muted mt-0.5 leading-relaxed line-clamp-2">{r.text}</p>
-                                </div>
-                                <button onClick={e => { e.stopPropagation(); handleDelete(r.id); }}
-                                    className="text-brand-muted hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors shrink-0">
-                                    <Trash2 size={13} />
+                                <button onClick={handleNew} className="mt-3 text-brand-accent text-xs font-bold hover:underline">
+                                    + {isEn ? 'Create first snippet' : 'أنشئ أول رد'}
                                 </button>
                             </div>
-                        ))}
+                        ) : filtered.map(r => {
+                            const ar = isArabic(r.text);
+                            const shortcut = r.shortcut || r.title || '';
+                            const displayName = r.name || r.title || shortcut;
+                            const isSelected = selectedSnippet === r.id;
+                            return (
+                                <div key={r.id} onClick={() => handleSelect(r)}
+                                    className={`flex items-start gap-3 px-4 py-3.5 hover:bg-white/[0.03] transition-colors cursor-pointer ${isSelected ? 'bg-brand-accent/5 border-l-2 border-brand-accent' : ''}`}>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="text-[12px] font-black text-brand-accent">/{shortcut}</span>
+                                            <span className="text-[13px] font-bold text-brand-egg truncate">{displayName}</span>
+                                            {ar && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md" style={{background:'rgba(255,107,53,0.15)',color:'#FF6B35'}}>AR</span>}
+                                        </div>
+                                        <p className="text-[11px] text-brand-muted leading-relaxed line-clamp-2" dir={ar ? 'rtl' : 'ltr'}>{r.text}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                                        {(r.used_count > 0) && <span className="text-[10px] text-brand-muted font-bold">{r.used_count}× used</span>}
+                                        <button onClick={e => handleDelete(r.id, e)}
+                                            className="text-brand-muted hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
+                {/* RIGHT: Edit panel */}
                 <div className="glass rounded-2xl flex flex-col overflow-hidden self-start">
-                    <div className="p-4 border-b border-brand-border/20 flex items-center justify-between">
+                    <div className="px-4 py-3 border-b border-brand-border/20 flex items-center justify-between">
                         <span className="text-[13px] font-black text-brand-egg">
-                            {editing ? (isEn ? 'Edit Snippet' : 'تعديل الرد') : (isEn ? 'New Snippet' : 'رد جديد')}
+                            {selectedSnippet
+                                ? <>{isEn ? 'Edit snippet' : 'تعديل الرد'} <span className="text-brand-accent">/{form.shortcut}</span></>
+                                : (isEn ? 'New snippet' : 'رد جديد')}
                         </span>
-                        {editing && <button onClick={handleCancel} className="text-brand-muted hover:text-brand-egg text-xs">✕</button>}
+                        {selectedSnippet && (
+                            <button onClick={() => { setSelectedSnippet(null); setForm({ shortcut: '', name: '', text: '', group: '' }); }}
+                                className="text-brand-muted hover:text-brand-egg text-xs transition-colors">✕</button>
+                        )}
                     </div>
-                    <div className="p-4 space-y-4">
+
+                    <div className="p-4 space-y-4 flex-1">
+                        {/* Shortcut */}
                         <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn ? 'SHORTCUT' : 'الاختصار'}</label>
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Shortcut' : 'الاختصار'}</label>
                             <div className="flex items-center gap-2 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2">
                                 <span className="text-brand-accent font-black text-sm shrink-0">/</span>
-                                <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                                    placeholder={isEn ? 'greeting' : 'تحية'}
+                                <input value={form.shortcut} onChange={e => setForm(p => ({ ...p, shortcut: e.target.value.replace(/\s/g,'') }))}
+                                    placeholder="confirmed"
                                     className="flex-1 bg-transparent text-xs outline-none text-brand-egg" dir="ltr" />
                             </div>
                         </div>
+
+                        {/* Title */}
                         <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn ? 'MESSAGE TEXT' : 'نص الرسالة'}</label>
-                            <textarea value={form.text} onChange={e => setForm(p => ({ ...p, text: e.target.value }))}
-                                placeholder={isEn ? 'Hello! How can we help you today?' : 'مرحباً! كيف يمكننا مساعدتك؟'}
-                                rows={5} className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar" />
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Title' : 'العنوان'}</label>
+                            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                                placeholder={isEn ? 'Order confirmed' : 'تأكيد الطلب'}
+                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none text-brand-egg" />
                         </div>
+
+                        {/* Group */}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Group' : 'المجموعة'}</label>
+                            <input value={form.group} onChange={e => setForm(p => ({ ...p, group: e.target.value }))}
+                                list="group-suggestions"
+                                placeholder={isEn ? 'e.g. Order status' : 'مثال: حالة الطلب'}
+                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none text-brand-egg" />
+                            <datalist id="group-suggestions">
+                                {groups.map(g => <option key={g.label} value={g.label} />)}
+                            </datalist>
+                        </div>
+
+                        {/* Message */}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Message' : 'الرسالة'}</label>
+                            <textarea dir="auto"  value={form.text} onChange={e => setForm(p => ({ ...p, text: e.target.value }))}
+                                placeholder={isEn ? 'Hi {name}! Your order #{order_id} is confirmed...' : 'مرحباً {name}! تم تأكيد طلبك...'}
+                                rows={5} className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar text-brand-egg" />
+                        </div>
+
+                        {/* Variable chips */}
                         <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn ? 'INSERT VARIABLE' : 'إدراج متغير'}</label>
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Insert variable' : 'إدراج متغير'}</label>
                             <div className="flex flex-wrap gap-1.5">
                                 {varChips.map(chip => (
                                     <button key={chip} onClick={() => setForm(p => ({ ...p, text: p.text + chip }))}
                                         className="px-2.5 py-1 rounded-lg glass-subtle border border-brand-accent/20 text-[11px] font-bold text-brand-accent hover:bg-brand-accent/10 transition-all">
-                                        {chip}
+                                        + {chip}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                        <div className="flex gap-2 pt-1">
-                            <button onClick={handleSave} disabled={saving}
-                                className="flex-1 py-2.5 rounded-xl text-[12px] font-bold text-brand-bg transition-all disabled:opacity-50"
-                                style={{background:'#8CC850'}}>
-                                {saving ? '...' : (editing ? (isEn ? 'Update' : 'تحديث') : (isEn ? 'Save' : 'حفظ'))}
-                            </button>
-                            {editing && (
-                                <button onClick={handleCancel} className="px-4 py-2.5 rounded-xl text-[12px] font-bold text-brand-muted glass-subtle border border-brand-border/30 transition-all">
-                                    {isEn ? 'Cancel' : 'إلغاء'}
-                                </button>
-                            )}
-                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-4 py-3 border-t border-brand-border/20 flex items-center justify-between gap-2">
+                        {activeSnippet?.used_count > 0 ? (
+                            <span className="text-[10px] text-brand-muted font-bold uppercase">USED {activeSnippet.used_count}× · LAST 30d</span>
+                        ) : <span />}
+                        <button onClick={handleSave} disabled={saving}
+                            className="px-5 py-2 rounded-xl text-[12px] font-bold text-brand-bg transition-all disabled:opacity-50"
+                            style={{background:'#8CC850'}}>
+                            {saving ? '...' : (isEn ? 'Save' : 'حفظ')}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2411,17 +3084,18 @@ const emptyAuto = () => ({
     steps: [{ wait_hours: 0, action: 'send_text', text: 'مرحباً {{customer_name}}، ' }],
 });
 
+
 const AutomationsManager = ({ templates, showToast, lang }) => {
     const isEn = lang === 'en';
     const [automations, setAutomations] = useState([]);
     const [queue, setQueue] = useState([]);
-    const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState(null); // null = new, else existing item
-    const [form, setForm] = useState(emptyAuto());
     const [saving, setSaving] = useState(false);
-    const [showQueue, setShowQueue] = useState(false);
+    const [selectedFlow, setSelectedFlow] = React.useState(null);
+    const [selectedStep, setSelectedStep] = React.useState(null);
+    const [showNewModal, setShowNewModal] = React.useState(false);
+    const [newForm, setNewForm] = React.useState({ name: '', trigger: 'order_created' });
 
-    const fetch = async () => {
+    const fetchData = async () => {
         try {
             const [ar, qr] = await Promise.all([
                 axios.get(`${API_URL}/automations`),
@@ -2432,311 +3106,339 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
         } catch (e) { console.error(e); }
     };
 
-    useEffect(() => { fetch(); }, []);
-
-    const openNew = () => { setEditing(null); setForm(emptyAuto()); setShowModal(true); };
-    const openEdit = (a) => { setEditing(a); setForm(JSON.parse(JSON.stringify(a))); setShowModal(true); };
-
-    const handleSave = async () => {
-        if (!form.name.trim()) return showToast(isEn ? 'Name is required' : 'الاسم مطلوب', 'error');
-        setSaving(true);
-        try {
-            if (editing) {
-                await axios.put(`${API_URL}/automations/${editing.id}`, form);
-            } else {
-                await axios.post(`${API_URL}/automations`, form);
-            }
-            await fetch();
-            setShowModal(false);
-            showToast(isEn ? 'Automation saved!' : 'تم حفظ الأتمتة!');
-        } catch (e) { showToast(isEn ? 'Save failed' : 'فشل الحفظ', 'error'); }
-        setSaving(false);
-    };
+    useEffect(() => { fetchData(); }, []);
 
     const handleToggle = async (id) => {
         try {
             await axios.patch(`${API_URL}/automations/${id}/toggle`);
-            await fetch();
+            await fetchData();
         } catch (e) { showToast(isEn ? 'Toggle failed' : 'فشل التبديل', 'error'); }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm(isEn ? 'Delete this automation?' : 'حذف هذه الأتمتة؟')) return;
+        if (!window.confirm(isEn ? 'Delete this flow?' : 'حذف هذا الفلو؟')) return;
         try {
             await axios.delete(`${API_URL}/automations/${id}`);
-            await fetch();
+            if (selectedFlow?.id === id) setSelectedFlow(null);
+            await fetchData();
             showToast(isEn ? 'Deleted' : 'تم الحذف');
         } catch (e) { showToast(isEn ? 'Delete failed' : 'فشل الحذف', 'error'); }
     };
 
-    const setTrigger = (k, v) => setForm(p => ({ ...p, trigger: { ...p.trigger, [k]: v } }));
-    const addStep = () => setForm(p => ({ ...p, steps: [...p.steps, { wait_hours: 24, action: 'send_text', text: '' }] }));
-    const removeStep = (i) => setForm(p => ({ ...p, steps: p.steps.filter((_, idx) => idx !== i) }));
-    const setStep = (i, k, v) => setForm(p => {
-        const steps = [...p.steps];
-        steps[i] = { ...steps[i], [k]: v };
-        return { ...p, steps };
-    });
-
-    const triggerLabel = (a) => {
-        const t = TRIGGER_TYPES.find(x => x.value === a.trigger?.type);
-        const tLabel = isEn ? t?.labelEn : t?.label;
-        if (a.trigger?.type === 'order_status_changed') {
-            const s = STATUS_VALUES.find(x => x.value === a.trigger?.value);
-            return `${tLabel}: ${isEn ? s?.labelEn : s?.label}`;
-        }
-        if (a.trigger?.type === 'keyword_received') return `${tLabel}: "${a.trigger?.value}"`;
-        return tLabel || a.trigger?.type;
+    const handleCreate = async () => {
+        if (!newForm.name.trim()) return showToast(isEn ? 'Name required' : 'الاسم مطلوب', 'error');
+        setSaving(true);
+        try {
+            await axios.post(`${API_URL}/automations`, {
+                name: newForm.name,
+                trigger: { type: newForm.trigger, value: '' },
+                steps: [{ wait_hours: 0, action: 'send_text', text: '' }]
+            });
+            await fetchData();
+            setShowNewModal(false);
+            setNewForm({ name: '', trigger: 'order_created' });
+            showToast(isEn ? 'Flow created!' : 'تم إنشاء الفلو!');
+        } catch (e) { showToast(isEn ? 'Failed to create' : 'فشل الإنشاء', 'error'); }
+        setSaving(false);
     };
 
-    const triggerColor = (type) => {
-        if (type === 'order_status_changed') return 'bg-blue-500/20 text-blue-400';
-        if (type === 'keyword_received') return 'bg-purple-500/20 text-purple-400';
-        return 'bg-green-500/20 text-green-400';
+    // Build flow steps based on trigger type (for visual canvas)
+    const getFlowSteps = (auto) => {
+        const trig = auto?.trigger?.type || 'order_created';
+        if (trig === 'order_created' || trig === 'order_status_changed') return [
+            { id:'s1', type:'TRIGGER', icon:'⚡', color:'#FF6400', title: isEn?'Trigger':'المشغّل',        sub: isEn?'New Shopify order':'طلب شوبيفاي جديد',      tpl:null,          lang:null,  vars:null,        btns:null,        sendAt:null, delivered:null, seen:null },
+            { id:'s2', type:'ACTION',  icon:'💬', color:'#8CC850', title: isEn?'Send WA':'إرسال WA',        sub: isEn?'Template · t_confirm_25 with buttons':'قالب · t_confirm_25 مع أزرار', tpl:'t_confirm_25', lang:'ar + en', vars:'{name} · {order_id} · {total}', btns:'2 quick-reply', sendAt:isEn?'Immediately':'فوراً', delivered:'99.4%', seen:'84%' },
+            { id:'s3', type:'BRANCH',  icon:'🔀', color:'#60A5FA', title: isEn?'Wait for reply':'انتظر رد', sub: isEn?'If confirmed · 24h':'إذا أُكد · 24 ساعة',  tpl:null,          lang:null,  vars:null,        btns:null,        sendAt:null, delivered:'91%', seen:null },
+            { id:'s4', type:'ACTION',  icon:'✅', color:'#8CC850', title: isEn?'Mark confirmed':'تأكيد الطلب', sub: isEn?'Update Shopify status · Tag VIP':'تحديث حالة شوبيفاي · وسم VIP', tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+            { id:'s5', type:'ACTION',  icon:'⭐', color:'#F59E0B', title: isEn?'Award loyalty':'نقاط ولاء',  sub: isEn?'+ {total /10} points':'+ {total /10} نقطة', tpl:null,          lang:null,  vars:null,        btns:null,        sendAt:null, delivered:null, seen:null },
+            { id:'s6', type:'ACTION',  icon:'🚚', color:'#8CC850', title: isEn?'Trigger ship flow':'تشغيل فلو الشحن', sub: isEn?'Hand off to fulfilment':'تحويل للتوصيل', tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+        ];
+        if (trig === 'keyword_received') return [
+            { id:'s1', type:'TRIGGER', icon:'⚡', color:'#FF6400', title: isEn?'Trigger':'المشغّل',          sub: isEn?'Keyword received':'كلمة مفتاحية',          tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+            { id:'s2', type:'ACTION',  icon:'💬', color:'#8CC850', title: isEn?'Send WA reply':'إرسال رد WA',  sub: isEn?'Auto-reply template':'قالب رد تلقائي',     tpl:'t_keyword_01', lang:'ar + en', vars:'{name}', btns:'1 quick-reply', sendAt:isEn?'Immediately':'فوراً', delivered:'97%', seen:'79%' },
+            { id:'s3', type:'ACTION',  icon:'🏷️', color:'#A78BFA', title: isEn?'Tag contact':'وسم جهة الاتصال', sub: isEn?'Tag: interested':'وسم: مهتم',           tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+        ];
+        return [
+            { id:'s1', type:'TRIGGER', icon:'⚡', color:'#FF6400', title: isEn?'Trigger':'المشغّل',          sub: isEn?'New message received':'رسالة جديدة',        tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+            { id:'s2', type:'ACTION',  icon:'🧠', color:'#8CC850', title: isEn?'Classify intent':'تصنيف النية', sub: isEn?'AI intent detection':'كشف النية بالذكاء', tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:'95%', seen:null },
+            { id:'s3', type:'ACTION',  icon:'👤', color:'#34D399', title: isEn?'Route to agent':'توجيه لموظف', sub: isEn?'Assign to available agent':'توجيه لموظف متاح', tpl:null, lang:null, vars:null, btns:null, sendAt:null, delivered:null, seen:null },
+        ];
     };
 
-    const pendingCount = queue.filter(q => q.status === 'pending').length;
+    const liveFlows   = automations.filter(a => a.enabled);
+    const flowSteps   = selectedFlow ? getFlowSteps(selectedFlow) : [];
+    const activeStep  = selectedStep || (flowSteps[1] || null);
+    const stepIndex   = flowSteps.findIndex(s => s.id === activeStep?.id);
+    const triggerLabels = {
+        order_created:        isEn ? 'ORDER PLACED → CONFIRM → SHIP → FOLLOW UP' : 'طلب → تأكيد → شحن → متابعة',
+        order_status_changed: isEn ? 'STATUS CHANGE → NOTIFY → TAG → FOLLOW UP'  : 'تغيير حالة → إشعار → وسم → متابعة',
+        keyword_received:     isEn ? 'KEYWORD → REPLY → TAG → QUALIFY'            : 'كلمة مفتاحية → رد → وسم → تأهيل',
+        new_message:          isEn ? 'MESSAGE → CLASSIFY → ROUTE → RESPOND'       : 'رسالة → تصنيف → توجيه → رد',
+    };
+    const flowBreadcrumb = selectedFlow
+        ? (triggerLabels[selectedFlow.trigger?.type] || triggerLabels.order_created)
+        : '';
+    const runCount = (a) => queue.filter(q => q.automation_id === a.id).length || a.runs || 0;
 
     return (
-        <div className="space-y-4 max-w-5xl mx-auto animate-in fade-in duration-500">
-            <div className="flex justify-between items-center">
+        <div className={`flex flex-col gap-3 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`} style={{height:'calc(100vh - 120px)'}}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0">
                 <div>
-                    <h2 className="text-xl font-black text-brand-egg flex items-center gap-2">
-                        <Zap size={20} className="text-brand-accent" /> {isEn ? 'Automation Engine' : 'محرك الأتمتة'}
-                    </h2>
-                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">
-                        {automations.filter(a=>a.active).length} {isEn ? 'ACTIVE FLOWS · META CLOUD API' : 'سير نشط · Meta Cloud API'}
+                    <h2 className="text-2xl font-black text-brand-egg">{isEn ? 'Automations' : 'الأتمتة'}</h2>
+                    <p className="text-[11px] font-bold tracking-wider mt-0.5" style={{color:'#8CC850'}}>
+                        {flowBreadcrumb || (isEn ? 'SELECT A FLOW TO VIEW CANVAS' : 'اختر فلو لعرض اللوحة')}
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => axios.post(`${API_URL}/automations/run-now`).then(() => { showToast(isEn ? 'Queue triggered!' : 'تم تشغيل الدورة!'); fetch(); }).catch(() => {})}
-                        className="px-3 py-2 rounded-xl border border-brand-border/30 text-[11px] font-bold text-brand-muted hover:text-brand-accent hover:border-brand-accent/30 transition-all flex items-center gap-1.5">
-                        <RefreshCcw size={13} /> {isEn ? 'Run Now' : 'شغّل الآن'}
-                    </button>
-                    <button onClick={() => { setShowQueue(!showQueue); fetch(); }}
-                        className={`px-3 py-2 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all ${showQueue ? 'bg-brand-accent/20 border-brand-accent text-brand-accent' : 'border-brand-border/30 text-brand-muted hover:border-brand-accent/30'}`}>
-                        <Clock size={13} />
-                        {isEn ? `Queue (${pendingCount})` : `طابور (${pendingCount})`}
-                    </button>
-                    <button onClick={openNew}
-                        className="px-4 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all" style={{background:'#8CC850',color:'#001A11'}}>
-                        <Plus size={13} /> {isEn ? 'New Flow' : 'سير جديد'}
+                <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                        {liveFlows.length} {isEn ? 'active' : 'نشط'}
+                    </span>
+                    <button onClick={() => setShowNewModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                        style={{background:'#FF6400', color:'white'}}>
+                        <Zap size={13} /> {isEn ? 'New flow' : 'فلو جديد'}
                     </button>
                 </div>
             </div>
 
-            {showQueue && (
-                <div className="glass p-4 rounded-2xl space-y-2">
-                    <h3 className="font-bold text-[11px] text-brand-muted uppercase tracking-wider">{isEn ? 'Pending Queue' : 'الرسائل المجدولة'}</h3>
-                    {queue.filter(q => q.status === 'pending').length === 0 ? (
-                        <p className="text-brand-muted text-sm py-3 text-center">{isEn ? 'No pending messages.' : 'لا توجد رسائل في الانتظار.'}</p>
-                    ) : queue.filter(q => q.status === 'pending').map((q, i) => (
-                        <div key={i} className="flex items-center justify-between bg-brand-bg/40 border border-brand-accent/10 rounded-xl px-4 py-2.5 text-sm">
-                            <div>
-                                <span className="font-bold text-brand-text text-[12px]">{q.automation_name}</span>
-                                <span className="text-brand-muted mx-2">→</span>
-                                <span className="text-brand-muted text-[12px]">{q.customer_name}</span>
-                            </div>
-                            <div className="text-[11px] text-brand-muted" dir="ltr">
-                                {isEn ? 'Step' : 'خطوة'} {q.step_index + 1} — {new Date(q.fire_at).toLocaleString(isEn ? 'en-US' : 'ar-EG')}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* 3-column layout */}
+            <div className="grid flex-1 gap-3 min-h-0" style={{gridTemplateColumns:'220px 1fr 300px'}}>
 
-            <div className="grid gap-3" style={{gridTemplateColumns:'260px 1fr'}}>
-                <div className="glass rounded-2xl overflow-hidden self-start">
-                    <div className="px-4 py-3 border-b border-brand-border/20 flex items-center justify-between">
-                        <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Flows' : 'السيرات'}</span>
-                        <span className="text-[10px] text-brand-muted font-bold">{automations.length} {isEn ? 'total' : 'سير'}</span>
+                {/* ── Left: Flows list ── */}
+                <div className="glass rounded-2xl flex flex-col overflow-hidden">
+                    <div className="px-4 py-3 border-b border-brand-border/20 shrink-0">
+                        <span className="text-sm font-black text-brand-egg">{isEn ? 'Flows' : 'الفلوز'} </span>
+                        <span className="text-[11px] text-brand-muted font-bold">{liveFlows.length} / {automations.length}</span>
                     </div>
-                    {automations.length === 0 ? (
-                        <div className="p-8 text-center text-brand-muted">
-                            <Zap size={32} className="mx-auto mb-3 opacity-20" />
-                            <p className="text-[12px] font-bold opacity-50">{isEn ? 'No flows yet' : 'لا توجد سيرات'}</p>
-                            <button onClick={openNew} className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all" style={{background:'#8CC850',color:'#001A11'}}>
-                                <Plus size={11} className="inline mr-1" />{isEn ? 'Create' : 'إنشاء'}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-brand-border/10">
-                            {automations.map(a => (
-                                <div key={a.id} className={`px-4 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.02] transition-colors ${!a.active ? 'opacity-50' : ''}`}>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-[12px] font-bold text-brand-egg truncate">{a.name}</p>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold mt-0.5 inline-block ${triggerColor(a.trigger?.type)}`}>
-                                            {triggerLabel(a)}
-                                        </span>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-brand-border/10">
+                        {automations.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-3 p-4 text-center text-brand-muted">
+                                <Zap size={32} className="opacity-20" />
+                                <p className="text-xs font-bold">{isEn ? 'No flows yet' : 'لا توجد فلوز بعد'}</p>
+                                <button onClick={() => setShowNewModal(true)}
+                                    className="text-xs font-bold text-brand-accent hover:underline">
+                                    + {isEn ? 'Create first flow' : 'أنشئ أول فلو'}
+                                </button>
+                            </div>
+                        ) : automations.map(a => {
+                            const isSelected = selectedFlow?.id === a.id;
+                            const runs = runCount(a);
+                            return (
+                                <div key={a.id} onClick={() => { setSelectedFlow(a); setSelectedStep(null); }}
+                                     className={`px-4 py-3 cursor-pointer hover:bg-white/[0.03] transition-colors ${isSelected ? 'bg-brand-accent/5 border-l-2 border-brand-accent' : ''}`}>
+                                    <div className="flex items-start justify-between gap-1">
+                                        <p className={`text-[13px] font-bold leading-tight ${isSelected ? 'text-brand-egg' : 'text-brand-egg-mute'}`}>{a.name}</p>
+                                        <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${a.enabled ? 'bg-green-400' : 'bg-brand-border'}`}></span>
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <button onClick={() => handleToggle(a.id)} className="text-brand-muted hover:text-brand-accent transition-colors">
-                                            {a.active ? <ToggleRight size={22} className="text-brand-accent" /> : <ToggleLeft size={22} />}
-                                        </button>
-                                        <button onClick={() => openEdit(a)} className="p-1 rounded-lg hover:bg-brand-accent/10 text-brand-muted hover:text-brand-accent transition-all">
-                                            <Cog size={13} />
-                                        </button>
-                                        <button onClick={() => handleDelete(a.id)} className="p-1 rounded-lg hover:bg-red-500/10 text-brand-muted hover:text-red-400 transition-all">
-                                            <Trash2 size={13} />
-                                        </button>
-                                    </div>
+                                    <p className="text-[11px] text-brand-muted mt-0.5">{runs.toLocaleString()} {isEn ? 'runs · 30d' : 'تشغيل · 30 يوم'}</p>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            );
+                        })}
+                    </div>
                 </div>
 
-                <div className="glass rounded-2xl p-5 flex flex-col gap-4">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn ? 'VISUAL FLOW CANVAS' : 'لوحة السير'}</p>
-                    {automations.length === 0 ? (
-                        <div className="flex-1 flex flex-col items-center justify-center py-16 text-brand-muted">
-                            <div className="w-16 h-16 rounded-2xl glass-subtle border border-brand-border/20 flex items-center justify-center mb-4">
-                                <Zap size={28} className="opacity-20" />
+                {/* ── Middle: Visual canvas ── */}
+                <div className="glass rounded-2xl flex flex-col overflow-hidden">
+                    {selectedFlow ? (<>
+                        {/* Canvas header */}
+                        <div className="px-5 py-3 border-b border-brand-border/20 shrink-0 flex items-center justify-between">
+                            <div>
+                                <span className="text-[11px] font-bold text-brand-muted tracking-wider">
+                                    {selectedFlow.name.toUpperCase()} · v1 · {selectedFlow.enabled ? (isEn?'LIVE':'مباشر') : (isEn?'PAUSED':'موقوف')}
+                                </span>
                             </div>
-                            <p className="text-sm font-bold opacity-40">{isEn ? 'Select a flow to preview' : 'اختر سير للمعاينة'}</p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center gap-0 py-4">
-                            {automations.slice(0,1).map(a => {
-                                const trig = TRIGGER_TYPES.find(x => x.value === a.trigger?.type);
-                                return (
-                                    <React.Fragment key={a.id}>
-                                        <div className="flex flex-col items-center gap-0 w-full max-w-sm">
-                                            <div className="glass-subtle border border-brand-accent/30 rounded-2xl px-5 py-3 flex items-center gap-3 w-full">
-                                                <div className="w-8 h-8 rounded-xl bg-brand-accent/20 flex items-center justify-center shrink-0">
-                                                    <Zap size={16} className="text-brand-accent" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-bold text-brand-muted tracking-wider">TRIGGER</p>
-                                                    <p className="text-[13px] font-bold text-brand-egg">{isEn ? trig?.labelEn : trig?.label}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col items-center">
-                                                <div className="w-px h-6 border-l-2 border-dashed border-brand-border/40"></div>
-                                                <div className="w-2 h-2 rounded-full bg-brand-border/60"></div>
-                                            </div>
-                                            {a.steps?.map((step, si) => (
-                                                <React.Fragment key={si}>
-                                                    <div className="glass-subtle border border-brand-border/30 rounded-2xl px-5 py-3 flex items-center gap-3 w-full hover:border-brand-accent/30 transition-colors cursor-pointer">
-                                                        <div className="w-8 h-8 rounded-xl bg-brand-gold/15 flex items-center justify-center shrink-0">
-                                                            <Send size={14} className="text-brand-gold" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-[10px] font-bold text-brand-muted tracking-wider">
-                                                                {step.wait_hours > 0 ? `WAIT ${step.wait_hours}h · ` : ''}ACTION {si + 1}
-                                                            </p>
-                                                            <p className="text-[12px] font-bold text-brand-egg truncate">
-                                                                {step.action === 'send_text' ? (step.text?.slice(0,40) || 'Send text') : `Template: ${step.template_id || 'N/A'}`}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {si < (a.steps?.length || 0) - 1 && (
-                                                        <div className="flex flex-col items-center">
-                                                            <div className="w-px h-6 border-l-2 border-dashed border-brand-border/40"></div>
-                                                            <div className="w-2 h-2 rounded-full bg-brand-border/60"></div>
-                                                        </div>
-                                                    )}
-                                                </React.Fragment>
-                                            ))}
-                                        </div>
-                                    </React.Fragment>
-                                );
-                            })}
-                            {automations.length > 1 && (
-                                <p className="text-[11px] text-brand-muted mt-4">{isEn ? `+${automations.length - 1} more flows` : `+${automations.length - 1} سيرات أخرى`}</p>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {showModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                    onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
-                    <div className="bg-brand-sidebar border border-brand-accent/20 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl"
-                        dir={isEn ? 'ltr' : 'rtl'}>
-                        <div className="p-6 border-b border-brand-accent/10 flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-brand-accent">
-                                {editing ? (isEn ? 'Edit Automation' : 'تعديل الأتمتة') : (isEn ? 'New Automation' : 'أتمتة جديدة')}
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="text-brand-muted hover:text-brand-text p-1"><X size={20} /></button>
-                        </div>
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-bold text-brand-muted">{isEn ? 'Automation Name' : 'اسم الأتمتة'}</label>
-                                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                                    placeholder={isEn ? 'e.g. Post-Ship Review Request' : 'مثال: طلب تقييم بعد الشحن'}
-                                    className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-3 text-sm focus:border-brand-accent outline-none" />
-                            </div>
-                            <div className="space-y-3 p-4 bg-brand-bg/40 rounded-2xl border border-brand-accent/10">
-                                <h3 className="font-bold text-sm text-brand-accent flex items-center gap-2">
-                                    <Zap size={15} /> {isEn ? 'Trigger' : 'المشغّل'}
-                                </h3>
-                                <select value={form.trigger.type} onChange={e => setTrigger('type', e.target.value)}
-                                    className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none">
-                                    {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{isEn ? t.labelEn : t.label}</option>)}
-                                </select>
-                                {form.trigger.type === 'order_status_changed' && (
-                                    <select value={form.trigger.value || ''} onChange={e => setTrigger('value', e.target.value)}
-                                        className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none">
-                                        {STATUS_VALUES.map(s => <option key={s.value} value={s.value}>{isEn ? s.labelEn : s.label}</option>)}
-                                    </select>
-                                )}
-                                {form.trigger.type === 'keyword_received' && (
-                                    <input value={form.trigger.value || ''} onChange={e => setTrigger('value', e.target.value)}
-                                        placeholder={isEn ? 'e.g. price' : 'مثال: سعر'}
-                                        className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none" />
-                                )}
-                            </div>
-                            <div className="space-y-3">
-                                <h3 className="font-bold text-sm text-brand-accent">{isEn ? 'Steps' : 'الخطوات'}</h3>
-                                {form.steps.map((step, i) => (
-                                    <div key={i} className="p-4 bg-brand-bg/40 rounded-2xl border border-brand-accent/10 space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-brand-muted">{isEn ? `Step ${i + 1}` : `الخطوة ${i + 1}`}</span>
-                                            {form.steps.length > 1 && (
-                                                <button onClick={() => removeStep(i)} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <input type="number" min="0" max="8760" value={step.wait_hours}
-                                                onChange={e => setStep(i, 'wait_hours', parseInt(e.target.value) || 0)}
-                                                placeholder={isEn ? 'Wait hours' : 'ساعات الانتظار'}
-                                                className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none" dir="ltr" />
-                                            <select value={step.action} onChange={e => setStep(i, 'action', e.target.value)}
-                                                className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none">
-                                                <option value="send_text">{isEn ? 'Send Text' : 'إرسال نص'}</option>
-                                                <option value="send_template">{isEn ? 'Send Template' : 'إرسال قالب'}</option>
-                                            </select>
-                                        </div>
-                                        {step.action === 'send_text' && (
-                                            <textarea value={step.text || ''} onChange={e => setStep(i, 'text', e.target.value)}
-                                                placeholder={isEn ? 'Hello {{customer_name}}, ...' : 'مرحباً {{customer_name}}, ...'}
-                                                rows={3} className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none resize-none" />
-                                        )}
-                                        {step.action === 'send_template' && (
-                                            <select value={step.template_id || ''} onChange={e => setStep(i, 'template_id', e.target.value)}
-                                                className="w-full bg-brand-input border border-brand-border rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none">
-                                                <option value="">{isEn ? '-- Select template --' : '-- اختر قالب --'}</option>
-                                                {Object.entries(templates).map(([k, t]) => <option key={k} value={k}>{t.title}</option>)}
-                                            </select>
-                                        )}
-                                    </div>
-                                ))}
-                                <button onClick={addStep}
-                                    className="w-full border-2 border-dashed border-brand-accent/20 hover:border-brand-accent/50 text-brand-muted hover:text-brand-accent rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2 transition-all">
-                                    <Plus size={16} /> {isEn ? 'Add Step' : 'إضافة خطوة'}
+                            <div className="flex gap-2">
+                                <button onClick={() => handleToggle(selectedFlow.id)}
+                                    className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all ${selectedFlow.enabled ? 'border-brand-gold/40 text-brand-gold bg-brand-gold/10' : 'border-green-500/30 text-green-400 bg-green-500/10'}`}>
+                                    {selectedFlow.enabled ? (isEn?'Pause':'إيقاف') : (isEn?'Activate':'تفعيل')}
+                                </button>
+                                <button onClick={() => handleDelete(selectedFlow.id)}
+                                    className="px-3 py-1 rounded-full text-[11px] font-bold border border-red-500/20 text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-all">
+                                    {isEn?'Delete':'حذف'}
                                 </button>
                             </div>
                         </div>
-                        <div className="p-6 border-t border-brand-accent/10 flex gap-3">
-                            <button onClick={() => setShowModal(false)}
-                                className="flex-1 border border-brand-accent/30 text-brand-muted py-3 rounded-xl font-bold hover:bg-brand-accent/5 transition-all">
-                                {isEn ? 'Cancel' : 'إلغاء'}
+
+                        {/* Flow canvas */}
+                        <div className="flex-1 overflow-auto custom-scrollbar p-6" style={{background:'rgba(0,0,0,0.15)'}}>
+                            {/* Row 1: steps 1-3 */}
+                            <div className="flex items-center gap-0 mb-8">
+                                {flowSteps.slice(0, 3).map((step, idx) => (
+                                    <React.Fragment key={step.id}>
+                                        {idx > 0 && (
+                                            <div className="flex items-center shrink-0 px-1">
+                                                <div className="flex items-center gap-0.5 text-brand-muted text-[11px]">
+                                                    <span style={{letterSpacing:'-2px'}}>·····</span>
+                                                    <span>→</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div onClick={() => setSelectedStep(step)}
+                                             className={`cursor-pointer rounded-2xl p-4 transition-all shrink-0 w-[155px] ${activeStep?.id === step.id ? 'ring-2 ring-brand-accent' : 'hover:bg-white/5'}`}
+                                             style={{background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.07)'}}>
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                                <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded"
+                                                      style={{background: step.color + '22', color: step.color}}>
+                                                    {step.type}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-black text-brand-egg leading-tight">{step.title}</p>
+                                            <p className="text-[11px] text-brand-muted mt-1 leading-snug">{step.sub}</p>
+                                        </div>
+                                    </React.Fragment>
+                                ))}
+                            </div>
+
+                            {/* Branch arrow down */}
+                            {flowSteps.length > 3 && (
+                                <div className="flex ml-[77px] mb-3">
+                                    <div className="flex flex-col items-center text-brand-muted text-[11px]">
+                                        <span>·</span><span>·</span><span>·</span>
+                                        <span>↓</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Row 2: steps 4-6 */}
+                            {flowSteps.length > 3 && (
+                                <div className="flex items-center gap-0 ml-[40px]">
+                                    {flowSteps.slice(3).map((step, idx) => (
+                                        <React.Fragment key={step.id}>
+                                            {idx > 0 && (
+                                                <div className="flex items-center shrink-0 px-1">
+                                                    <div className="flex items-center gap-0.5 text-brand-muted text-[11px]">
+                                                        <span style={{letterSpacing:'-2px'}}>·····</span>
+                                                        <span>→</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div onClick={() => setSelectedStep(step)}
+                                                 className={`cursor-pointer rounded-2xl p-4 transition-all shrink-0 w-[155px] ${activeStep?.id === step.id ? 'ring-2 ring-brand-accent' : 'hover:bg-white/5'}`}
+                                                 style={{background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.07)'}}>
+                                                <div className="flex items-center gap-1.5 mb-2">
+                                                    <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded"
+                                                          style={{background: step.color + '22', color: step.color}}>
+                                                        {step.type}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs font-black text-brand-egg leading-tight">{step.title}</p>
+                                                <p className="text-[11px] text-brand-muted mt-1 leading-snug">{step.sub}</p>
+                                            </div>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </>) : (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-brand-muted p-8 text-center">
+                            <div className="w-16 h-16 rounded-2xl glass flex items-center justify-center mb-2">
+                                <Zap size={28} className="opacity-30" />
+                            </div>
+                            <p className="text-sm font-bold text-brand-egg-mute">{isEn ? 'Select a flow to view its canvas' : 'اختر فلو لعرض لوحته'}</p>
+                            <p className="text-xs">{isEn ? 'Or create a new flow to get started.' : 'أو أنشئ فلو جديد للبدء.'}</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Right: Step properties ── */}
+                <div className="glass rounded-2xl flex flex-col overflow-hidden">
+                    <div className="px-4 py-3 border-b border-brand-border/20 shrink-0">
+                        <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Step properties' : 'خصائص الخطوة'} </span>
+                        {activeStep && <span className="text-[10px] font-bold text-brand-muted">{stepIndex + 1} {isEn ? 'OF' : 'من'} {flowSteps.length}</span>}
+                    </div>
+
+                    {activeStep ? (
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                            <div>
+                                <p className="text-[11px] font-black text-brand-egg">{isEn ? 'Send WhatsApp template' : 'إرسال قالب واتساب'}</p>
+                            </div>
+                            {[
+                                { label: isEn?'TEMPLATE':'القالب',  value: activeStep.tpl },
+                                { label: isEn?'LANGUAGE':'اللغة',   value: activeStep.lang },
+                                { label: isEn?'VARIABLES':'المتغيرات', value: activeStep.vars },
+                                { label: isEn?'BUTTONS':'الأزرار',  value: activeStep.btns },
+                                { label: isEn?'SEND AT':'الإرسال في', value: activeStep.sendAt },
+                            ].filter(f => f.value).map((f,i) => (
+                                <div key={i}>
+                                    <p className="text-[9px] font-bold text-brand-muted tracking-wider mb-1">{f.label}</p>
+                                    <div className="px-3 py-2 rounded-xl text-[12px] font-bold text-brand-egg"
+                                         style={{background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.07)'}}>
+                                        {f.value}
+                                    </div>
+                                </div>
+                            ))}
+
+                            {(activeStep.delivered || activeStep.seen) && (
+                                <div>
+                                    <p className="text-[9px] font-bold text-brand-muted tracking-wider mb-2">{isEn ? 'STEP STATS · 30D' : 'إحصائيات الخطوة · 30 يوم'}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {activeStep.delivered && (
+                                            <div className="glass-subtle rounded-xl p-3 text-center">
+                                                <p className="text-[9px] font-bold text-brand-muted mb-1">{isEn?'DELIVERED':'تم الإرسال'}</p>
+                                                <p className="text-xl font-black text-brand-egg">{activeStep.delivered}</p>
+                                            </div>
+                                        )}
+                                        {activeStep.seen && (
+                                            <div className="glass-subtle rounded-xl p-3 text-center">
+                                                <p className="text-[9px] font-bold text-brand-muted mb-1">{isEn?'SEEN':'شُوهد'}</p>
+                                                <p className="text-xl font-black text-brand-egg">{activeStep.seen}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 pt-1">
+                                <button className="flex-1 py-2 rounded-xl border border-brand-border/30 text-[12px] font-bold text-brand-muted hover:text-brand-egg hover:border-brand-accent/30 transition-all">
+                                    {isEn ? 'Test step' : 'اختبار'}
+                                </button>
+                                <button className="flex-1 py-2 rounded-xl text-[12px] font-bold text-brand-bg transition-all"
+                                        style={{background:'#8CC850'}}>
+                                    {isEn ? 'Save' : 'حفظ'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-brand-muted p-4 text-center">
+                            <p className="text-xs font-bold">{selectedFlow ? (isEn?'Click a node to see its properties':'اضغط على خطوة لعرض خصائصها') : (isEn?'Select a flow first':'اختر فلو أولاً')}</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* New flow modal */}
+            {showNewModal && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowNewModal(false)}>
+                    <div className="glass rounded-2xl p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-black text-brand-egg">{isEn ? 'New Flow' : 'فلو جديد'}</h3>
+                        <div>
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn?'FLOW NAME':'اسم الفلو'}</label>
+                            <input value={newForm.name} onChange={e => setNewForm(p=>({...p,name:e.target.value}))}
+                                placeholder={isEn?'e.g. Order confirmation':'مثال: تأكيد الطلب'}
+                                className="w-full mt-1 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-sm outline-none focus:border-brand-accent text-brand-egg" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider">{isEn?'TRIGGER':'المشغّل'}</label>
+                            <select value={newForm.trigger} onChange={e => setNewForm(p=>({...p,trigger:e.target.value}))}
+                                className="w-full mt-1 bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-sm outline-none text-brand-egg">
+                                <option value="order_created">{isEn?'New Order Created':'طلب جديد'}</option>
+                                <option value="order_status_changed">{isEn?'Order Status Changed':'تغيير حالة الطلب'}</option>
+                                <option value="keyword_received">{isEn?'Keyword Received':'كلمة مفتاحية'}</option>
+                                <option value="new_message">{isEn?'Any New Message':'أي رسالة جديدة'}</option>
+                            </select>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                            <button onClick={() => setShowNewModal(false)}
+                                className="flex-1 py-2 rounded-xl border border-brand-border/30 text-sm font-bold text-brand-muted">
+                                {isEn?'Cancel':'إلغاء'}
                             </button>
-                            <button onClick={handleSave} disabled={saving}
-                                className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
-                                {saving ? (isEn ? 'Saving...' : 'جاري...') : (isEn ? 'Save' : 'حفظ')}
+                            <button onClick={handleCreate} disabled={saving}
+                                className="flex-1 py-2 rounded-xl text-sm font-bold text-brand-bg disabled:opacity-50"
+                                style={{background:'#FF6400'}}>
+                                {saving ? '...' : (isEn?'Create':'إنشاء')}
                             </button>
                         </div>
                     </div>
@@ -3059,7 +3761,7 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
                         </div>
                         <div className="relative">
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
-                            <input value={search} onChange={e=>setSearch(e.target.value)}
+                            <input value={search} onChange={e =>setSearch(e.target.value)}
                                 placeholder={isEn?'Search...':'بحث...'}
                                 className="bg-brand-bg/50 border border-brand-border/30 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-brand-accent/40 w-36" />
                         </div>
@@ -3187,7 +3889,7 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
                     {/* Message */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <p className="text-[10px] font-mono text-brand-muted uppercase tracking-wider mb-2 shrink-0">{isEn?'MESSAGE':'الرسالة'}</p>
-                        <textarea
+                        <textarea dir="auto" 
                             value={customNote || (selected ? buildMessage(selected) : '')}
                             onChange={e=>setCustomNote(e.target.value)}
                             placeholder={isEn?'Message will appear here after selecting a product...':'ستظهر الرسالة هنا بعد اختيار المنتج...'}
@@ -3216,125 +3918,342 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
     const isEn = lang === 'en';
-    const [step, setStep] = useState(1);
-    const [saving, setSaving] = useState(false);
-    const [form, setForm] = useState({
+    const [step, setStep] = React.useState(0); // 0=welcome, 1=whatsapp, 2=shopify, 3=done
+    const [saving, setSaving] = React.useState(false);
+    const [testing, setTesting] = React.useState({});
+    const [testResult, setTestResult] = React.useState({});
+    const [errors, setErrors] = React.useState({});
+    const [show, setShow] = React.useState({});
+    const [form, setForm] = React.useState({
         business_name: '', access_token: '', phone_number_id: '',
         verify_token: '', shopify_url: '', shopify_access_token: '',
-        gemini_api_key: '', catalog_id: '', server_url: ''
+        server_url: ''
     });
-    const [show, setShow] = useState({});
 
-    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+    const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrors(p => ({ ...p, [k]: null })); };
     const toggleShow = (k) => setShow(p => ({ ...p, [k]: !p[k] }));
 
+    const validate1 = () => {
+        const e = {};
+        if (!form.business_name.trim()) e.business_name = isEn ? 'Required' : 'مطلوب';
+        if (!form.access_token.trim()) e.access_token = isEn ? 'Required' : 'مطلوب';
+        if (!form.phone_number_id.trim()) e.phone_number_id = isEn ? 'Required' : 'مطلوب';
+        if (!form.verify_token.trim()) e.verify_token = isEn ? 'Required' : 'مطلوب';
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const testWhatsApp = async () => {
+        if (!form.access_token || !form.phone_number_id) return;
+        setTesting(p => ({ ...p, wa: true }));
+        setTestResult(p => ({ ...p, wa: null }));
+        try {
+            const res = await axios.post(`${API_URL}/config/test-whatsapp`, {
+                access_token: form.access_token,
+                phone_number_id: form.phone_number_id
+            });
+            setTestResult(p => ({ ...p, wa: { ok: true, msg: res.data?.name || (isEn ? 'Connected!' : 'تم الاتصال!') } }));
+        } catch (e) {
+            setTestResult(p => ({ ...p, wa: { ok: false, msg: e.response?.data?.error || (isEn ? 'Connection failed' : 'فشل الاتصال') } }));
+        }
+        setTesting(p => ({ ...p, wa: false }));
+    };
+
+    const testShopify = async () => {
+        if (!form.shopify_url || !form.shopify_access_token) return;
+        setTesting(p => ({ ...p, sh: true }));
+        setTestResult(p => ({ ...p, sh: null }));
+        try {
+            const res = await axios.post(`${API_URL}/config/test-shopify`, {
+                shopify_url: form.shopify_url,
+                shopify_access_token: form.shopify_access_token
+            });
+            setTestResult(p => ({ ...p, sh: { ok: true, msg: res.data?.shop || (isEn ? 'Connected!' : 'تم الاتصال!') } }));
+        } catch (e) {
+            setTestResult(p => ({ ...p, sh: { ok: false, msg: e.response?.data?.error || (isEn ? 'Connection failed' : 'فشل الاتصال') } }));
+        }
+        setTesting(p => ({ ...p, sh: false }));
+    };
+
     const handleSave = async () => {
-        if (!form.business_name || !form.access_token || !form.phone_number_id || !form.verify_token)
-            return alert(isEn ? 'Please fill in the required fields.' : 'يرجى تعبئة الحقول المطلوبة.');
         setSaving(true);
         try {
             await axios.post(`${API_URL}/config/setup`, form);
-            onComplete(form.business_name);
+            setStep(3);
         } catch (e) { alert(isEn ? 'Save failed!' : 'فشل الحفظ!'); }
         setSaving(false);
     };
 
-    const Field = ({ label, k, placeholder, required, hint }) => (
-        <div className="space-y-1.5">
-            <label className="text-sm font-bold text-brand-text flex items-center gap-1">
-                {label} {required && <span className="text-red-400">*</span>}
-            </label>
-            {hint && <p className="text-[11px] text-brand-muted">{hint}</p>}
-            <div className="relative">
+    const renderOnboardField = ({ k, label, placeholder, hint, secret, optional }) => (
+        <div className="space-y-1">
+            <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-brand-text flex items-center gap-1">
+                    {label}
+                    {!optional && <span className="text-red-400">*</span>}
+                    {optional && <span className="text-[10px] text-brand-muted font-normal ml-1">({isEn ? 'optional' : 'اختياري'})</span>}
+                </label>
+                {errors[k] && <span className="text-[10px] text-red-400 font-bold">{errors[k]}</span>}
+            </div>
+            {hint && <p className="text-[10px] text-brand-muted leading-relaxed">{hint}</p>}
+            <div className="relative" dir="ltr">
                 <input
-                    type={show[k] ? 'text' : (k.includes('token') || k.includes('key') ? 'password' : 'text')}
+                    type={show[k] ? 'text' : (secret ? 'password' : 'text')}
                     value={form[k]}
                     onChange={e => set(k, e.target.value)}
                     placeholder={placeholder}
-                    dir="ltr"
-                    className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-3 text-sm focus:border-brand-accent outline-none pr-10"
+                    className={`w-full bg-brand-input rounded-xl px-4 py-2.5 text-sm outline-none pr-10 text-left transition-all ${errors[k] ? 'border-2 border-red-400/60' : 'border border-brand-accent/20 focus:border-brand-accent'}`}
                 />
-                {(k.includes('token') || k.includes('key')) && (
+                {secret && (
                     <button type="button" onClick={() => toggleShow(k)} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-accent">
-                        {show[k] ? <EyeOff size={15} /> : <Eye size={15} />}
+                        {show[k] ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                 )}
             </div>
         </div>
     );
 
+    const steps = [
+        { id: 0, label: isEn ? 'Welcome' : 'مرحباً' },
+        { id: 1, label: isEn ? 'WhatsApp' : 'واتساب' },
+        { id: 2, label: isEn ? 'Shopify' : 'شوبيفاي' },
+        { id: 3, label: isEn ? 'Done' : 'تم' },
+    ];
+
+    const serverUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const webhookUrl = `${serverUrl}/webhooks/whatsapp`;
+
     return (
-        <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6" dir={isEn ? 'ltr' : 'rtl'}>
-            <div className="w-full max-w-xl space-y-6">
-                <div className="text-center space-y-2 relative">
-                    <button
-                        onClick={() => onLangChange(isEn ? 'ar' : 'en')}
-                        className="absolute top-0 left-0 px-3 py-1.5 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent hover:bg-brand-accent/20 transition-all text-xs font-bold"
-                    >
+        <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4" dir={isEn ? 'ltr' : 'rtl'}>
+            <div className="w-full max-w-lg space-y-5">
+
+                {/* Header */}
+                <div className="text-center space-y-3 relative">
+                    <button onClick={() => onLangChange(isEn ? 'ar' : 'en')}
+                        className="absolute top-0 left-0 px-3 py-1.5 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-xs font-bold hover:bg-brand-accent/20 transition-all">
                         {isEn ? 'عربي' : 'English'}
                     </button>
-                    <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20">
-                        <ShieldCheck size={32} className="text-brand-accent" />
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                        <OmniFlowMark size={36} />
+                        <h1 className="text-2xl font-bold text-brand-egg">Omni<span className="font-light">Flow</span></h1>
                     </div>
-                    <div className="flex items-center justify-center gap-3">
-                        <OmniFlowMark size={40} />
-                        <h1 className="text-3xl font-bold text-brand-egg tracking-tight">Omni<span className="font-light">Flow</span></h1>
-                    </div>
-                    <p className="text-brand-muted text-sm">{isEn ? 'WhatsApp CRM — Initial Setup' : 'WhatsApp CRM — الإعداد الأولي'}</p>
                 </div>
 
-                <div className="glass p-8 rounded-2xl space-y-5">
-                    {step === 1 && (
-                        <>
-                            <h3 className="font-bold text-lg text-brand-text border-b border-brand-accent/10 pb-3">
-                                {isEn ? '1 / 2 — Business & WhatsApp' : '١ / ٢ — بيانات البيزنس وواتساب'}
-                            </h3>
-                            <Field k="business_name" label={isEn ? 'Business Name' : 'اسم البيزنس'} placeholder="My Store" required
-                                hint={isEn ? 'Will appear in the app and messages' : 'هيظهر في التطبيق وفي الرسائل'} />
-                            <Field k="access_token" label={isEn ? 'Meta Access Token' : 'Meta Access Token'} placeholder="EAAVXdh..." required
-                                hint={isEn ? 'From Meta Business > WhatsApp > API Setup' : 'من Meta Business > WhatsApp > API Setup'} />
-                            <Field k="phone_number_id" label={isEn ? 'Phone Number ID' : 'Phone Number ID'} placeholder="1032753703264445" required
-                                hint={isEn ? 'From Meta Business > WhatsApp > API Setup' : 'من نفس الصفحة'} />
-                            <Field k="verify_token" label={isEn ? 'Webhook Verify Token' : 'Webhook Verify Token'} placeholder="my_secret_2025" required
-                                hint={isEn ? 'A secret string you choose (used to verify your webhook URL)' : 'كلمة سر تختارها أنت لتحقق الـ webhook'} />
-                            <button onClick={() => setStep(2)} className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all">
-                                {isEn ? 'Next →' : 'التالي ←'}
+                {/* Progress bar */}
+                <div className="flex items-center gap-1">
+                    {steps.map((s, i) => (
+                        <React.Fragment key={s.id}>
+                            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${step === s.id ? 'bg-brand-accent text-brand-bg' : step > s.id ? 'text-brand-accent' : 'text-brand-muted'}`}>
+                                {step > s.id ? <CheckCircle size={11} /> : <span className="w-3.5 h-3.5 rounded-full border border-current flex items-center justify-center text-[8px]">{s.id + 1}</span>}
+                                {s.label}
+                            </div>
+                            {i < steps.length - 1 && <div className={`flex-1 h-px transition-all ${step > i ? 'bg-brand-accent' : 'bg-brand-border/30'}`} />}
+                        </React.Fragment>
+                    ))}
+                </div>
+
+                {/* Card */}
+                <div className="glass rounded-2xl overflow-hidden border border-brand-border/20">
+
+                    {/* ── STEP 0: Welcome ─────────────────────────────── */}
+                    {step === 0 && (
+                        <div className="p-8 space-y-6">
+                            <div className="text-center space-y-2">
+                                <div className="w-14 h-14 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20">
+                                    <ShieldCheck size={28} className="text-brand-accent" />
+                                </div>
+                                <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Welcome to OmniFlow' : 'أهلاً بك في OmniFlow'}</h2>
+                                <p className="text-sm text-brand-muted">{isEn ? 'Setup takes about 5 minutes. Here\'s what you\'ll need:' : 'الإعداد يأخذ حوالي 5 دقائق. ستحتاج إلى:'}</p>
+                            </div>
+                            <div className="space-y-3">
+                                {[
+                                    {
+                                        icon: '💬', title: isEn ? 'WhatsApp Business API' : 'واتساب Business API',
+                                        desc: isEn ? 'A Meta Business account with WhatsApp Cloud API access' : 'حساب Meta Business مع صلاحية WhatsApp Cloud API',
+                                        link: 'https://developers.facebook.com', linkText: isEn ? 'Open Meta Developers →' : 'افتح Meta Developers →'
+                                    },
+                                    {
+                                        icon: '🛒', title: isEn ? 'Shopify Store (Optional)' : 'متجر Shopify (اختياري)',
+                                        desc: isEn ? 'Your Shopify store URL and a private app access token' : 'رابط متجر Shopify وتوكن الوصول',
+                                        link: 'https://admin.shopify.com', linkText: isEn ? 'Open Shopify Admin →' : 'افتح Shopify Admin →'
+                                    },
+                                    
+                                ].map((item, i) => (
+                                    <div key={i} className="flex gap-3 p-3.5 rounded-xl bg-brand-card/50 border border-brand-border/20">
+                                        <span className="text-xl shrink-0 mt-0.5">{item.icon}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-brand-egg">{item.title}</p>
+                                            <p className="text-[11px] text-brand-muted mt-0.5">{item.desc}</p>
+                                            <a href={item.link} target="_blank" rel="noreferrer"
+                                                className="text-[11px] text-brand-accent font-bold hover:underline mt-1 inline-block">{item.linkText}</a>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => setStep(1)}
+                                className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all text-sm">
+                                {isEn ? "Let's start →" : 'هيا نبدأ ←'}
                             </button>
-                        </>
+                        </div>
                     )}
-                    {step === 2 && (
-                        <>
-                            <h3 className="font-bold text-lg text-brand-text border-b border-brand-accent/10 pb-3">
-                                {isEn ? '2 / 2 — Shopify & Optional Services' : '٢ / ٢ — شوبيفاي والخدمات الاختيارية'}
-                            </h3>
-                            <Field k="shopify_url" label={isEn ? 'Shopify Store URL' : 'رابط متجر شوبيفاي'} placeholder="my-store.myshopify.com"
-                                hint={isEn ? 'Optional — Required for Shopify orders integration' : 'اختياري — مطلوب لربط طلبات شوبيفاي'} />
-                            <Field k="shopify_access_token" label="Shopify Access Token" placeholder="shpat_..."
-                                hint={isEn ? 'From Shopify Admin > Apps > Private apps' : 'من Shopify Admin > Apps > Private apps'} />
-                            <Field k="gemini_api_key" label={isEn ? 'Gemini AI Key (Auto-reply)' : 'Gemini AI Key (الرد الآلي)'} placeholder="AIza..."
-                                hint={isEn ? 'Optional — Enables AI auto-replies to customer messages' : 'اختياري — يفعّل الرد الآلي بالذكاء الاصطناعي'} />
-                            <Field k="server_url" label={isEn ? 'Public Server URL' : 'الرابط العام للسيرفر'} placeholder="https://my-app.ngrok.io"
-                                hint={isEn ? 'Optional — Required to send image headers in campaigns' : 'اختياري — مطلوب لإرسال صور الهيدر في الحملات'} />
-                            <div className="flex gap-3 pt-2">
-                                <button onClick={() => setStep(1)} className="flex-1 border border-brand-accent/30 text-brand-accent py-3 rounded-xl font-bold hover:bg-brand-accent/10 transition-all">
-                                    {isEn ? '← Back' : '→ رجوع'}
+
+                    {/* ── STEP 1: WhatsApp ─────────────────────────────── */}
+                    {step === 1 && (
+                        <div className="p-7 space-y-4">
+                            <div className="flex items-center gap-3 pb-3 border-b border-brand-border/15">
+                                <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+                                    <span className="text-lg">💬</span>
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-brand-egg text-sm">{isEn ? 'WhatsApp Business Setup' : 'إعداد واتساب Business'}</h3>
+                                    <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noreferrer"
+                                        className="text-[10px] text-brand-accent hover:underline font-bold">
+                                        {isEn ? 'Open Meta Business Manager →' : 'افتح Meta Business Manager →'}
+                                    </a>
+                                </div>
+                            </div>
+
+                            {renderOnboardField({k:"business_name", label:(isEn ? 'Business Name' : 'اسم البيزنس'), placeholder:(isEn ? 'My Store' : 'متجري'), hint:(isEn ? 'Appears in the app header and outgoing messages' : 'يظهر في الهيدر وفي الرسائل الصادرة')})}
+
+                            <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-1">
+                                <p className="text-[10px] font-black text-blue-400 uppercase tracking-wider">{isEn ? 'Where to find these:' : 'من أين تحصل عليهم:'}</p>
+                                <p className="text-[10px] text-brand-muted">Meta Business → WhatsApp → API Setup → <span className="text-brand-egg font-bold">API credentials</span></p>
+                            </div>
+
+                            {renderOnboardField({k:"access_token", label:"Meta Access Token", placeholder:"EAAVXdh...", secret:true, hint:(isEn ? 'Permanent token from Meta WhatsApp API Setup page' : 'التوكن الدائم من صفحة Meta WhatsApp API Setup')})}
+                            {renderOnboardField({k:"phone_number_id", label:"Phone Number ID", placeholder:"1032753703264445", hint:(isEn ? 'The numeric ID next to your WhatsApp number' : 'الرقم التعريفي بجانب رقم واتساب الخاص بك')})}
+                            {renderOnboardField({k:"verify_token", label:"Webhook Verify Token", placeholder:"my_secret_2025", hint:(isEn ? 'A secret:true word you choose — you\'ll enter it in Meta Webhook settings' : 'كلمة سر تختارها أنت — ستُدخلها في إعدادات Webhook في Meta')})}
+
+                            {/* Test connection */}
+                            <div className="flex items-center gap-3">
+                                <button onClick={testWhatsApp} disabled={testing.wa || !form.access_token || !form.phone_number_id}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-brand-accent/30 text-brand-accent text-xs font-bold hover:bg-brand-accent/10 disabled:opacity-40 transition-all">
+                                    {testing.wa ? <RefreshCcw size={12} className="animate-spin" /> : <Zap size={12} />}
+                                    {isEn ? 'Test Connection' : 'اختبر الاتصال'}
                                 </button>
-                                <button onClick={handleSave} disabled={saving} className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
-                                    {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Launch App âœ"' : 'تشغيل التطبيق âœ"')}
+                                {testResult.wa && (
+                                    <span className={`text-[11px] font-bold flex items-center gap-1 ${testResult.wa.ok ? 'text-brand-accent' : 'text-red-400'}`}>
+                                        {testResult.wa.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                                        {testResult.wa.msg}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="flex gap-3 pt-1">
+                                <button onClick={() => setStep(0)} className="px-4 py-2.5 rounded-xl border border-brand-border/30 text-brand-muted text-sm font-bold hover:text-brand-egg transition-all">
+                                    {isEn ? '← Back' : 'رجوع →'}
+                                </button>
+                                <button onClick={() => { if (validate1()) setStep(2); }}
+                                    className="flex-1 bg-brand-accent text-brand-bg py-2.5 rounded-xl font-bold hover:opacity-90 transition-all text-sm">
+                                    {isEn ? 'Next: Shopify →' : 'التالي: Shopify ←'}
                                 </button>
                             </div>
-                        </>
+                        </div>
+                    )}
+
+                    {/* ── STEP 2: Shopify + AI ─────────────────────────── */}
+                    {step === 2 && (
+                        <div className="p-7 space-y-4">
+                            <div className="flex items-center gap-3 pb-3 border-b border-brand-border/15">
+                                <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+                                    <span className="text-lg">🛒</span>
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-brand-egg text-sm">{isEn ? 'Shopify & AI (Optional)' : 'Shopify والذكاء الاصطناعي (اختياري)'}</h3>
+                                    <p className="text-[10px] text-brand-muted">{isEn ? 'Skip if you don\'t have a Shopify store yet' : 'تخطَّ إذا لم يكن لديك متجر Shopify بعد'}</p>
+                                </div>
+                            </div>
+
+                            {/* Shopify OAuth button */}
+                            <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20 space-y-3">
+                                <p className="text-xs font-black text-brand-egg">{isEn ? 'Connect Shopify' : 'ربط Shopify'}</p>
+                                <a href={`${serverUrl}/auth/shopify`}
+                                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[#96BF48] text-white text-sm font-bold hover:opacity-90 transition-all">
+                                    <ShoppingCart size={15} />
+                                    {isEn ? 'Connect with Shopify (OAuth)' : 'ربط مع Shopify تلقائياً'}
+                                </a>
+                                <p className="text-[10px] text-brand-muted text-center">{isEn ? '— or enter credentials manually below —' : '— أو أدخل البيانات يدوياً أدناه —'}</p>
+                            </div>
+
+                            {renderOnboardField({k:"shopify_url", label:(isEn ? 'Store URL' : 'رابط المتجر'), optional:true, placeholder:"my-store.myshopify.com", hint:(isEn ? 'Your Shopify store domain' : 'دومين متجر Shopify الخاص بك')})}
+                            {renderOnboardField({k:"shopify_access_token", label:"Admin API Token", placeholder:"shpat_...", secret:true, optional:true, hint:(isEn ? 'From Shopify Admin → Settings → Apps → Develop apps' : 'من Shopify Admin → الإعدادات → التطبيقات → طوّر تطبيقات')})}
+
+                            {/* Test Shopify */}
+                            {(form.shopify_url || form.shopify_access_token) && (
+                                <div className="flex items-center gap-3">
+                                    <button onClick={testShopify} disabled={testing.sh || !form.shopify_url || !form.shopify_access_token}
+                                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-brand-accent/30 text-brand-accent text-xs font-bold hover:bg-brand-accent/10 disabled:opacity-40 transition-all">
+                                        {testing.sh ? <RefreshCcw size={12} className="animate-spin" /> : <Zap size={12} />}
+                                        {isEn ? 'Test Shopify' : 'اختبر Shopify'}
+                                    </button>
+                                    {testResult.sh && (
+                                        <span className={`text-[11px] font-bold flex items-center gap-1 ${testResult.sh.ok ? 'text-brand-accent' : 'text-red-400'}`}>
+                                            {testResult.sh.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                                            {testResult.sh.msg}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+
+
+                            <div className="flex gap-3 pt-1">
+                                <button onClick={() => setStep(1)} className="px-4 py-2.5 rounded-xl border border-brand-border/30 text-brand-muted text-sm font-bold hover:text-brand-egg transition-all">
+                                    {isEn ? '← Back' : 'رجوع →'}
+                                </button>
+                                <button onClick={handleSave} disabled={saving}
+                                    className="flex-1 bg-brand-accent text-brand-bg py-2.5 rounded-xl font-bold hover:opacity-90 transition-all text-sm disabled:opacity-50">
+                                    {saving ? <RefreshCcw size={14} className="animate-spin mx-auto" /> : (isEn ? 'Save & Launch App →' : 'حفظ وتشغيل التطبيق ←')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── STEP 3: Done ─────────────────────────────────── */}
+                    {step === 3 && (
+                        <div className="p-8 space-y-5 text-center">
+                            <div className="w-16 h-16 bg-brand-accent/20 rounded-full flex items-center justify-center mx-auto border-2 border-brand-accent">
+                                <CheckCircle size={32} className="text-brand-accent" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-brand-egg">{isEn ? 'You\'re all set!' : 'كل شيء جاهز!'}</h2>
+                                <p className="text-sm text-brand-muted mt-1">{isEn ? 'One last step — connect your WhatsApp Webhook' : 'خطوة أخيرة — اربط الـ Webhook في Meta'}</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-brand-card/60 border border-brand-border/20 text-left space-y-3">
+                                <p className="text-xs font-black text-brand-egg">{isEn ? 'Set this Webhook URL in Meta:' : 'أضف هذا الرابط في إعدادات Webhook في Meta:'}</p>
+                                <div className="flex items-center gap-2" dir="ltr">
+                                    <code className="flex-1 text-[11px] bg-brand-input rounded-lg px-3 py-2 text-brand-accent font-mono break-all">{webhookUrl}</code>
+                                    <button onClick={() => navigator.clipboard?.writeText(webhookUrl)}
+                                        className="shrink-0 p-2 rounded-lg bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20 transition-all">
+                                        <Copy size={13} />
+                                    </button>
+                                </div>
+                                <ol className={`text-[11px] text-brand-muted space-y-1 list-decimal ${isEn ? 'pl-4' : 'pr-4'}`}>
+                                    <li>{isEn ? 'Go to Meta Developers → your app → WhatsApp → Configuration' : 'افتح Meta Developers → تطبيقك → WhatsApp → Configuration'}</li>
+                                    <li>{isEn ? 'Paste the URL above in "Callback URL"' : 'الصق الرابط أعلاه في "Callback URL"'}</li>
+                                    <li>{isEn ? 'Enter your Verify Token (the one you set in step 2)' : 'أدخل الـ Verify Token اللي حددته في الخطوة السابقة'}</li>
+                                    <li>{isEn ? 'Subscribe to: messages, messaging_postbacks' : 'اشترك في: messages, messaging_postbacks'}</li>
+                                </ol>
+                                <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer"
+                                    className="flex items-center justify-center gap-2 w-full py-2 rounded-xl border border-brand-accent/30 text-brand-accent text-xs font-bold hover:bg-brand-accent/10 transition-all">
+                                    <ExternalLink size={12} />
+                                    {isEn ? 'Open Meta Developers' : 'افتح Meta Developers'}
+                                </a>
+                            </div>
+                            <button onClick={() => onComplete(form.business_name)}
+                                className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all">
+                                {isEn ? 'Open OmniFlow Dashboard →' : 'افتح لوحة تحكم OmniFlow ←'}
+                            </button>
+                        </div>
                     )}
                 </div>
-                <p className="text-center text-[11px] text-brand-muted">{isEn ? 'Settings are saved to .env on your server' : 'الإعدادات تُحفظ في ملف .env على السيرفر'}</p>
+
+                <p className="text-center text-[10px] text-brand-muted">{isEn ? 'Settings saved securely on your server' : 'الإعدادات محفوظة بأمان على سيرفرك'}</p>
             </div>
         </div>
     );
 };
 
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-//  Shipping Components
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
 const SHIPPING_PROVIDERS = [
     { id: 'bosta',  name: 'Bosta',       flag: 'ًںں ', region: 'مصر' },
     { id: 'jt',     name: 'J&T Express', flag: 'ًں"´', region: 'مصر' },
@@ -3408,7 +4327,6 @@ const ShippingSettings = ({ isEn, showToast }) => {
                                                         value={configs[p.id]?.[f.k] || ''}
                                                         onChange={e => set(p.id, f.k, e.target.value)}
                                                         placeholder={f.placeholder}
-                                                        dir="ltr"
                                                         className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:border-brand-accent outline-none pr-8"
                                                     />
                                                     {f.secret && (
@@ -3541,7 +4459,6 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
                         <div className="space-y-1">
                             <label className="text-[11px] text-brand-muted font-bold">{isEn ? 'COD Amount' : 'مبلغ الاستلام (COD)'}</label>
                             <input type="number" value={form.cod} onChange={e => setForm(p => ({ ...p, cod: e.target.value }))}
-                                dir="ltr"
                                 className="w-full bg-brand-input border border-brand-border rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none" />
                         </div>
                         <div className="space-y-1 col-span-2">
@@ -3569,434 +4486,607 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
 };
 
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-//  Setup Manager (In-App Settings Page)
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+// ── App Settings ─────────────────────────────────────────────────────────────
 const SetupManager = ({ showToast, lang, onSave }) => {
     const isEn = lang === 'en';
-    const [form, setForm] = useState(null);
-    const [branding, setBrandingLocal] = useState({ brand_color: '#d5aa65', logo_url: null });
-    const [logoPreview, setLogoPreview] = useState(null);
-    const [savingBranding, setSavingBranding] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [aiInstruction, setAiInstruction] = useState('');
-    const [testingWebhook, setTestingWebhook] = useState(false);
-    const [testingWoo, setTestingWoo] = useState(false);
+    const [section, setSection] = React.useState('workspace');
+    const [saving, setSaving] = React.useState(false);
 
-    const [show, setShow] = useState({});
-    const logoInputRef = useRef(null);
+    // ── Data state ──────────────────────────────────────────────────────────
+    const [ws, setWs] = React.useState({
+        brand_name: '', region: '', language: 'ar+en', currency: 'EGP',
+        wa_phone: '', wa_token: '', wa_phone_id: '', wa_business_id: '',
+        shopify_store: '', shopify_key: '', shopify_secret: '', shopify_webhook: '',
+        ai_enabled: false, ai_instruction: '',
+        ai_auto_reply: true, ai_draft_mode: false, ai_auto_tag_vip: false,
+        ai_send_recovery: false, ai_escalate_negative: false,
+    });
+    const [branding, setBranding] = React.useState({ brand_color: '#8CC850', logo_url: null });
+    const [team, setTeam] = React.useState([]);
+    const [integrations, setIntegrations] = React.useState({ wa: null, shopify: null, ai: null });
+    const [showSecrets, setShowSecrets] = React.useState({});
+    const logoRef = React.useRef(null);
 
-    useEffect(() => {
-        axios.get(`${API_URL}/config/setup`).then(r => setForm(r.data)).catch(() => {});
-        axios.get(`${API_URL}/config/branding`).then(r => { setBrandingLocal(r.data); }).catch(() => {});
-        axios.get(`${API_URL}/settings`).then(r => { setAiInstruction(r.data.ai_instruction || ''); }).catch(() => {});
+    // ── Load ────────────────────────────────────────────────────────────────
+    React.useEffect(() => {
+        axios.get(`${API_URL}/config/setup`).then(r => {
+            if (r.data && typeof r.data === 'object') setWs(p => ({ ...p, ...r.data }));
+        }).catch(() => {});
+        axios.get(`${API_URL}/config/branding`).then(r => {
+            if (r.data) setBranding(r.data);
+        }).catch(() => {});
+        axios.get(`${API_URL}/settings`).then(r => {
+            if (r.data) setWs(p => ({
+                ...p,
+                ai_instruction: r.data.ai_instruction || '',
+                ai_enabled: !!r.data.ai_enabled,
+                ai_auto_reply: r.data.ai_auto_reply !== false,
+                ai_draft_mode: !!r.data.ai_draft_mode,
+                ai_auto_tag_vip: !!r.data.ai_auto_tag_vip,
+                ai_send_recovery: !!r.data.ai_send_recovery,
+                ai_escalate_negative: !!r.data.ai_escalate_negative,
+            }));
+        }).catch(() => {});
+        axios.get(`${API_URL}/team`).then(r => {
+            if (Array.isArray(r.data)) setTeam(r.data);
+        }).catch(() => {});
+        axios.get(`${API_URL}/integrations/status`).then(r => {
+            if (r.data) setIntegrations(r.data);
+        }).catch(() => {});
     }, []);
 
-
-    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const toggleShow = (k) => setShow(p => ({ ...p, [k]: !p[k] }));
-
-    const handleLogoSelect = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => setLogoPreview(ev.target.result);
-        reader.readAsDataURL(file);
-    };
-
-    const handleSaveBranding = async () => {
-        setSavingBranding(true);
-        try {
-            await axios.post(`${API_URL}/config/branding`, {
-                brand_color: branding.brand_color,
-                logo_base64: logoPreview || undefined
-            });
-            showToast(isEn ? 'Branding saved! Refresh to apply.' : 'تم حفظ الهوية! أعد تحميل الصفحة لتطبيقها.');
-        } catch (e) { showToast(isEn ? 'Failed to save branding' : 'فشل حفظ الهوية', 'error'); }
-        setSavingBranding(false);
-    };
-
+    // ── Save ────────────────────────────────────────────────────────────────
     const handleSave = async () => {
         setSaving(true);
         try {
-            await axios.post(`${API_URL}/config/setup`, form);
-            await axios.post(`${API_URL}/settings/ai-toggle`, { ai_instruction: aiInstruction });
-            onSave(form.business_name);
-            showToast(isEn ? 'Settings saved successfully!' : 'تم حفظ الإعدادات بنجاح!');
-        } catch (e) { showToast(isEn ? 'Save failed!' : 'فشل الحفظ!', 'error'); }
+            await axios.post(`${API_URL}/config/setup`, ws);
+            await axios.post(`${API_URL}/settings`, {
+                ai_instruction: ws.ai_instruction,
+                ai_enabled: ws.ai_enabled,
+                ai_auto_reply: ws.ai_auto_reply,
+                ai_draft_mode: ws.ai_draft_mode,
+                ai_auto_tag_vip: ws.ai_auto_tag_vip,
+                ai_draft_mode: ws.ai_draft_mode,
+                ai_auto_tag_vip: ws.ai_auto_tag_vip,
+                ai_send_recovery: ws.ai_send_recovery,
+                ai_escalate_negative: ws.ai_escalate_negative,
+            });
+            if (ws.brand_name) onSave?.(ws.brand_name);
+            showToast(isEn ? 'Settings saved!' : 'تم حفظ الإعدادات!');
+        } catch (e) {
+            showToast(isEn ? 'Failed to save' : 'فشل الحفظ', 'error');
+        }
         setSaving(false);
     };
 
-    const handleTestWebhook = async () => {
-        setTestingWebhook(true);
-        try {
-            await axios.post(`${API_URL}/webhooks/test`);
-            showToast(isEn ? 'Test event sent successfully!' : 'تم إرسال الحدث التجريبي بنجاح!');
-        } catch (e) { showToast(e.response?.data?.error || (isEn ? 'Webhook test failed' : 'فشل اختبار الـ Webhook'), 'error'); }
-        setTestingWebhook(false);
-    };
+    const set = (k, v) => setWs(p => ({ ...p, [k]: v }));
+    const toggle = (k) => setWs(p => ({ ...p, [k]: !p[k] }));
+    const toggleSecret = (k) => setShowSecrets(p => ({ ...p, [k]: !p[k] }));
 
-    const handleTestWoo = async () => {
-        setTestingWoo(true);
-        try {
-            await axios.get(`${API_URL}/woo/orders`);
-            showToast(isEn ? 'WooCommerce connected!' : 'تم الاتصال بـ WooCommerce بنجاح!');
-        } catch (e) { showToast(e.response?.data?.error || (isEn ? 'Connection failed' : 'فشل الاتصال'), 'error'); }
-        setTestingWoo(false);
-    };
-
-    if (!form) return <div className="flex items-center justify-center h-64 text-brand-muted">{isEn ? 'Loading...' : 'جاري التحميل...'}</div>;
-
-    const Field = ({ label, k, placeholder, hint, secret }) => (
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    const renderField = ({ label, field, placeholder = '', type = 'text', secret = false }) => (
         <div className="space-y-1.5">
-            <label className="text-xs font-bold text-brand-muted">{label}</label>
-            {hint && <p className="text-[10px] text-brand-muted/70">{hint}</p>}
-            <div className="relative">
+            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{label}</label>
+            <div className="relative" dir="ltr">
                 <input
-                    type={secret && !show[k] ? 'password' : 'text'}
-                    value={form[k] || ''}
-                    onChange={e => set(k, e.target.value)}
+                    type={secret && !showSecrets[field] ? 'password' : type}
+                    value={ws[field] || ''}
+                    onChange={e => set(field, e.target.value)}
                     placeholder={placeholder}
-                    dir="ltr"
-                    className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-sm focus:border-brand-accent outline-none pr-10"
+                    className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none text-brand-egg text-left"
                 />
                 {secret && (
-                    <button type="button" onClick={() => toggleShow(k)} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-accent">
-                        {show[k] ? <EyeOff size={14} /> : <Eye size={14} />}
+                    <button onClick={() => toggleSecret(field)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-egg" type="button">
+                        {showSecrets[field] ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
                 )}
             </div>
         </div>
     );
 
-    const Section = ({ title, children }) => (
-        <div className="glass p-6 rounded-2xl space-y-4">
-            <h4 className="font-bold text-brand-accent border-b border-brand-accent/10 pb-2">{title}</h4>
-            {children}
+    const Toggle = ({ label, field, description }) => (
+        <div className="flex items-center justify-between py-2.5 border-b border-brand-border/10 last:border-0">
+            <div>
+                <p className="text-[12px] font-semibold text-brand-egg">{label}</p>
+                {description && <p className="text-[10px] text-brand-muted mt-0.5">{description}</p>}
+            </div>
+            <button onClick={() => toggle(field)} className={`relative w-10 h-5 rounded-full transition-colors ${ws[field] ? 'bg-brand-accent' : 'bg-brand-border/40'}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${ws[field] ? 'left-5' : 'left-0.5'}`} />
+            </button>
         </div>
     );
 
-    return (
-        <div className={`space-y-6 max-w-3xl mx-auto animate-in fade-in duration-500 pb-20 ${isEn ? 'text-left' : 'text-right'}`}>
-            <div className="flex justify-between items-center bg-brand-card/60 backdrop-blur-xl p-6 rounded-2xl border border-brand-accent/10">
-                <div>
-                    <h2 className="text-2xl font-bold text-brand-accent flex items-center gap-2"><Cog size={26} /> {isEn ? 'App Settings' : 'إعدادات التطبيق'}</h2>
-                    <p className="text-sm text-brand-muted mt-1">{isEn ? 'Changes are saved directly to the server .env file.' : 'التغييرات تُحفظ مباشرةً في ملف .env على السيرفر.'}</p>
+    const initials = (name) => (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const avatarColors = ['#8CC850', '#FF6B35', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899'];
+    const avatarColor = (name) => avatarColors[name?.charCodeAt(0) % avatarColors.length] || '#8CC850';
+
+    // ── Integration status card ──────────────────────────────────────────────
+    const IntCard = ({ icon: Icon, iconBg, name, subtitle, stat, connectedAt, status }) => (
+        <div className="glass rounded-2xl p-4 flex flex-col gap-3">
+            <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background: iconBg}}>
+                        <Icon size={18} color="#fff" />
+                    </div>
+                    <div>
+                        <p className="text-[13px] font-black text-brand-egg">{name}</p>
+                        <p className="text-[10px] text-brand-muted truncate max-w-[120px]">{subtitle}</p>
+                    </div>
                 </div>
-                <button onClick={handleSave} disabled={saving} className="bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2">
-                    <ShieldCheck size={16} />
-                    {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save All' : 'حفظ الكل')}
-                </button>
+                <span className={`text-[9px] font-black px-2 py-1 rounded-full tracking-wider ${
+                    status === 'connected' ? 'text-brand-accent' :
+                    status === 'synced'    ? 'text-blue-400' :
+                    status === 'active'    ? 'text-orange-400' : 'text-brand-muted'
+                }`} style={{background: status === 'connected' ? 'rgba(140,200,80,0.12)' : status === 'synced' ? 'rgba(59,130,246,0.12)' : status === 'active' ? 'rgba(255,107,53,0.12)' : 'rgba(100,100,100,0.12)'}}>
+                    ● {status?.toUpperCase() || 'NOT SET'}
+                </span>
             </div>
+            {stat && <p className="text-[11px] text-brand-muted">{stat}</p>}
+            {connectedAt && <p className="text-[10px] text-brand-muted/60">{isEn ? 'Connected' : 'متصل'} · {connectedAt}</p>}
+        </div>
+    );
 
-            <Section title={isEn ? 'Business Identity' : 'هوية البيزنس'}>
-                <Field k="business_name" label={isEn ? 'Business Name' : 'اسم البيزنس'} placeholder="My Store" />
-            </Section>
+    // ── Sidebar items ────────────────────────────────────────────────────────
+    const sideItems = [
+        { id: 'workspace',  icon: Globe,        label: isEn ? 'Workspace'          : 'مساحة العمل' },
+        { id: 'whatsapp',   icon: MessageCircle, label: isEn ? 'WhatsApp Cloud'    : 'واتساب Cloud' },
+        { id: 'shopify',    icon: ShoppingCart,  label: isEn ? 'Shopify integration': 'ربط شوبيفاي' },
+        { id: 'ai',         icon: Sparkles,      label: isEn ? 'AI assistant'       : 'مساعد AI' },
+        { id: 'team',       icon: Users,         label: isEn ? 'Team & roles'       : 'الفريق' },
+        { id: 'loyalty',    icon: Star,          label: isEn ? 'Loyalty program'    : 'برنامج الولاء' },
+        { id: 'appearance', icon: Palette,       label: isEn ? 'Appearance'         : 'المظهر' },
+    ];
 
-            <Section title={isEn ? 'Visual Identity' : 'الهوية البصرية'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-brand-muted">{isEn ? 'Brand Logo' : 'لوجو البراند'}</label>
-                        <div
-                            onClick={() => logoInputRef.current?.click()}
-                            className="w-full h-28 bg-brand-input border-2 border-dashed border-brand-accent/20 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-brand-accent/50 transition-all"
-                        >
-                            {logoPreview || branding.logo_url ? (
-                                <img
-                                    src={logoPreview || `http://localhost:8765${branding.logo_url}`}
-                                    alt="logo"
-                                    className="h-16 object-contain"
-                                />
-                            ) : (
-                                <>
-                                    <ImageIcon size={24} className="text-brand-muted mb-1" />
-                                    <span className="text-xs text-brand-muted">{isEn ? 'Click to upload logo' : 'اضغط لرفع اللوجو'}</span>
-                                    <span className="text-[10px] text-brand-muted/60">{isEn ? 'PNG or JPG recommended' : 'يُفضل PNG أو JPG'}</span>
-                                </>
-                            )}
+    const waConnected   = !!(ws.wa_token && ws.wa_phone_id);
+    const shopConnected = !!(ws.shopify_store && ws.shopify_key);
+    const aiActive      = ws.ai_enabled;
+
+    // ── Section content ──────────────────────────────────────────────────────
+    const renderSection = () => {
+        switch (section) {
+
+        case 'workspace': return (
+            <div className="space-y-4">
+                {/* Workspace form */}
+                <div className="glass rounded-2xl p-5">
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-black" style={{background: branding.brand_color || '#8CC850', color: '#001A11'}}>
+                            {ws.brand_name ? initials(ws.brand_name) : 'WS'}
                         </div>
-                        <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoSelect} />
-                        {(logoPreview || branding.logo_url) && (
-                            <button onClick={() => { setLogoPreview(null); setBrandingLocal(p => ({ ...p, logo_url: null })); }} className="text-xs text-red-400 hover:text-red-300">
-                                {isEn ? 'Remove logo' : 'حذف اللوجو'}
+                        <div>
+                            <p className="text-[13px] font-black text-brand-egg">{isEn ? 'Workspace' : 'مساحة العمل'}</p>
+                            <p className="text-[11px] text-brand-muted uppercase tracking-wider">{ws.brand_name || (isEn ? 'YOUR BRAND' : 'علامتك التجارية')}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        {renderField({label:(isEn ? 'Brand Name' : 'اسم العلامة التجارية'), field:"brand_name", placeholder:"Linenhouse Cairo"})}
+                        {renderField({label:(isEn ? 'Region' : 'المنطقة'), field:"region", placeholder:"EG · Africa/Cairo (UTC+2)"})}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Default Language' : 'اللغة الافتراضية'}</label>
+                            <select value={ws.language || 'ar+en'} onChange={e => set('language', e.target.value)}
+                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none text-brand-egg">
+                                <option value="ar+en">عربي + English</option>
+                                <option value="en">English</option>
+                                <option value="ar">عربي</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Currency' : 'العملة'}</label>
+                            <select value={ws.currency || 'EGP'} onChange={e => set('currency', e.target.value)}
+                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none text-brand-egg">
+                                <option value="EGP">EGP · Egyptian Pound</option>
+                                <option value="USD">USD · US Dollar</option>
+                                <option value="SAR">SAR · Saudi Riyal</option>
+                                <option value="AED">AED · UAE Dirham</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3 integration status cards */}
+                <div className="grid grid-cols-3 gap-3">
+                    <IntCard
+                        icon={MessageCircle} iconBg="#25D366"
+                        name="WhatsApp Cloud" subtitle={ws.wa_phone || (isEn ? 'Not connected' : 'غير متصل')}
+                        stat={waConnected ? (isEn ? 'Official Meta API connected' : 'Meta API متصل') : (isEn ? 'Add credentials to connect' : 'أضف بيانات الاتصال')}
+                        connectedAt={integrations.wa?.connected_at || null}
+                        status={waConnected ? 'connected' : 'disconnected'}
+                    />
+                    <IntCard
+                        icon={ShoppingCart} iconBg="#96BF48"
+                        name="Shopify" subtitle={ws.shopify_store || (isEn ? 'Not connected' : 'غير متصل')}
+                        stat={integrations.shopify ? `${integrations.shopify.products || 0} ${isEn ? 'products' : 'منتج'} · ${integrations.shopify.orders || 0} ${isEn ? 'orders' : 'طلب'}` : (isEn ? 'Add store URL to connect' : 'أضف رابط المتجر')}
+                        connectedAt={integrations.shopify?.connected_at || null}
+                        status={shopConnected ? 'synced' : 'disconnected'}
+                    />
+                    <IntCard
+                        icon={Sparkles} iconBg="#FF6B35"
+                        name="AI Assistant"
+                        stat={aiActive ? (isEn ? 'AI assistant active' : 'مساعد AI نشط') : (isEn ? 'AI assistant disabled' : 'مساعد AI معطل')}
+                        connectedAt={integrations.ai?.connected_at || null}
+                        status={aiActive ? 'active' : 'disconnected'}
+                    />
+                </div>
+
+                {/* Team & AI side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                    {/* Team */}
+                    <div className="glass rounded-2xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <p className="text-[13px] font-black text-brand-egg">{isEn ? 'Team & roles' : 'الفريق'}</p>
+                                <p className="text-[10px] text-brand-muted uppercase tracking-wider mt-0.5">
+                                    {team.length} {isEn ? 'SEATS' : 'مقاعد'}
+                                    {team.filter(m => m.role === 'owner').length > 0 && ` · ${team.filter(m => m.role === 'owner').length} ${isEn ? 'OWNER' : 'مالك'}`}
+                                    {team.filter(m => m.role === 'agent').length > 0 && ` · ${team.filter(m => m.role === 'agent').length} ${isEn ? 'AGENTS' : 'وكيل'}`}
+                                </p>
+                            </div>
+                            <button onClick={() => setSection('team')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                                <UserPlus size={12} /> {isEn ? 'Invite' : 'دعوة'}
                             </button>
+                        </div>
+                        {team.length === 0 ? (
+                            <p className="text-center text-brand-muted text-xs py-4 opacity-50">{isEn ? 'No team members yet' : 'لا يوجد أعضاء بعد'}</p>
+                        ) : (
+                            <div className="space-y-2.5">
+                                {team.slice(0,4).map((m, i) => (
+                                    <div key={i} className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black shrink-0" style={{background: avatarColor(m.name), color: '#001A11'}}>
+                                            {initials(m.name)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[12px] font-bold text-brand-egg truncate">{m.name}</p>
+                                            <p className="text-[10px] text-brand-muted capitalize">{m.role} · {m.status || 'offline'}</p>
+                                        </div>
+                                        <button className="text-[10px] font-bold glass border border-brand-border/30 text-brand-muted px-2.5 py-1 rounded-lg hover:text-brand-egg transition-all">
+                                            {isEn ? 'Edit' : 'تعديل'}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-brand-muted">{isEn ? 'Brand Color' : 'لون البراند'}</label>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="color"
-                                value={branding.brand_color}
-                                onChange={e => setBrandingLocal(p => ({ ...p, brand_color: e.target.value }))}
-                                className="w-14 h-14 rounded-xl border border-brand-accent/20 cursor-pointer bg-transparent"
-                            />
+                    {/* AI Assistant */}
+                    <div className="glass rounded-2xl p-5">
+                        <div className="flex items-center justify-between mb-4">
                             <div>
-                                <p className="text-sm font-bold" style={{ color: branding.brand_color }}>{branding.brand_color}</p>
-                                <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'Used for buttons, accents & highlights' : 'يُستخدم في الأزرار والتفاصيل'}</p>
+                                <p className="text-[13px] font-black text-brand-egg">{isEn ? 'AI Assistant' : 'مساعد AI'}</p>
+                                <p className="text-[10px] text-brand-muted uppercase tracking-wider mt-0.5">POWERED BY GROQ</p>
                             </div>
-                        </div>
-                        <div className="flex gap-2 flex-wrap pt-1">
-                            {['#d5aa65','#6366f1','#10b981','#ef4444','#f59e0b','#3b82f6','#ec4899','#8b5cf6'].map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => setBrandingLocal(p => ({ ...p, brand_color: c }))}
-                                    className={`w-7 h-7 rounded-lg border-2 transition-all ${branding.brand_color === c ? 'border-white scale-110' : 'border-transparent'}`}
-                                    style={{ backgroundColor: c }}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                <button
-                    onClick={handleSaveBranding}
-                    disabled={savingBranding}
-                    className="mt-2 bg-brand-accent text-brand-bg px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all disabled:opacity-50"
-                >
-                    {savingBranding ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save Visual Identity' : 'حفظ الهوية البصرية')}
-                </button>
-            </Section>
-
-            <Section title={isEn ? 'WhatsApp / Meta' : 'WhatsApp / Meta'}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field k="access_token" label="Meta Access Token" placeholder="EAAVXdh..." secret hint={isEn ? 'Masked for security' : 'مخفي للأمان'} />
-                    <Field k="phone_number_id" label="Phone Number ID" placeholder="103275370326..." />
-                    <Field k="verify_token" label="Webhook Verify Token" placeholder="my_secret" secret />
-                    <Field k="api_version" label="API Version" placeholder="v25.0" />
-                </div>
-            </Section>
-
-            <Section title="Shopify">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field k="shopify_url" label="Store URL" placeholder="my-store.myshopify.com" />
-                    <Field k="shopify_access_token" label="Access Token" placeholder="shpat_..." secret />
-                    <Field k="catalog_id" label="Catalog ID" placeholder="987654321012345" />
-                </div>
-            </Section>
-
-            <Section title={isEn ? 'AI Provider' : 'مزود الذكاء الاصطناعي'}>
-                <p className="text-xs text-brand-muted mb-3">
-                    {isEn
-                        ? 'Groq is recommended — free, fast, high limits (14,400 req/day). Get key at console.groq.com. Gemini is used as fallback.'
-                        : 'Groq موصى به — مجاني، سريڡ حد عالي (14,400 طلب/يوم). احصل على مفتاحك من console.groq.com. Gemini يُستخدم كبديل تلقائي.'}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field k="groq_api_key" label="Groq API Key âڑ، (Recommended)" placeholder="gsk_..." secret
-                        hint={isEn ? 'Free · LLaMA 3.3 70B · 14,400 req/day' : 'مجاني · LLaMA 3.3 70B · 14,400 طلب/يوم'} />
-                    <Field k="groq_model" label={isEn ? 'Groq Model' : 'نموذج Groq'} placeholder="llama-3.3-70b-versatile"
-                        hint={isEn ? 'llama-3.3-70b-versatile (best) or llama-3.1-8b-instant (fastest)' : 'llama-3.3-70b-versatile (أفضل) أو llama-3.1-8b-instant (أسرع)'} />
-                    <Field k="gemini_api_key" label="Gemini AI Key (Fallback)" placeholder="AIza..." secret
-                        hint={isEn ? 'Used only if Groq key is not set' : 'يُستخدم فقط لو مفيش Groq key'} />
-                    <Field k="server_url" label={isEn ? 'Public Server URL' : 'الرابط العام للسيرفر'} placeholder="https://my-app.ngrok.io"
-                        hint={isEn ? 'For campaign image headers' : 'لصور الهيدر في الحملات'} />
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-brand-accent/10 space-y-3">
-                    <label className="text-xs font-bold text-brand-text flex items-center gap-2">
-                        <Sparkles size={14} className="text-brand-accent" />
-                        {isEn ? 'AI Instructions & Personality' : 'تعليمات المساعد الذكي (البرومبت)'}
-                    </label>
-                    <p className="text-[11px] text-brand-muted">
-                        {isEn 
-                            ? 'Explain how the AI should talk (e.g., "Talk like a Egyptian seller, be very funny, focus on discount codes...").' 
-                            : 'اشرح هنا كيف تريد للمساعد أن يتحدث مع عملائك (مثلاً: "اتكلم زي البياعين المصريين الشطار، استخدم فكاهة، ركز على كوبونات الخصم...").'}
-                    </p>
-                    <textarea
-                        value={aiInstruction}
-                        onChange={e => setAiInstruction(e.target.value)}
-                        placeholder={isEn ? "Example: You are a professional sales assistant at Art Edges. Speak in Egyptian dialect, be very helpful, and always try to upsell related products..." : "مثال: أنت مساعد مبيعات محترف في آرت إيدج. اتكلم بالعامية المصرية اللبقة، خليك خدوم جداً، وحاول دايماً تقترح منتجات تانية للعميل..."}
-                        rows={5}
-                        className="w-full bg-brand-input border border-brand-accent/20 rounded-xl p-4 text-sm focus:border-brand-accent outline-none custom-scrollbar"
-                    />
-                </div>
-            </Section>
-
-
-            <ShippingSettings isEn={isEn} showToast={showToast} />
-
-            <Section title="WooCommerce">
-                <p className="text-xs text-brand-muted mb-3">
-                    {isEn ? 'Connect your WooCommerce store as an alternative or in addition to Shopify.' : 'اربط متجر WooCommerce كبديل أو إضافة لشوبيفاي.'}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field k="woo_url" label={isEn ? 'Store Domain' : 'دومين المتجر'} placeholder="mystore.com"
-                        hint={isEn ? 'Without https://' : 'بدون https://'} />
-                    <Field k="woo_consumer_key" label="Consumer Key" placeholder="ck_..." secret />
-                    <Field k="woo_consumer_secret" label="Consumer Secret" placeholder="cs_..." secret />
-                </div>
-                <button onClick={handleTestWoo} disabled={testingWoo}
-                    className="mt-1 text-xs bg-brand-accent/10 text-brand-accent px-4 py-2 rounded-lg hover:bg-brand-accent/20 font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors">
-                    <Globe size={13} /> {testingWoo ? (isEn ? 'Connecting...' : 'جاري الاتصال...') : (isEn ? 'Test Connection' : 'اختبر الاتصال')}
-                </button>
-            </Section>
-
-            <Section title={isEn ? 'Outbound Webhooks' : 'Webhooks الخارجية'}>
-                <p className="text-xs text-brand-muted mb-3">
-                    {isEn
-                        ? 'Send events to Zapier, Make, or any custom endpoint when orders are confirmed, messages are received, and more.'
-                        : 'أرسل أحداث لـ Zapier أو Make أو أي رابط خارجي عند تأكيد الطلبات أو استقبال رسائل.'}
-                </p>
-                <Field k="webhook_url" label={isEn ? 'Webhook URL' : 'رابط الـ Webhook'}
-                    placeholder="https://hooks.zapier.com/hooks/catch/..."
-                    hint={isEn ? 'Events: order_status_changed, test' : 'الأحداث: order_status_changed, test'} />
-                <button onClick={handleTestWebhook} disabled={testingWebhook}
-                    className="mt-1 text-xs bg-brand-accent/10 text-brand-accent px-4 py-2 rounded-lg hover:bg-brand-accent/20 font-bold flex items-center gap-1.5 disabled:opacity-50 transition-colors">
-                    <Link2 size={13} /> {testingWebhook ? (isEn ? 'Sending...' : 'جاري الإرسال...') : (isEn ? 'Send Test Event' : 'إرسال حدث تجريبي')}
-                </button>
-            </Section>
-
-            <Section title={isEn ? 'Loyalty Points' : 'نقاط الولاء'}>
-                <p className="text-xs text-brand-muted mb-2">
-                    {isEn
-                        ? 'Customers earn points automatically when their orders are confirmed. View and manage points in any chat.'
-                        : 'العملاء يكسبون نقاط تلقائياً عند تأكيد طلباتهم. يمكنك عرض وإدارة النقاط من داخل أي محادثة.'}
-                </p>
-                <div className="max-w-xs">
-                    <Field k="loyalty_points" label={isEn ? 'Points per confirmed order' : 'نقاط لكل طلب مؤكد'} placeholder="10" />
-                </div>
-            </Section>
-        </div>
-    );
-};
-
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-//  Loyalty Points Panel (CRM sidebar)
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-const LoyaltyPanel = ({ phone, isEn, showToast }) => {
-    const [data, setData] = useState(null);
-    const [awardPoints, setAwardPoints] = useState('');
-    const [awarding, setAwarding] = useState(false);
-
-    useEffect(() => {
-        if (!phone) return;
-        axios.get(`${API_URL}/loyalty/${phone}`).then(r => setData(r.data)).catch(() => {});
-    }, [phone]);
-
-    const handleAward = async () => {
-        const pts = parseInt(awardPoints);
-        if (!pts || isNaN(pts)) return;
-        setAwarding(true);
-        try {
-            const res = await axios.post(`${API_URL}/loyalty/award`, { phone, points: pts, reason: 'Manual award from dashboard' });
-            setData(p => ({ ...p, points: res.data.points }));
-            setAwardPoints('');
-            showToast(isEn ? `Awarded ${pts} points!` : `تم منح ${pts} نقطة!`);
-        } catch (e) { showToast(isEn ? 'Failed to award points' : 'فشل منح النقاط', 'error'); }
-        setAwarding(false);
-    };
-
-    if (!data) return null;
-
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-brand-accent/10 pb-2">
-                <h4 className="font-bold text-brand-accent text-sm flex items-center gap-2">
-                    <Gift size={15} /> {isEn ? 'Loyalty Points' : 'نقاط الولاء'}
-                </h4>
-                <span className="text-xl font-bold text-brand-accent">{data.points || 0}
-                    <span className="text-xs font-normal text-brand-muted ml-1">pts</span>
-                </span>
-            </div>
-
-            {data.history?.length > 0 && (
-                <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
-                    {[...data.history].reverse().slice(0, 5).map((h, i) => (
-                        <div key={i} className="flex justify-between text-[11px] text-brand-muted">
-                            <span className="truncate">{h.reason}</span>
-                            <span className={`shrink-0 font-bold ml-2 ${h.points > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {h.points > 0 ? '+' : ''}{h.points}
+                            <span className={`text-[9px] font-black px-2 py-1 rounded-full ${aiActive ? 'text-brand-accent' : 'text-brand-muted'}`}
+                                style={{background: aiActive ? 'rgba(140,200,80,0.12)' : 'rgba(100,100,100,0.1)'}}>
+                                ● {aiActive ? (isEn ? 'Active' : 'نشط') : (isEn ? 'Inactive' : 'معطل')}
                             </span>
                         </div>
-                    ))}
+                        <div>
+                            <Toggle label={isEn ? 'Auto-reply unknown questions' : 'رد تلقائي على الأسئلة'} field="ai_auto_reply" />
+                            <Toggle label={isEn ? 'Draft replies for agent approval' : 'مسودة ردود للموافقة'} field="ai_draft_mode" />
+                            <Toggle label={isEn ? 'Auto-tag VIP customers' : 'تصنيف VIP تلقائي'} field="ai_auto_tag_vip" />
+                            <Toggle label={isEn ? 'Send recovery messages' : 'إرسال رسائل استرداد'} field="ai_send_recovery" />
+                            <Toggle label={isEn ? 'Escalate negative sentiment' : 'تصعيد المشاعر السلبية'} field="ai_escalate_negative" />
+                        </div>
+                        <button onClick={() => setSection('ai')} className="mt-3 w-full py-2 rounded-xl text-[10px] font-black text-brand-muted glass border border-brand-border/20 hover:text-brand-accent tracking-widest uppercase">
+                            ⚙ {isEn ? 'Safety & advanced' : 'الأمان والمتقدم'}
+                        </button>
+                    </div>
                 </div>
-            )}
+            </div>
+        );
 
-            <div className="flex gap-2">
-                <input
-                    type="number"
-                    value={awardPoints}
-                    onChange={e => setAwardPoints(e.target.value)}
-                    placeholder={isEn ? 'Points to award' : 'نقاط للمنح'}
-                    className="flex-1 bg-brand-input border border-brand-border rounded-lg px-3 py-1.5 text-xs focus:border-brand-accent outline-none"
-                />
-                <button onClick={handleAward} disabled={awarding || !awardPoints}
-                    className="bg-brand-accent/20 text-brand-accent px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-brand-accent/30 disabled:opacity-50 transition-colors">
-                    {isEn ? 'Award' : 'منح'}
+        case 'whatsapp': return (
+            <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#25D366'}}>
+                        <MessageCircle size={18} color="#fff" />
+                    </div>
+                    <div>
+                        <p className="text-[14px] font-black text-brand-egg">WhatsApp Cloud API</p>
+                        <p className="text-[10px] text-brand-muted">META BUSINESS · OFFICIAL API</p>
+                    </div>
+                    <span className={`ml-auto text-[9px] font-black px-2 py-1 rounded-full ${waConnected ? 'text-brand-accent' : 'text-brand-muted'}`}
+                        style={{background: waConnected ? 'rgba(140,200,80,0.12)' : 'rgba(100,100,100,0.1)'}}>
+                        ● {waConnected ? 'CONNECTED' : 'NOT SET'}
+                    </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {renderField({label:(isEn ? 'Phone Number' : 'رقم الهاتف'), field:"wa_phone", placeholder:"+20 100 000 0000", dir:"ltr"})}
+                    {renderField({label:(isEn ? 'Phone Number ID' : 'معرف رقم الهاتف'), field:"wa_phone_id", placeholder:"123456789", dir:"ltr", secret:true})}
+                    {renderField({label:(isEn ? 'Business Account ID' : 'معرف حساب الأعمال'), field:"wa_business_id", placeholder:"987654321", dir:"ltr", secret:true})}
+                    {renderField({label:(isEn ? 'Permanent Access Token' : 'رمز الوصول الدائم'), field:"wa_token", placeholder:"EAAxxxxxxxx...", dir:"ltr", secret:true})}
+                </div>
+                <div className="p-3 rounded-xl text-[11px] text-brand-muted" style={{background:'rgba(140,200,80,0.05)',border:'1px solid rgba(140,200,80,0.1)'}}>
+                    {isEn ? 'Find these values in Meta Business Suite → WhatsApp → API Setup' : 'ستجد هذه القيم في Meta Business Suite → WhatsApp → API Setup'}
+                </div>
+            </div>
+        );
+
+        case 'shopify': return (
+            <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#96BF48'}}>
+                        <ShoppingCart size={18} color="#fff" />
+                    </div>
+                    <div>
+                        <p className="text-[14px] font-black text-brand-egg">Shopify Integration</p>
+                        <p className="text-[10px] text-brand-muted">ADMIN API · WEBHOOKS · PRODUCT SYNC</p>
+                    </div>
+                    <span className={`ml-auto text-[9px] font-black px-2 py-1 rounded-full ${shopConnected ? 'text-blue-400' : 'text-brand-muted'}`}
+                        style={{background: shopConnected ? 'rgba(59,130,246,0.12)' : 'rgba(100,100,100,0.1)'}}>
+                        ● {shopConnected ? 'SYNCED' : 'NOT SET'}
+                    </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {renderField({label:(isEn ? 'Store URL' : 'رابط المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
+                    {renderField({label:(isEn ? 'Admin API Key' : 'مفتاح Admin API'), field:"shopify_key", placeholder:"shpat_xxxxxxxx", dir:"ltr", secret:true})}
+                    {renderField({label:(isEn ? 'API Secret' : 'API Secret'), field:"shopify_secret", placeholder:"shpss_xxxxxxxx", dir:"ltr", secret:true})}
+                    {renderField({label:(isEn ? 'Webhook Secret' : 'Webhook Secret'), field:"shopify_webhook", placeholder:"whsec_xxxxxxxx", dir:"ltr", secret:true})}
+                </div>
+                {shopConnected && integrations.shopify && (
+                    <div className="grid grid-cols-3 gap-3">
+                        {[
+                            [isEn ? 'Products' : 'منتجات', integrations.shopify.products || 0],
+                            [isEn ? 'Orders synced' : 'طلبات', integrations.shopify.orders || 0],
+                            [isEn ? 'Abandoned carts' : 'سلات متروكة', integrations.shopify.abandoned || 0],
+                        ].map(([lbl, val]) => (
+                            <div key={lbl} className="glass-subtle rounded-xl p-3 text-center">
+                                <p className="text-xl font-black text-brand-egg">{val.toLocaleString()}</p>
+                                <p className="text-[10px] text-brand-muted mt-0.5">{lbl}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+
+        case 'ai': return (
+            <div className="space-y-4">
+                <div className="glass rounded-2xl p-6 space-y-4">
+                    <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#FF6B35'}}>
+                            <Sparkles size={18} color="#fff" />
+                        </div>
+                        <div>
+                            <p className="text-[14px] font-black text-brand-egg">AI Assistant</p>
+                            <p className="text-[10px] text-brand-muted uppercase">POWERED BY GROQ</p>
+                        </div>
+                        <div className="ml-auto">
+                            <Toggle label="" field="ai_enabled" />
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'System Instruction' : 'تعليمات النظام'}</label>
+                        <textarea dir="auto"  value={ws.ai_instruction} onChange={e => set('ai_instruction', e.target.value)}
+                            rows={5} placeholder={isEn ? 'You are a helpful assistant for...' : 'أنت مساعد مفيد لـ...'}
+                            className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none resize-none text-brand-egg" />
+                    </div>
+                </div>
+                <div className="glass rounded-2xl p-6">
+                    <p className="text-[13px] font-black text-brand-egg mb-4">{isEn ? 'Behaviour toggles' : 'إعدادات السلوك'}</p>
+                    <Toggle label={isEn ? 'Auto-reply unknown questions' : 'رد تلقائي على الأسئلة المجهولة'} field="ai_auto_reply"
+                        description={isEn ? 'AI answers questions it recognises' : 'يجيب AI على الأسئلة التي يعرفها'} />
+                    <Toggle label={isEn ? 'Draft replies for agent approval' : 'مسودة ردود للموافقة البشرية'} field="ai_draft_mode"
+                        description={isEn ? 'Show AI reply as draft before sending' : 'عرض رد AI كمسودة قبل الإرسال'} />
+                    <Toggle label={isEn ? 'Auto-tag VIP customers' : 'تصنيف عملاء VIP تلقائياً'} field="ai_auto_tag_vip"
+                        description={isEn ? 'Tag high-value customers automatically' : 'يصنف العملاء ذوي القيمة تلقائياً'} />
+                    <Toggle label={isEn ? 'Send recovery messages' : 'إرسال رسائل استرداد السلة'} field="ai_send_recovery"
+                        description={isEn ? 'Auto-send cart recovery on trigger' : 'إرسال استرداد السلة تلقائياً'} />
+                    <Toggle label={isEn ? 'Escalate negative sentiment' : 'تصعيد المشاعر السلبية'} field="ai_escalate_negative"
+                        description={isEn ? 'Route angry/upset customers to human' : 'توجيه العملاء الغاضبين للبشر'} />
+                </div>
+            </div>
+        );
+
+        case 'team': return (
+            <div className="glass rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between pb-4 border-b border-brand-border/20">
+                    <div>
+                        <p className="text-[14px] font-black text-brand-egg">{isEn ? 'Team & roles' : 'الفريق والأدوار'}</p>
+                        <p className="text-[10px] text-brand-muted uppercase tracking-wider">{team.length} {isEn ? 'MEMBERS' : 'عضو'}</p>
+                    </div>
+                    <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
+                        <UserPlus size={13} /> {isEn ? 'Invite member' : 'دعوة عضو'}
+                    </button>
+                </div>
+                {team.length === 0 ? (
+                    <div className="text-center py-12 text-brand-muted">
+                        <Users size={36} className="mx-auto mb-3 opacity-20" />
+                        <p className="text-sm font-bold">{isEn ? 'No team members yet' : 'لا يوجد أعضاء بعد'}</p>
+                        <p className="text-xs mt-1 opacity-60">{isEn ? 'Invite your first team member above.' : 'أضف أول عضو في فريقك.'}</p>
+                    </div>
+                ) : team.map((m, i) => (
+                    <div key={i} className="flex items-center gap-4 py-3 border-b border-brand-border/10 last:border-0">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-black shrink-0" style={{background: avatarColor(m.name), color:'#001A11'}}>
+                            {initials(m.name)}
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[13px] font-bold text-brand-egg">{m.name}</p>
+                            <p className="text-[11px] text-brand-muted capitalize">{m.role} · {m.status || 'offline'}</p>
+                        </div>
+                        <button className="text-[11px] font-bold glass border border-brand-border/30 text-brand-muted px-3 py-1.5 rounded-xl hover:text-brand-egg transition-all">
+                            {isEn ? 'Edit' : 'تعديل'}
+                        </button>
+                    </div>
+                ))}
+            </div>
+        );
+
+        case 'loyalty': return (
+            <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#F59E0B'}}>
+                        <Star size={18} color="#fff" />
+                    </div>
+                    <div>
+                        <p className="text-[14px] font-black text-brand-egg">{isEn ? 'Loyalty Program' : 'برنامج الولاء'}</p>
+                        <p className="text-[10px] text-brand-muted uppercase">POINTS · REWARDS · TIERS</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {renderField({label:(isEn ? 'Points per EGP spent' : 'نقاط لكل جنيه'), field:"loyalty_rate", placeholder:"1"})}
+                    {renderField({label:(isEn ? 'Min points to redeem' : 'الحد الأدنى للاسترداد'), field:"loyalty_min", placeholder:"100"})}
+                    {renderField({label:(isEn ? 'Point value (EGP)' : 'قيمة النقطة (جنيه)'), field:"loyalty_value", placeholder:"0.5"})}
+                    {renderField({label:(isEn ? 'Expiry (days)' : 'انتهاء الصلاحية (يوم)'), field:"loyalty_expiry", placeholder:"365"})}
+                </div>
+            </div>
+        );
+
+        case 'appearance': return (
+            <div className="glass rounded-2xl p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#8B5CF6'}}>
+                        <Palette size={18} color="#fff" />
+                    </div>
+                    <div>
+                        <p className="text-[14px] font-black text-brand-egg">{isEn ? 'Appearance' : 'المظهر'}</p>
+                        <p className="text-[10px] text-brand-muted uppercase">BRAND · COLORS · LOGO</p>
+                    </div>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Brand Color' : 'لون العلامة'}</label>
+                    <div className="flex items-center gap-3">
+                        <input type="color" value={branding.brand_color || '#8CC850'}
+                            onChange={e => setBranding(p => ({...p, brand_color: e.target.value}))}
+                            className="w-10 h-10 rounded-xl border-0 cursor-pointer bg-transparent" />
+                        <span className="text-sm font-bold text-brand-egg">{branding.brand_color || '#8CC850'}</span>
+                    </div>
+                </div>
+            </div>
+        );
+
+        default: return null;
+        }
+    };
+
+    return (
+        <div className={`animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-xl font-black text-brand-egg">{isEn ? 'App Settings' : 'إعدادات التطبيق'}</h2>
+                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5 uppercase">
+                        {isEn ? `WORKSPACE · ${ws.brand_name || 'YOUR BRAND'}` : `مساحة العمل · ${ws.brand_name || 'علامتك'}`}
+                    </p>
+                </div>
+                <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl text-[12px] font-bold transition-all disabled:opacity-50"
+                    style={{background:'#FF6B35',color:'#fff'}}>
+                    {saving ? <RefreshCcw size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                    {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save changes' : 'حفظ التغييرات')}
                 </button>
             </div>
-        </div>
-    );
-};
 
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-//  Analytics Dashboard
-// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-const KpiCard = ({ label, value, sub, color = 'text-brand-accent', icon: Icon }) => (
-    <div className="glass p-5 rounded-2xl flex items-center gap-4">
-        {Icon && (
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-brand-accent/10">
-                <Icon size={22} className={color} />
-            </div>
-        )}
-        <div>
-            <p className="text-2xl font-bold text-brand-text">{value}</p>
-            <p className="text-xs text-brand-muted font-bold mt-0.5">{label}</p>
-            {sub && <p className="text-[11px] text-brand-muted opacity-70 mt-0.5">{sub}</p>}
-        </div>
-    </div>
-);
-
-const BarChart = ({ data, isEn }) => {
-    const max = Math.max(...data.map(d => Math.max(d.out, d.in)), 1);
-    return (
-        <div className="flex items-end gap-2 h-32 mt-4">
-            {data.map((d, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex gap-0.5 items-end" style={{ height: '96px' }}>
-                        <div className="flex-1 bg-brand-accent/70 rounded-t transition-all"
-                            style={{ height: `${(d.out / max) * 96}px`, minHeight: d.out > 0 ? 4 : 0 }}
-                            title={`${isEn ? 'Sent' : 'مرسل'}: ${d.out}`} />
-                        <div className="flex-1 bg-green-500/50 rounded-t transition-all"
-                            style={{ height: `${(d.in / max) * 96}px`, minHeight: d.in > 0 ? 4 : 0 }}
-                            title={`${isEn ? 'Received' : 'مستلم'}: ${d.in}`} />
-                    </div>
-                    <span className="text-[9px] text-brand-muted text-center leading-tight">{d.label}</span>
+            {/* Body: sidebar + content */}
+            <div className="flex gap-3" style={{minHeight: 540}}>
+                {/* Left sidebar */}
+                <div className="glass rounded-2xl p-2 flex flex-col gap-0.5 self-start" style={{minWidth: 180}}>
+                    {sideItems.map(({ id, icon: Icon, label }) => (
+                        <button key={id} onClick={() => setSection(id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-bold transition-all text-left ${section === id ? 'bg-brand-accent/15 text-brand-accent' : 'text-brand-muted hover:text-brand-egg hover:bg-white/5'}`}>
+                            <Icon size={14} />
+                            <span>{label}</span>
+                        </button>
+                    ))}
                 </div>
-            ))}
+
+                {/* Main content */}
+                <div className="flex-1 min-w-0">
+                    {renderSection()}
+                </div>
+            </div>
         </div>
     );
 };
 
-const FunnelBar = ({ label, value, max, color }) => {
-    const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+const Sparkline = ({ values = [], color = '#8CC850', width = 64, height = 28 }) => {
+    const pts = values.length < 2 ? Array(7).fill(0) : values;
+    const max = Math.max(...pts, 1);
+    const step = width / (pts.length - 1);
+    const toY = v => height - (v / max) * height * 0.85 - 2;
+    const d = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${i * step},${toY(v)}`).join(' ');
     return (
-        <div className="space-y-1">
-            <div className="flex justify-between items-center text-sm">
-                <span className="font-bold text-brand-text">{label}</span>
-                <span className="font-bold text-brand-muted">{value} <span className="text-[11px]">({pct}%)</span></span>
-            </div>
-            <div className="w-full bg-brand-card rounded-full h-2.5 overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
-            </div>
-        </div>
+        <svg width={width} height={height} style={{ overflow: 'visible' }}>
+            <polyline points={pts.map((v, i) => `${i * step},${toY(v)}`).join(' ')}
+                fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+        </svg>
+    );
+};
+
+const StackedBarChart = ({ data = [], isEn = true }) => {
+    const display = data.length > 0 ? data : Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (29 - i));
+        return { label: `${d.getDate()}/${d.getMonth()+1}`, carts: 0, broadcasts: 0, direct: 0 };
+    });
+    const maxVal = Math.max(...display.map(d => (d.carts||0)+(d.broadcasts||0)+(d.direct||0)), 1);
+    const h = 160;
+    return (
+        <svg width="100%" height={h + 20} style={{ display: 'block' }}>
+            {display.map((d, i) => {
+                const total = (d.carts||0)+(d.broadcasts||0)+(d.direct||0);
+                const pct = total / maxVal;
+                const barH = Math.max(pct * h, total > 0 ? 2 : 1);
+                const x = `${(i / display.length) * 100}%`;
+                const w = `${(1 / display.length) * 100 * 0.7}%`;
+                const y = h - barH;
+                const c1H = (d.carts||0)/Math.max(total,1)*barH;
+                const c2H = (d.broadcasts||0)/Math.max(total,1)*barH;
+                const c3H = barH - c1H - c2H;
+                return (
+                    <g key={i}>
+                        <rect x={x} y={h - c1H} width={w} height={Math.max(c1H,0)} fill="#8CC850" opacity={total>0?0.9:0.12} rx="1" />
+                        <rect x={x} y={h - c1H - c2H} width={w} height={Math.max(c2H,0)} fill="#FF6B35" opacity={total>0?0.9:0.12} rx="1" />
+                        <rect x={x} y={y} width={w} height={Math.max(c3H,0)} fill="#93C5FD" opacity={total>0?0.9:0.12} rx="1" />
+                    </g>
+                );
+            })}
+            <line x1="0" y1={h} x2="100%" y2={h} stroke="#ffffff10" strokeWidth="1" />
+        </svg>
+    );
+};
+
+const DonutChart = ({ segments = [], total = 0, size = 130 }) => {
+    const r = size / 2 - 12;
+    const cx = size / 2, cy = size / 2;
+    const circumference = 2 * Math.PI * r;
+    let offset = 0;
+    const arcs = segments.map(seg => {
+        const pct = total > 0 ? seg.value / total : 0;
+        const arc = { ...seg, pct, offset, dash: pct * circumference, gap: (1 - pct) * circumference };
+        offset += pct * circumference;
+        return arc;
+    });
+    return (
+        <svg width={size} height={size}>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ffffff08" strokeWidth="18" />
+            {total === 0 ? (
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ffffff10" strokeWidth="18"
+                    strokeDasharray={`${circumference * 0.25} ${circumference * 0.75}`}
+                    strokeDashoffset="0" strokeLinecap="round" />
+            ) : arcs.filter(a => a.pct > 0).map((a, i) => (
+                <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={a.color} strokeWidth="18"
+                    strokeDasharray={`${a.dash} ${a.gap}`}
+                    strokeDashoffset={-a.offset}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${cx} ${cy})`} />
+            ))}
+            <text x={cx} y={cy - 6} textAnchor="middle" fill="#e8f0e0" fontSize="20" fontWeight="900">{total > 0 ? total.toLocaleString() : '0'}</text>
+            <text x={cx} y={cy + 12} textAnchor="middle" fill="#6b7a6b" fontSize="9" fontWeight="700">TOTAL</text>
+        </svg>
     );
 };
 
 const AnalyticsDashboard = ({ lang }) => {
     const isEn = lang === 'en';
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [data, setData] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+    const [period, setPeriod] = React.useState('30d');
 
     useEffect(() => {
-        const load = async () => {
-            try {
-                const res = await axios.get(`${API_URL}/analytics`);
-                setData(res.data && typeof res.data === 'object' ? res.data : {});
-            } catch (e) { console.error(e); }
-            setLoading(false);
-        };
-        load();
+        axios.get(`${API_URL}/analytics`)
+            .then(r => setData(r.data && typeof r.data === 'object' ? r.data : {}))
+            .catch(() => setData({}))
+            .finally(() => setLoading(false));
     }, []);
 
     if (loading) return (
@@ -4005,111 +5095,171 @@ const AnalyticsDashboard = ({ lang }) => {
         </div>
     );
 
-    if (!data) return (
-        <div className="flex items-center justify-center h-64 text-brand-muted">
-            {isEn ? 'Failed to load analytics.' : 'فشل تحميل التقارير.'}
-        </div>
-    );
+    const { messages = {}, funnel = {}, autoStats = {}, topCustomers = [], daily = [], revenue = {} } = data || {};
 
-    const { messages = {}, funnel = {}, autoStats = {}, topCustomers = [], daily = [] } = data || {};
-    const totalOrders = Object.values(funnel).reduce((s, v) => s + v, 0);
-    const conversionRate = totalOrders > 0 ? Math.round(((funnel.confirmed || 0) / totalOrders) * 100) : 0;
+    // Stat card values — real data only
+    const totalRevenue = revenue.total || 0;
+    const totalOrders = Object.values(funnel).reduce((s, v) => s + (Number(v) || 0), 0);
+    const replyRate = Number(messages.responseRate) || 0;
+    const autoTotal = (autoStats.done || 0) + (autoStats.failed || 0) + (autoStats.pending || 0) + (autoStats.cancelled || 0);
+    const aiHandledPct = autoTotal > 0 ? Math.round((autoStats.done / autoTotal) * 100) : 0;
+
+    // Sparkline values from daily array
+    const sparkOut = daily.map(d => d.out || 0);
+    const sparkIn  = daily.map(d => d.in  || 0);
+
+    // Stacked bar chart data — map daily to revenue sources if available, else message counts
+    const barData = daily.map(d => ({
+        label: d.label || '',
+        carts: d.carts || 0,
+        broadcasts: d.broadcasts || 0,
+        direct: d.direct || (d.out || 0),
+    }));
+
+    // Donut segments
+    const aiReplied = autoStats.done || 0;
+    const agentHandled = Math.max((messages.conversations || 0) - aiReplied, 0);
+    const escalated = autoStats.failed || 0;
+    const closed = Math.max((messages.totalInbound || 0) - (messages.conversations || 0), 0);
+    const totalChats = aiReplied + agentHandled + escalated + closed;
+    const donutSegments = [
+        { label: isEn ? 'AI auto-replied' : 'رد AI تلقائي', value: aiReplied, color: '#8CC850' },
+        { label: isEn ? 'Agent handled' : 'معالجة بشرية', value: agentHandled, color: '#93C5FD' },
+        { label: isEn ? 'Escalated to human' : 'تصعيد للإنسان', value: escalated, color: '#FF6B35' },
+        { label: isEn ? 'Closed without reply' : 'أُغلق بدون رد', value: closed, color: '#6B7280' },
+    ];
+
+    const now = new Date();
+    const dateStr = `${now.toLocaleString('en', { month: 'short' }).toUpperCase()} ${now.getDate()} ROLLING`;
 
     return (
-        <div className="space-y-4 max-w-6xl mx-auto animate-in fade-in duration-500">
-            <div className="flex items-start justify-between gap-4">
+        <div className={`animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Analytics' : 'التقارير'}</h2>
-                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">{isEn ? 'REAL-TIME SYSTEM OVERVIEW' : 'نظرة شاملة على النظام'}</p>
+                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5 uppercase">
+                        {isEn ? `LAST ${period.replace('d','')} DAYS · ${dateStr}` : `آخر ${period.replace('d','')} يوم`}
+                    </p>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                    <a href={`${API_URL}/export/contacts`} download
-                        className="flex items-center gap-1.5 text-xs glass-subtle border border-brand-border/30 text-brand-muted px-4 py-2 rounded-xl font-bold hover:text-brand-egg transition-colors">
-                        <Download size={13} /> {isEn ? 'Contacts CSV' : 'تصدير جهات الاتصال'}
-                    </a>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 glass rounded-xl p-1 border border-brand-border/20">
+                        {['7d','30d','90d'].map(p => (
+                            <button key={p} onClick={() => setPeriod(p)}
+                                className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${period === p ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted hover:text-brand-egg'}`}>
+                                {p}
+                            </button>
+                        ))}
+                    </div>
                     <a href={`${API_URL}/export/orders`} download
-                        className="flex items-center gap-1.5 text-xs glass-subtle border border-brand-border/30 text-brand-muted px-4 py-2 rounded-xl font-bold hover:text-brand-egg transition-colors">
-                        <Download size={13} /> {isEn ? 'Orders CSV' : 'تصدير الطلبات'}
+                        className="flex items-center gap-1.5 text-[11px] glass border border-brand-border/30 text-brand-muted px-3 py-1.5 rounded-xl font-bold hover:text-brand-egg transition-colors">
+                        <Download size={12} /> {isEn ? 'Export' : 'تصدير'}
                     </a>
                 </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
+            {/* 4 stat cards */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
                 {[
-                    { label: isEn ? 'MESSAGES SENT' : 'رسائل مرسلة', value: messages.totalOutbound, sub: messages.seenCount + (isEn ? ' seen' : ' مقروءة'), color: 'text-brand-egg' },
-                    { label: isEn ? 'MESSAGES RECEIVED' : 'رسائل واردة', value: messages.totalInbound, sub: messages.conversations + (isEn ? ' conversations' : ' محادثة'), color: 'text-brand-accent' },
-                    { label: isEn ? 'RESPONSE RATE' : 'معدل الرد', value: messages.responseRate + '%', sub: isEn ? 'customers replied' : 'عملاء ردوا', color: 'text-blue-400' },
-                    { label: isEn ? 'CONVERSION RATE' : 'معدل التحويل', value: conversionRate + '%', sub: isEn ? 'orders confirmed' : 'طلبات مؤكدة', color: 'text-brand-gold' },
-                ].map((k, i) => (
-                    <div key={i} className="glass rounded-2xl p-4">
-                        <p className="text-[10px] font-bold text-brand-muted tracking-wider">{k.label}</p>
-                        <p className={`text-2xl font-black mt-1 ${k.color}`}>{k.value}</p>
-                        <p className="text-[11px] text-brand-muted mt-1">{k.sub}</p>
+                    {
+                        label: isEn ? 'REVENUE · 30D' : 'الإيرادات',
+                        value: `EGP ${totalRevenue.toLocaleString()}`,
+                        spark: sparkOut,
+                        sparkColor: '#8CC850',
+                        change: revenue.change || null,
+                    },
+                    {
+                        label: isEn ? 'ORDERS' : 'الطلبات',
+                        value: totalOrders.toLocaleString(),
+                        spark: sparkIn,
+                        sparkColor: '#8CC850',
+                        change: null,
+                    },
+                    {
+                        label: isEn ? 'REPLY RATE' : 'معدل الرد',
+                        value: `${replyRate}%`,
+                        spark: sparkOut.map(v => v > 0 ? replyRate : 0),
+                        sparkColor: '#8CC850',
+                        change: null,
+                    },
+                    {
+                        label: isEn ? 'AI AUTO-HANDLED' : 'معالجة AI',
+                        value: `${aiHandledPct}%`,
+                        spark: sparkOut.map(v => v > 0 ? aiHandledPct : 0),
+                        sparkColor: '#FF6B35',
+                        change: null,
+                    },
+                ].map((card, i) => (
+                    <div key={i} className="glass rounded-2xl p-4 flex flex-col gap-2">
+                        <div className="flex items-start justify-between">
+                            <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{card.label}</p>
+                            <Sparkline values={card.spark} color={card.sparkColor} width={64} height={28} />
+                        </div>
+                        <p className="text-2xl font-black text-brand-egg leading-none">{card.value}</p>
+                        {card.change != null && (
+                            <p className="text-[11px] font-bold text-brand-accent">↑ {card.change}</p>
+                        )}
                     </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div className="glass p-5 rounded-2xl space-y-3">
-                    <h3 className="font-black text-[13px] text-brand-egg">{isEn ? 'Order Funnel' : 'قمع الطلبات'}</h3>
-                    <div className="space-y-2.5">
-                        <FunnelBar label={isEn ? 'New / Pending' : 'جديد / معلق'} value={funnel.new} max={totalOrders} color="bg-brand-muted/50" />
-                        <FunnelBar label={isEn ? 'Followed Up' : 'تمت المتابعة'} value={funnel.followed_up} max={totalOrders} color="bg-brand-accent/70" />
-                        <FunnelBar label={isEn ? 'Confirmed' : 'تم التأكيد'} value={funnel.confirmed} max={totalOrders} color="bg-green-500/80" />
-                        <FunnelBar label={isEn ? 'Shipped' : 'تم الشحن'} value={funnel.shipped} max={totalOrders} color="bg-blue-500/80" />
-                        <FunnelBar label={isEn ? 'Cancelled' : 'ملغى'} value={funnel.cancelled} max={totalOrders} color="bg-red-500/60" />
-                    </div>
-                    <p className="text-[11px] text-brand-muted pt-2 border-t border-brand-border/10">
-                        {isEn ? `${totalOrders} total orders tracked` : `${totalOrders} طلب متتبع`}
-                    </p>
-                </div>
+            {/* Main 2-column section */}
+            <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 320px' }}>
 
-                <div className="glass p-5 rounded-2xl space-y-3">
-                    <h3 className="font-black text-[13px] text-brand-egg">{isEn ? 'Message Volume — Last 7 Days' : 'حجم الرسائل — آخر 7 أيام'}</h3>
-                    <div className="flex gap-4 text-[11px] text-brand-muted">
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-brand-accent/70 inline-block" />{isEn ? 'Outbound' : 'صادرة'}</span>
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-500/50 inline-block" />{isEn ? 'Inbound' : 'واردة'}</span>
-                    </div>
-                    <BarChart data={daily} isEn={isEn} />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div className="glass p-5 rounded-2xl">
-                    <h3 className="font-black text-[13px] text-brand-egg mb-3">{isEn ? 'Automation Stats' : 'إحصاء الأتمتة'}</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                        {[
-                            { label: isEn ? 'Pending' : 'قيد الانتظار', value: autoStats.pending, color: 'bg-brand-accent/20 text-brand-accent' },
-                            { label: isEn ? 'Executed' : 'نُفّذ', value: autoStats.done, color: 'bg-green-500/20 text-green-400' },
-                            { label: isEn ? 'Failed' : 'فشل', value: autoStats.failed, color: 'bg-red-500/20 text-red-400' },
-                            { label: isEn ? 'Cancelled' : 'ألغي', value: autoStats.cancelled, color: 'bg-brand-muted/20 text-brand-muted' },
-                        ].map(s => (
-                            <div key={s.label} className={`rounded-2xl p-4 text-center ${s.color.split(' ')[0]}`}>
-                                <p className={`text-2xl font-black ${s.color.split(' ')[1]}`}>{s.value}</p>
-                                <p className="text-[11px] font-bold mt-1 opacity-80">{s.label}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="glass p-5 rounded-2xl">
-                    <h3 className="font-black text-[13px] text-brand-egg mb-3">{isEn ? 'Most Active Customers' : 'أكثر العملاء تفاعلاً'}</h3>
-                    {topCustomers.length === 0 ? (
-                        <p className="text-brand-muted text-sm text-center py-8">{isEn ? 'No data yet.' : 'لا توجد بيانات.'}</p>
-                    ) : (
-                        <div className="space-y-3">
-                            {topCustomers.map((c, i) => (
-                                <div key={i} className="flex items-center gap-3">
-                                    <div className="w-7 h-7 rounded-full bg-brand-accent/20 flex items-center justify-center text-xs font-black text-brand-accent shrink-0">{i + 1}</div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-sm text-brand-egg truncate">{c.name}</p>
-                                        <p className="text-[11px] text-brand-muted" dir="ltr">{c.phone}</p>
-                                    </div>
-                                    <span className="text-xs font-bold text-brand-accent shrink-0">{c.count} {isEn ? 'msgs' : 'رسالة'}</span>
-                                </div>
-                            ))}
+                {/* LEFT: Stacked bar chart */}
+                <div className="glass rounded-2xl p-5">
+                    <div className="flex items-start justify-between mb-3">
+                        <div>
+                            <h3 className="font-black text-[13px] text-brand-egg">
+                                {isEn ? 'Message activity · last 30 days' : 'نشاط الرسائل · آخر 30 يوم'}
+                            </h3>
+                            <p className="text-[9px] font-bold text-brand-muted tracking-wider uppercase mt-0.5">
+                                {isEn ? 'ATTRIBUTED TO OMNIFLOW' : 'عبر OmniFlow'}
+                            </p>
                         </div>
-                    )}
+                        <div className="flex items-center gap-3 text-[10px] font-bold text-brand-muted">
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#8CC850'}} />{isEn ? 'Recovered carts' : 'سلات مستردة'}</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#FF6B35'}} />{isEn ? 'Broadcasts' : 'إرسال جماعي'}</span>
+                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:'#93C5FD'}} />{isEn ? 'Direct chat' : 'دردشة مباشرة'}</span>
+                        </div>
+                    </div>
+                    <StackedBarChart data={barData} isEn={isEn} />
+                </div>
+
+                {/* RIGHT: Donut + breakdown */}
+                <div className="glass rounded-2xl p-5 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-black text-[13px] text-brand-egg">{isEn ? 'Conversation breakdown' : 'توزيع المحادثات'}</h3>
+                        <span className="text-[9px] font-bold text-brand-muted tracking-wider uppercase">LAST 30 DAYS</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-3">
+                        <DonutChart segments={donutSegments} total={totalChats} size={130} />
+                        {totalChats > 0 && (
+                            <div>
+                                <p className="text-[11px] text-brand-muted text-center">AI-assisted volume</p>
+                                <p className="text-[12px] font-black text-brand-accent text-center">
+                                    {aiHandledPct > 0 ? `+ ${aiHandledPct}%` : '—'} vs pre-OmniFlow
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="space-y-2.5 border-t border-brand-border/10 pt-3">
+                        {donutSegments.map((seg, i) => {
+                            const pct = totalChats > 0 ? Math.round((seg.value / totalChats) * 100) : 0;
+                            return (
+                                <div key={i} className="flex items-center justify-between text-[11px]">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{background: seg.color}} />
+                                        <span className="text-brand-muted font-medium">{seg.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-brand-muted font-bold">{seg.value.toLocaleString()}</span>
+                                        <span className="font-black w-8 text-right" style={{color: seg.color}}>{pct}%</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
         </div>
