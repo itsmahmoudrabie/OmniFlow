@@ -317,6 +317,15 @@ const App = () => {
         return () => { axios.interceptors.request.eject(id); axios.interceptors.response.eject(rid); };
     }, []);
 
+    // If opened from Shopify admin with ?shop=, auto-start OAuth
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const shop = params.get('shop');
+        if (shop && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
+            window.location.href = `/auth?shop=${encodeURIComponent(shop)}`;
+        }
+    }, []);
+
     // Handle Shopify OAuth redirect — pick up JWT from URL hash
     useEffect(() => {
         const hash = window.location.hash;
