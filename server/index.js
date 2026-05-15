@@ -2304,8 +2304,13 @@ app.get('/api/export/orders', (_req, res) => {
 });
 
 // Catch-all: serve React app for non-API routes (Express 5 syntax: /{*splat})
+// If Shopify opens the app with ?shop=, auto-start OAuth instead of showing login page
 if (fs.existsSync(FRONTEND_DIST)) {
-    app.get('/{*splat}', (_req, res) => {
+    app.get('/{*splat}', (req, res) => {
+        const shop = req.query.shop;
+        if (shop && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
+            return res.redirect(`/auth?shop=${encodeURIComponent(shop)}`);
+        }
         res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
     });
 }
