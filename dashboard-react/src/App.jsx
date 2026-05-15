@@ -586,7 +586,9 @@ const App = () => {
     }
 
     // New users (no charge yet) must pick a plan before accessing the dashboard
-    const needsPlan = authTenant && !authTenant.shopifyChargeId && authTenant._id !== 'dev-admin-001';
+    // Skip for admin and enterprise accounts
+    const isAdminAccount = authTenant?.id === 'dev-admin-001' || authTenant?._id === 'dev-admin-001' || authTenant?.plan === 'enterprise';
+    const needsPlan = authTenant && !authTenant.shopifyChargeId && !isAdminAccount;
     if (needsPlan || showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={showPricing ? () => setShowPricing(false) : null} />;
 
     if (!isConfigured) {

@@ -61,7 +61,7 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req, res) => {
     const t = req.tenant;
-    res.json({ id: t._id, name: t.name, email: t.email, plan: t.plan, status: t.status, trialEnds: t.trialEnds, limits: t.limits, cardLastFour: t.cardLastFour, nextBillingDate: t.nextBillingDate, config: t.config });
+    res.json({ id: t._id, name: t.name, email: t.email, plan: t.plan, status: t.status, trialEnds: t.trialEnds, limits: t.limits, cardLastFour: t.cardLastFour, nextBillingDate: t.nextBillingDate, config: t.config, shopifyChargeId: t.shopifyChargeId, shopifyChargeStatus: t.shopifyChargeStatus });
 });
 
 // POST /api/auth/change-password
