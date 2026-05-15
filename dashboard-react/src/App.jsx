@@ -1981,22 +1981,32 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
 
     const [selectedCamp, setSelectedCamp] = React.useState(null);
 
-    const mockCamps = [
-        { id:'m1', name: isEn ? 'Eid Drop · 2026'        : 'حملة العيد · 2026',       date: isEn ? 'Now · 3h running' : 'الآن · منذ 3 ساعات', sent:12840, open:76, reply:24, revenue:184200, status:'live',   color:'#FF6400', tpl:'t_eid_25',    tplMsg: isEn ? 'Eid Mubarak, {first_name} 🌙\nOur Eid drop just landed. 24 new pieces. Members get 15% off — use EID15 at checkout.' : 'عيد مبارك {first_name} 🌙\nتشكيلة العيد وصلت. 24 قطعة جديدة. خصم 15% لأعضاء الكلوب.', btn1: isEn ? 'Shop the drop' : 'تسوق الآن', btn2: isEn ? 'Catalogue' : 'الكتالوج' },
-        { id:'m2', name: isEn ? 'New Linen Capsule'       : 'تشكيلة الكتان الجديدة',    date: isEn ? 'Yesterday'       : 'أمس',             sent:8420,  open:71, reply:18, revenue:92400,  status:'live',   color:'#8CC850', tpl:'t_linen_12',  tplMsg: isEn ? 'New arrivals are here, {first_name} 👗\nFresh linen pieces, limited stock.' : 'وصلت التشكيلة الجديدة {first_name} 👗\nقطع كتان جديدة، كميات محدودة.', btn1: isEn ? 'Shop now' : 'تسوق الآن', btn2: isEn ? 'View all' : 'عرض الكل' },
-        { id:'m3', name: isEn ? 'VIP Early Access · May' : 'وصول مبكر VIP · مايو',   date: isEn ? 'May 12'          : '12 مايو',           sent:420,   open:94, reply:52, revenue:38200,  status:'live',   color:'#2D5A3D', tpl:'t_vip_07',    tplMsg: isEn ? "You're VIP, {first_name} ⭐\nExclusive early access to our May drop — 24 hours before everyone else." : 'أنت VIP {first_name} ⭐\nوصول حصري مبكر لتشكيلة مايو — 24 ساعة قبل الجميع.', btn1: isEn ? 'Access now' : 'ادخل الآن', btn2: isEn ? 'Learn more' : 'اعرف أكثر' },
-        { id:'m4', name: isEn ? "Mother's Day Flash"      : 'فلاش عيد الأم',            date: isEn ? 'May 09'          : '9 مايو',            sent:6210,  open:82, reply:21, revenue:74800,  status:'paused', color:'#C4A882', tpl:'t_mom_03',    tplMsg: isEn ? "Happy Mother's Day, {first_name} 💐\nSurprise her with something special. Free gift wrapping today only." : 'عيد أم سعيد {first_name} 💐\nفاجئيها بشيء مميز. تغليف هدية مجاني اليوم فقط.', btn1: isEn ? 'Shop gifts' : 'تسوق الهدايا', btn2: isEn ? 'Gift guide' : 'دليل الهدايا' },
-        { id:'m5', name: isEn ? 'Cart Recovery · Auto'  : 'استرداد السلة · تلقائي',   date: isEn ? 'Ongoing'         : 'مستمر',         sent:2840,  open:88, reply:42, revenue:12640,  status:'live',   color:'#FF9B7A', tpl:'t_cart_01',   tplMsg: isEn ? 'You left something behind, {first_name} 🛒\nYour cart is waiting. Complete your order and get free shipping.' : 'نسيت حاجة {first_name} 🛒\nسلتك لسه في الانتظار. أكمل طلبك واحصل على شحن مجاني.', btn1: isEn ? 'Complete order' : 'أكمل الطلب', btn2: isEn ? 'View cart' : 'عرض السلة' },
-        { id:'m6', name: isEn ? 'Spring Catalogue Reveal' : 'كشف كتالوج الربيع',        date: isEn ? 'Apr 28'          : '28 أبريل',          sent:15640, open:64, reply:12, revenue:124800, status:'paused', color:'#34D399', tpl:'t_spring_09', tplMsg: isEn ? 'Spring is here, {first_name} 🌸\nOur full spring catalogue is now live. 60+ new styles.' : 'الربيع وصل {first_name} 🌸\nكتالوج الربيع متاح الآن. أكثر من 60 موديل جديد.', btn1: isEn ? 'Browse now' : 'تصفح الآن', btn2: isEn ? 'New arrivals' : 'الجديد' },
-    ];
+    const colorPalette = ['#FF6400','#8CC850','#2D5A3D','#C4A882','#FF9B7A','#88B8B0','#A78BFA','#34D399','#F59E0B','#60A5FA'];
+    const colorFor = (str) => colorPalette[(str||'').split('').reduce((a,c)=>a+c.charCodeAt(0),0) % colorPalette.length];
 
-    const liveCamps   = mockCamps.filter(c => c.status === 'live');
-    const pausedCamps = mockCamps.filter(c => c.status === 'paused');
-    const filteredDisplay = campaignFilter === 'live' ? liveCamps : campaignFilter === 'paused' ? pausedCamps : campaignFilter === 'draft' ? [] : mockCamps;
-    const displayCamps = scheduledList.length > 0
-        ? (campaignFilter === 'live' ? scheduledList.filter(c => c.status === 'running') : scheduledList)
-        : filteredDisplay;
-    const previewCamp = selectedCamp || mockCamps[0];
+    const allCamps = scheduledList.map(b => {
+        const dt = new Date(b.scheduled_at);
+        const now = new Date();
+        const diffH = (now - dt) / 3600000;
+        let date;
+        if (b.status === 'running') date = isEn ? `Now · ${Math.round(diffH)}h running` : `الآن · منذ ${Math.round(diffH)} ساعات`;
+        else if (dt > now) date = dt.toLocaleDateString(isEn?'en-US':'ar-EG',{month:'short',day:'numeric'}) + ' · ' + dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        else if (diffH < 48) date = isEn ? 'Yesterday' : 'أمس';
+        else date = dt.toLocaleDateString(isEn?'en-US':'ar-EG',{month:'short',day:'numeric'});
+        const status = b.status === 'running' ? 'live' : b.status === 'pending' ? 'scheduled' : b.status === 'done' ? 'done' : 'paused';
+        return { id: b.id, name: b.name, date, sent: b.sent||0, open: b.open_rate||0, reply: b.reply_rate||0, revenue: b.revenue||0, status, color: colorFor(b.name), tpl: b.template_id||'—', tplMsg: b.message_text||'' };
+    });
+
+    const liveCamps     = allCamps.filter(c => c.status === 'live');
+    const pausedCamps   = allCamps.filter(c => c.status === 'paused' || c.status === 'done');
+    const scheduledCamps= allCamps.filter(c => c.status === 'scheduled');
+    const displayCamps  = campaignFilter === 'live' ? liveCamps : campaignFilter === 'paused' ? pausedCamps : campaignFilter === 'draft' ? scheduledCamps : allCamps;
+
+    const totalSent    = allCamps.reduce((s,c) => s + c.sent, 0);
+    const avgOpen      = allCamps.length ? (allCamps.reduce((s,c) => s + parseFloat(c.open||0), 0) / allCamps.length).toFixed(1) : '0';
+    const avgReply     = allCamps.length ? (allCamps.reduce((s,c) => s + parseFloat(c.reply||0), 0) / allCamps.length).toFixed(1) : '0';
+    const totalRevenue = allCamps.reduce((s,c) => s + c.revenue, 0);
+    const previewCamp  = selectedCamp || allCamps[0] || null;
 
     return (
         <div className={`flex flex-col gap-4 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
@@ -2022,10 +2032,10 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
             {/* 4 stat cards */}
             <div className="grid grid-cols-4 gap-3">
                 {[
-                    { label: isEn ? 'SENT · 30D'         : 'المُرسَل · 30 يوم', value: '56,420',       sub: '↑ 18%',      subC:'text-brand-accent' },
-                    { label: isEn ? 'OPEN RATE'          : 'معدل الفتح',          value: '78.4%',        sub: '↑ 4.2 pts',  subC:'text-brand-accent' },
-                    { label: isEn ? 'REPLY RATE'         : 'معدل الرد',           value: '22.1%',        sub: '↑ 1.8 pts',  subC:'text-brand-accent' },
-                    { label: isEn ? 'REVENUE ATTRIBUTED' : 'الإيرادات المحققة',   value: 'EGP 412,840',  sub: '↑ EGP 84k', subC:'text-brand-gold', gold:true },
+                    { label: isEn ? 'SENT · 30D'         : 'المُرسَل · 30 يوم', value: totalSent.toLocaleString(),                                   sub: isEn ? `${allCamps.length} campaigns` : `${allCamps.length} حملة`,  subC:'text-brand-muted' },
+                    { label: isEn ? 'OPEN RATE'          : 'معدل الفتح',         value: avgOpen + '%',                                                sub: isEn ? (allCamps.length ? 'avg across campaigns' : 'no data yet') : (allCamps.length ? 'متوسط الحملات' : 'لا بيانات بعد'), subC:'text-brand-muted' },
+                    { label: isEn ? 'REPLY RATE'         : 'معدل الرد',          value: avgReply + '%',                                               sub: isEn ? (allCamps.length ? 'avg across campaigns' : 'no data yet') : (allCamps.length ? 'متوسط الحملات' : 'لا بيانات بعد'), subC:'text-brand-muted' },
+                    { label: isEn ? 'REVENUE ATTRIBUTED' : 'الإيرادات المحققة',  value: totalRevenue > 0 ? 'EGP ' + totalRevenue.toLocaleString() : 'EGP 0', sub: isEn ? (totalRevenue > 0 ? 'from broadcasts' : 'no revenue yet') : (totalRevenue > 0 ? 'من الحملات' : 'لا إيرادات بعد'), subC:'text-brand-muted', gold: totalRevenue > 0 },
                 ].map((s,i) => (
                     <div key={i} className="glass rounded-2xl p-4">
                         <p className="text-[10px] font-bold text-brand-muted tracking-wider">{s.label}</p>
@@ -2047,10 +2057,10 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                         </div>
                         <div className="flex gap-1.5">
                             {[
-                                { k:'all',    label: isEn?'All':'الكل',     count: mockCamps.length },
-                                { k:'live',   label: isEn?'Live':'نشط',   count: liveCamps.length,   dot:true },
+                                { k:'all',    label: isEn?'All':'الكل',     count: allCamps.length },
+                                { k:'live',   label: isEn?'Live':'نشط',     count: liveCamps.length,      dot:true },
                                 { k:'paused', label: isEn?'Paused':'موقوف', count: pausedCamps.length },
-                                { k:'draft',  label: isEn?'Draft':'مسودة',  count: 0 },
+                                { k:'draft',  label: isEn?'Draft':'مسودة',  count: scheduledCamps.length },
                             ].map(f => (
                                 <button key={f.k} onClick={() => setCampaignFilter(f.k)}
                                     className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition-all ${campaignFilter===f.k ? 'bg-brand-accent text-brand-bg' : 'glass-subtle text-brand-muted hover:text-brand-egg'}`}>
@@ -2073,8 +2083,10 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                     {/* Rows */}
                     <div className="divide-y divide-brand-border/10 overflow-y-auto custom-scrollbar flex-1">
                         {displayCamps.length === 0 ? (
-                            <div className="flex items-center justify-center h-32 text-brand-muted text-sm">
-                                {isEn ? 'No campaigns in this filter' : 'لا توجد حملات'}
+                            <div className="flex flex-col items-center justify-center h-48 gap-3 text-brand-muted">
+                                <Megaphone size={36} className="opacity-20" />
+                                <p className="text-sm font-bold">{allCamps.length === 0 ? (isEn ? 'No broadcasts yet' : 'لا توجد حملات بعد') : (isEn ? 'No campaigns match this filter' : 'لا توجد حملات بهذا الفلتر')}</p>
+                                {allCamps.length === 0 && <button onClick={() => setShowScheduler(true)} className="text-xs font-bold text-brand-accent hover:underline">{isEn ? '+ Create your first broadcast' : '+ أنشئ أول حملة'}</button>}
                             </div>
                         ) : displayCamps.map(c => {
                             const isSelected = previewCamp?.id === c.id;
@@ -2117,10 +2129,19 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                     <div className="px-4 py-3 border-b border-brand-border/20 shrink-0 flex items-center justify-between">
                         <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Composer preview' : 'معاينة الحملة'}</span>
                         <span className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">
-                            {isEn ? 'DRAFT' : 'مسودة'} · {(previewCamp?.name||'').replace(/[؀-ۿ]/g,'').trim().toUpperCase().slice(0,14)||previewCamp?.name?.slice(0,14)}
+                            {previewCamp ? ((previewCamp.status==='scheduled'?(isEn?'DRAFT':'مسودة'):(isEn?'SENT':'أُرسلت')) + ' · ' + previewCamp.name.slice(0,14)) : (isEn?'NO CAMPAIGN':'لا توجد حملة')}
                         </span>
                     </div>
 
+                    {!previewCamp ? (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-brand-muted p-6 text-center">
+                            <Megaphone size={40} className="opacity-20" />
+                            <p className="text-sm font-bold">{isEn ? 'Create a broadcast to see the preview' : 'أنشئ حملة لترى المعاينة'}</p>
+                            <button onClick={() => setShowScheduler(true)} className="px-4 py-2 rounded-xl text-xs font-bold text-brand-bg transition-all" style={{background:'#FF6400'}}>
+                                <Zap size={12} className="inline mr-1" />{isEn ? 'New Broadcast' : 'حملة جديدة'}
+                            </button>
+                        </div>
+                    ) : (<>
                     <div className="flex-1 p-3 overflow-y-auto custom-scrollbar">
                         <div className="rounded-2xl overflow-hidden border border-brand-border/20" style={{background:'#081A10'}}>
                             {/* WA business header */}
@@ -2137,12 +2158,12 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                                 <div className="rounded-xl overflow-hidden" style={{background:'rgba(255,255,255,0.06)'}}>
                                     <div className="w-full h-28 flex items-end p-3 relative" style={{background: previewCamp?.color||'#FF6400'}}>
                                         <p className="text-white font-black text-sm tracking-wider leading-tight opacity-95">
-                                            {(previewCamp?.name||'EID DROP').toUpperCase()}
+                                            {(previewCamp?.name||'').toUpperCase()}
                                         </p>
                                     </div>
                                     <div className="px-3 py-2.5">
                                         <p className="text-[12px] text-brand-egg leading-relaxed whitespace-pre-line">
-                                            {previewCamp?.tplMsg || (isEn ? 'Select a campaign to preview.' : 'اختر حملة للمعاينة.')}
+                                            {previewCamp?.tplMsg || previewCamp?.name || ''}
                                         </p>
                                         <p className="text-[10px] text-brand-muted text-right mt-1.5">14:02 ✓✓</p>
                                     </div>
@@ -2158,7 +2179,6 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                             </div>
                         </div>
                     </div>
-
                     {/* Footer */}
                     <div className="px-4 py-3 border-t border-brand-border/20 shrink-0">
                         <div className="grid grid-cols-3 gap-2 mb-3">
@@ -2186,6 +2206,7 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                             </button>
                         </div>
                     </div>
+                    </>)}
                 </div>
             </div>
         </div>
