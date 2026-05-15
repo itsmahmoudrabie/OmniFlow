@@ -511,7 +511,6 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
             </div>
         </div>
     );
-;
 };
 
 const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang }) => {
@@ -2733,7 +2732,6 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
             )}
         </div>
     );
-;
 };
 
 const AbandonedCartsManager = ({ carts, refresh, showToast, lang }) => {
@@ -4104,7 +4102,6 @@ const AnalyticsDashboard = ({ lang }) => {
             </div>
         </div>
     );
-;
 };
 
 export default App;
