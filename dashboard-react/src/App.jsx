@@ -278,7 +278,10 @@ const App = () => {
     // ── Auth state ───────────────────────────────────────────────────────────
     const [authScreen, setAuthScreen] = useState(() => {
         const token = localStorage.getItem('omni_token');
-        return token ? null : 'login';
+        if (token) return null;
+        // If Shopify just redirected with a token in the hash, don't show login screen yet
+        if (window.location.hash.includes('shopify_token=')) return null;
+        return 'login';
     });
     const [authTenant, setAuthTenant] = useState(() => {
         try { return JSON.parse(localStorage.getItem('omni_tenant') || 'null'); } catch { return null; }
@@ -312,6 +315,19 @@ const App = () => {
             return Promise.reject(err);
         });
         return () => { axios.interceptors.request.eject(id); axios.interceptors.response.eject(rid); };
+    }, []);
+
+    // Handle Shopify OAuth redirect — pick up JWT from URL hash
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (!hash.includes('shopify_token=')) return;
+        const params = new URLSearchParams(hash.slice(1));
+        const token = params.get('shopify_token');
+        if (!token) return;
+        window.history.replaceState(null, '', window.location.pathname);
+        axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => handleLogin(token, r.data))
+            .catch(() => {});
     }, []);
 
     const [activeTab, setActiveTab] = useState('dash');

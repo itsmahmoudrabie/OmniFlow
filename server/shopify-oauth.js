@@ -130,11 +130,59 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
                 console.warn('[Shopify] Webhook registration warning:', e.message)
             );
 
-            // Redirect into the embedded app inside Shopify admin
-            const host = req.query.host
-                ? `&host=${encodeURIComponent(req.query.host)}`
-                : '';
-            res.redirect(`/?shop=${encodeURIComponent(shop)}${host}`);
+            // Create or find Tenant by Shopify shop domain, issue JWT
+            let jwtToken = null;
+            try {
+                const { signToken } = require('./middleware/auth');
+                let Tenant;
+                try { Tenant = require('./models/Tenant'); } catch (_) {}
+
+                if (Tenant) {
+                    // Fetch shop info from Shopify to get business name/email
+                    let shopName = shop.replace('.myshopify.com', '');
+                    let shopEmail = `${shopName}@shopify.com`;
+                    try {
+                        const shopInfo = await axios.get(`https://${shop}/admin/api/2024-01/shop.json`, {
+                            headers: { 'X-Shopify-Access-Token': access_token }
+                        });
+                        shopName  = shopInfo.data.shop?.name  || shopName;
+                        shopEmail = shopInfo.data.shop?.email || shopEmail;
+                    } catch (_) {}
+
+                    let tenant = await Tenant.findOne({ 'config.shopify_url': `https://${shop}` });
+                    if (!tenant) {
+                        tenant = new Tenant({
+                            name: shopName,
+                            email: shopEmail,
+                            password: `shopify-${Date.now()}-${Math.random()}`,
+                            plan: 'starter',
+                            status: 'trial',
+                            config: {
+                                shopify_url: `https://${shop}`,
+                                shopify_access_token: access_token,
+                            }
+                        });
+                        tenant.applyPlanLimits();
+                        await tenant.save();
+                    } else {
+                        tenant.config.shopify_access_token = access_token;
+                        await tenant.save();
+                    }
+                    jwtToken = signToken(tenant._id);
+                } else {
+                    // Dev mode — no MongoDB
+                    const { signToken: sign } = require('./middleware/auth');
+                    jwtToken = sign('dev-admin-001');
+                }
+            } catch (tenantErr) {
+                console.warn('[Shopify OAuth] Tenant upsert failed:', tenantErr.message);
+                const { signToken: sign } = require('./middleware/auth');
+                jwtToken = sign('dev-admin-001');
+            }
+
+            // Redirect to frontend with JWT in URL hash (frontend reads it and stores in localStorage)
+            const tokenParam = jwtToken ? `#shopify_token=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}` : '';
+            res.redirect(`/${tokenParam}`);
         } catch (err) {
             console.error('[Shopify OAuth] Token exchange failed:', err.response?.data || err.message);
             res.status(500).send('OAuth token exchange failed');

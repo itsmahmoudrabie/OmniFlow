@@ -350,77 +350,112 @@ export const RegisterPage = ({ lang = 'ar', selectedPlan = 'starter', onSuccess,
     );
 };
 
-// ── Login Page ────────────────────────────────────────────────────────────────
-export const LoginPage = ({ lang = 'ar', onSuccess, onRegister }) => {
+// ── Shopify Login Page ────────────────────────────────────────────────────────
+export const LoginPage = ({ lang = 'ar', onLogin }) => {
     const isEn = lang === 'en';
-    const [form, setForm] = React.useState({ email: '', password: '' });
-    const [loading, setLoading] = React.useState(false);
-    const [error, setError] = React.useState('');
+    const [shop, setShop] = React.useState('');
+    const [langState, setLangState] = React.useState(lang);
+    const en = langState === 'en';
 
-    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+    // Clean shop input: remove https://, trailing slashes, spaces
+    const cleanShop = (val) => {
+        return val.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+    };
 
-    const handleLogin = async (e) => {
+    const handleConnect = (e) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
-        try {
-            const res = await axios.post(`${API_URL}/auth/login`, form);
-            localStorage.setItem('omni_token', res.data.token);
-            onSuccess(res.data.token, res.data.tenant);
-        } catch (err) {
-            setError(err.response?.data?.error || (isEn ? 'Login failed' : 'فشل تسجيل الدخول'));
-        }
-        setLoading(false);
+        let s = cleanShop(shop);
+        if (!s) return;
+        // Append .myshopify.com if missing
+        if (!s.endsWith('.myshopify.com')) s = `${s}.myshopify.com`;
+        // Redirect to server Shopify OAuth
+        window.location.href = `/auth?shop=${encodeURIComponent(s)}`;
     };
 
     return (
-        <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4" dir={isEn ? 'ltr' : 'rtl'}>
-            <div className="w-full max-w-sm space-y-6">
-                <div className="text-center space-y-2">
+        <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center p-4" dir={en ? 'ltr' : 'rtl'}>
+            {/* Lang toggle */}
+            <button onClick={() => setLangState(p => p === 'ar' ? 'en' : 'ar')}
+                className="absolute top-5 right-5 text-[11px] font-bold text-brand-muted border border-brand-border/30 px-3 py-1.5 rounded-lg hover:text-brand-egg transition-all">
+                {en ? 'عربي' : 'English'}
+            </button>
+
+            <div className="w-full max-w-sm space-y-7">
+                {/* Logo */}
+                <div className="text-center space-y-3">
                     <div className="flex items-center justify-center gap-2">
-                        <div className="w-8 h-8 bg-brand-accent rounded-lg flex items-center justify-center">
-                            <span className="text-brand-bg font-black text-sm">O</span>
+                        <div className="w-10 h-10 bg-brand-accent rounded-xl flex items-center justify-center shadow-lg">
+                            <span className="text-brand-bg font-black text-lg">O</span>
                         </div>
-                        <span className="font-black text-brand-egg text-xl">Omni<span className="font-light">Flow</span></span>
+                        <span className="font-black text-brand-egg text-2xl tracking-tight">Omni<span className="font-light">Flow</span></span>
                     </div>
-                    <p className="text-brand-muted text-sm">{isEn ? 'Sign in to your workspace' : 'تسجيل الدخول لمساحة عملك'}</p>
+                    <p className="text-brand-muted text-sm">
+                        {en ? 'Connect your Shopify store to get started' : 'ربّط متجر Shopify الخاص بك للبدء'}
+                    </p>
                 </div>
 
-                <form onSubmit={handleLogin} className="glass rounded-2xl p-6 space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-brand-muted">{isEn ? 'Email' : 'البريد الإلكتروني'}</label>
-                        <div dir="ltr">
-                            <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
-                                placeholder="ahmed@company.com" required
-                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand-accent text-brand-egg text-left" />
+                {/* Card */}
+                <form onSubmit={handleConnect} className="glass rounded-2xl p-7 space-y-5">
+                    {/* Shopify icon */}
+                    <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(150,191,72,0.08)', border:'1px solid rgba(150,191,72,0.2)'}}>
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{background:'#96BF48'}}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
+                                <path d="M15.337 23.979l6.631-1.432S19.053 7.424 19.03 7.258c-.023-.167-.167-.278-.312-.278-.145 0-2.7-.057-2.7-.057s-1.792-1.736-1.98-1.925v18.981zm-2.398.521L12.5.836s-.7-.19-.926-.245c-.23-.056-2.455-.623-2.455-.623L4.025 2.434S3.1 13.968 3.03 14.545c-.067.577 12.01 9.955 12.01 9.955h-.101z"/>
+                            </svg>
                         </div>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-brand-muted">{isEn ? 'Password' : 'كلمة المرور'}</label>
-                        <div dir="ltr">
-                            <input type="password" value={form.password} onChange={e => set('password', e.target.value)}
-                                placeholder="••••••••" required
-                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand-accent text-brand-egg text-left" />
+                        <div>
+                            <p className="text-[12px] font-black text-brand-egg">Shopify OAuth</p>
+                            <p className="text-[10px] text-brand-muted">{en ? 'Secure login via Shopify' : 'دخول آمن عبر Shopify'}</p>
                         </div>
                     </div>
 
-                    {error && <p className="text-red-400 text-xs font-bold text-center">{error}</p>}
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-brand-muted uppercase tracking-wider">
+                            {en ? 'Your Shopify store URL' : 'رابط متجر Shopify'}
+                        </label>
+                        <div className="relative" dir="ltr">
+                            <input
+                                value={shop}
+                                onChange={e => setShop(e.target.value)}
+                                placeholder="my-store.myshopify.com"
+                                required
+                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-accent text-brand-egg pr-36"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-brand-muted font-bold opacity-50">
+                                .myshopify.com
+                            </span>
+                        </div>
+                        <p className="text-[10px] text-brand-muted">
+                            {en ? 'e.g. my-store or my-store.myshopify.com' : 'مثال: my-store أو my-store.myshopify.com'}
+                        </p>
+                    </div>
 
-                    <button type="submit" disabled={loading}
-                        className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all disabled:opacity-50 text-sm">
-                        {loading ? (isEn ? 'Signing in...' : 'جاري الدخول...') : (isEn ? 'Sign in →' : 'دخول ←')}
+                    <button type="submit"
+                        className="w-full py-3 rounded-xl font-black text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2"
+                        style={{background:'#96BF48', color:'#fff'}}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="white">
+                            <path d="M15.337 23.979l6.631-1.432S19.053 7.424 19.03 7.258c-.023-.167-.167-.278-.312-.278-.145 0-2.7-.057-2.7-.057s-1.792-1.736-1.98-1.925v18.981zm-2.398.521L12.5.836s-.7-.19-.926-.245c-.23-.056-2.455-.623-2.455-.623L4.025 2.434S3.1 13.968 3.03 14.545c-.067.577 12.01 9.955 12.01 9.955h-.101z"/>
+                        </svg>
+                        {en ? 'Connect with Shopify →' : 'ربط مع Shopify ←'}
                     </button>
-
-                    <p className="text-center text-xs text-brand-muted">
-                        {isEn ? "Don't have an account? " : 'لا تملك حساباً؟ '}
-                        <button type="button" onClick={onRegister} className="text-brand-accent font-bold hover:underline">
-                            {isEn ? 'Start free trial' : 'ابدأ التجربة المجانية'}
-                        </button>
-                    </p>
                 </form>
 
+                {/* Features */}
+                <div className="grid grid-cols-3 gap-3 text-center">
+                    {[
+                        { en: 'No password', ar: 'بدون كلمة مرور', icon: '🔓' },
+                        { en: '14-day trial', ar: 'تجربة 14 يوم', icon: '🎁' },
+                        { en: 'Instant setup', ar: 'إعداد فوري', icon: '⚡' },
+                    ].map((f, i) => (
+                        <div key={i} className="glass rounded-xl p-3 space-y-1">
+                            <div className="text-lg">{f.icon}</div>
+                            <p className="text-[10px] font-bold text-brand-muted">{en ? f.en : f.ar}</p>
+                        </div>
+                    ))}
+                </div>
+
                 <p className="text-center text-[10px] text-brand-muted opacity-50">
-                    {isEn ? 'Secured with 256-bit encryption' : 'مؤمَّن بتشفير 256-bit'}
+                    {en ? 'Secured with 256-bit encryption' : 'مؤمَّن بتشفير 256-bit'}
                 </p>
             </div>
         </div>
