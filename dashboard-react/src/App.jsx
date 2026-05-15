@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
     LayoutDashboard,
@@ -47,12 +47,22 @@ import {
     Link2,
     Calendar,
     MessageSquareQuote,
-    Download
+    Download,
+    Star,
+    Brain
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL
     ? `${import.meta.env.VITE_API_URL}/api`
     : `${window.location.origin}/api`;
+
+const OmniFlowMark = ({ size = 24, bg = '#F5EBE1', fg = '#003223', pulse = '#FF6400' }) => (
+    <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block', flexShrink: 0 }}>
+        <circle cx="50" cy="50" r="40" fill={bg} />
+        <circle cx="64" cy="42" r="32" fill={fg} />
+        <circle cx="32" cy="62" r="5" fill={pulse} />
+    </svg>
+);
 
 const App = () => {
     const [activeTab, setActiveTab] = useState('dash');
@@ -115,7 +125,7 @@ const App = () => {
         setLoading(true);
         try {
             const res = await axios.get(`${API_URL}/orders`);
-            setOrders(res.data);
+            setOrders(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -123,21 +133,21 @@ const App = () => {
     const fetchInbox = async () => {
         try {
             const res = await axios.get(`${API_URL}/inbox`);
-            setInbox(res.data);
+            setInbox(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
     };
 
     const fetchTemplates = async () => {
         try {
             const res = await axios.get(`${API_URL}/templates`);
-            setTemplates(res.data);
+            setTemplates(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
     };
 
     const fetchAbandonedCarts = async () => {
         try {
             const res = await axios.get(`${API_URL}/abandoned_carts`);
-            setAbandonedCarts(res.data);
+            setAbandonedCarts(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
     };
 
@@ -209,113 +219,129 @@ const App = () => {
 
     return (
         <div
-            className={`flex h-screen bg-brand-bg overflow-hidden text-brand-text theme-${theme} ${lang === 'en' ? 'dir-ltr' : 'dir-rtl'}`}
+            className={`flex h-screen bg-brand-bg overflow-hidden text-brand-text theme-${theme} ${lang === 'en' ? 'dir-ltr' : 'dir-rtl'} p-5 gap-3.5 relative`}
             dir={lang === 'en' ? 'ltr' : 'rtl'}
-            style={{ '--brand-accent': branding.brand_color, '--brand-gold': branding.brand_color }}
         >
             {/* Sidebar */}
-            <aside className={`w-64 bg-brand-sidebar ${lang === 'en' ? 'border-r' : 'border-l'} border-brand-accent/10 flex flex-col shrink-0`}>
-                <div className="p-6">
+            <aside className="w-[200px] rounded-2xl flex flex-col shrink-0 p-4" style={{background:'color-mix(in srgb, var(--color-brand-card) 60%, transparent)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',border:'1px solid rgba(245,235,225,0.08)'}}>
+                <div className={`${lang === 'en' ? 'pl-1' : 'pr-1'}`}>
                     {branding.logo_url ? (
-                        <img src={`http://localhost:8765${branding.logo_url}`} alt="logo" className="h-10 w-auto object-contain mb-2" />
+                        <img src={`http://localhost:8765${branding.logo_url}`} alt="logo" className="h-5 w-auto object-contain mb-1" />
                     ) : (
-                        <h1 className="text-2xl font-bold text-brand-accent tracking-wider">{businessName || 'OmniFlow'}</h1>
+                        <div className="flex items-center gap-2">
+                            <OmniFlowMark size={22} />
+                            <span className="text-base font-bold tracking-tight text-brand-egg">
+                                Omni<span className="font-light">Flow</span>
+                            </span>
+                        </div>
                     )}
-                    <p className="text-[10px] text-brand-muted uppercase tracking-widest">{businessName || 'OmniFlow'} — WhatsApp CRM</p>
+                    <p className="text-[8px] text-brand-egg-mute uppercase tracking-[0.18em] mt-1" style={{ marginInlineStart: 30 }}>WHATSAPP CRM</p>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-2">
-                    {navItems.map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveTab(item.id)}
-                            className={`nav-item w-full group ${activeTab === item.id
-                                    ? 'bg-brand-accent/10 text-brand-accent'
-                                    : 'text-brand-muted hover:bg-brand-card/50 hover:text-brand-text'
-                                }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <item.icon size={18} />
-                                <span className="font-semibold text-sm">{item.label}</span>
-                            </div>
-                            {item.badge > 0 && (
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] text-white font-bold animate-pulse ${item.id === 'abandoned' ? 'bg-amber-500' : 'bg-green-500'}`}>
-                                    {item.badge}
-                                </span>
-                            )}
-                        </button>
-                    ))}
+                <nav className="flex-1 mt-5 flex flex-col gap-0.5 text-xs">
+                    {navItems.map((item) => {
+                        const isActive = activeTab === item.id;
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                className={`nav-item w-full group ${isActive
+                                        ? 'glass-strong text-brand-egg font-semibold'
+                                        : 'text-brand-egg-mute hover:text-brand-egg hover:bg-brand-green-soft/40'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-2.5">
+                                    <item.icon size={14} className={isActive ? 'text-brand-accent' : 'text-brand-egg-mute'} />
+                                    <span className="text-xs">{item.label}</span>
+                                </div>
+                                {item.badge > 0 && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono ${item.id === 'abandoned' ? 'bg-brand-gold text-brand-egg' : 'bg-brand-accent text-brand-bg'}`}>
+                                        {item.badge}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </nav>
 
-                <div className="p-5 border-t border-brand-accent/5 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-xs text-brand-muted">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shrink-0"></div>
-                        <span className="text-[11px] font-bold">{lang === 'en' ? 'Online' : 'متصل'}</span>
-                    </div>
+                <div className="pt-3 mt-auto border-t border-brand-egg/10 flex items-center justify-between text-[11px] text-brand-egg-mute">
                     <div className="flex items-center gap-1.5">
+                        <span className="w-[7px] h-[7px] rounded-full bg-brand-accent shadow-[0_0_8px_#8CC850]"></span>
+                        {lang === 'en' ? 'Online' : 'متصل'}
+                    </div>
+                    <div className="flex gap-1">
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                            title={theme === 'dark' ? (lang === 'en' ? 'Switch to Light Mode' : 'تفعيل الوضع المضيء') : (lang === 'en' ? 'Switch to Dark Mode' : 'تفعيل الوضع الداكن')}
-                            className="p-1.5 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent hover:bg-brand-accent/20 transition-all shrink-0"
+                            className="w-6 h-6 rounded-md glass-subtle flex items-center justify-center hover:bg-brand-egg/10 transition-all"
                         >
-                            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                            {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
                         </button>
                         <button
                             onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
-                            className="px-2.5 py-1 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent hover:bg-brand-accent/20 transition-all text-xs font-bold shrink-0"
+                            className="h-6 px-2 rounded-md glass-subtle flex items-center justify-center text-[10px] text-brand-egg-mute hover:bg-brand-egg/10 transition-all"
                         >
-                            {lang === 'en' ? 'عربي' : 'English'}
+                            {lang === 'en' ? 'عربي' : 'EN'}
                         </button>
                     </div>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Header */}
-                <header className="h-16 border-b border-brand-accent/5 flex items-center justify-between px-8 bg-brand-bg/50 backdrop-blur-md z-10">
-                    <h2 className="text-xl font-bold">
-                        {navItems.find(i => i.id === activeTab)?.label}
-                    </h2>
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-accent/5 border border-brand-accent/10">
-                            <div className="flex flex-col items-end">
-                                <span className="text-[10px] font-bold text-brand-accent/70 leading-none">{lang === 'en' ? 'AI AUTO-REPLY' : 'الرد التلقائي الذكي'}</span>
-                                <span className={`text-[9px] font-bold ${aiEnabled ? 'text-green-500' : 'text-red-500'}`}>{aiEnabled ? (lang === 'en' ? 'ACTIVE' : 'مفعل') : (lang === 'en' ? 'OFF' : 'معطل')}</span>
-                            </div>
+            <main className="flex-1 flex flex-col overflow-hidden relative min-w-0 gap-3">
+                {/* TopBar */}
+                <header className="flex items-center justify-between px-1">
+                    <div>
+                        <h2 className="text-xl font-bold tracking-tight">
+                            {navItems.find(i => i.id === activeTab)?.label}
+                        </h2>
+                        <p className="text-[10px] text-brand-egg-mute tracking-[0.12em] font-mono uppercase mt-0.5">
+                            {lang === 'en'
+                                ? new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase() + ' · ' + new Date().toLocaleDateString('en-US', { month: 'long' }).toUpperCase() + ' ' + new Date().getDate() + ', ' + new Date().getFullYear()
+                                : new Date().toLocaleDateString('ar-EG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-subtle border border-brand-border/30 text-[11px] font-bold text-brand-egg-mute hover:border-brand-accent/30 transition-all">
+                            <Brain size={13} className="text-brand-accent" />
+                            {lang === 'en' ? 'Train assistant' : 'تدريب المساعد'}
+                        </button>
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass-subtle border border-brand-border/30">
+                            <span className={`w-2 h-2 rounded-full ${aiEnabled ? 'bg-brand-accent shadow-[0_0_6px_#8CC850]' : 'bg-brand-muted'}`}></span>
+                            <span className="text-[11px] font-bold text-brand-egg-mute">{lang === 'en' ? 'AI Auto-Reply' : 'الرد التلقائي'}</span>
+                            <span className="text-[11px] font-bold text-brand-accent">·</span>
+                            <span className={`text-[11px] font-bold ${aiEnabled ? 'text-brand-accent' : 'text-brand-muted'}`}>{aiEnabled ? (lang === 'en' ? 'ON' : 'مفعل') : (lang === 'en' ? 'OFF' : 'معطل')}</span>
                             <button
                                 onClick={toggleAI}
-                                className={`w-10 h-5 rounded-full relative transition-all duration-300 ${aiEnabled ? 'bg-brand-accent shadow-[0_0_10px_rgba(var(--brand-accent-rgb),0.3)]' : 'bg-brand-muted/30'}`}
+                                className={`w-9 h-[18px] rounded-full relative transition-all duration-300 ${aiEnabled ? 'bg-brand-accent shadow-[0_0_8px_rgba(140,200,80,0.35)]' : 'bg-brand-muted/30'}`}
                             >
-                                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-300 ${lang === 'en' ? (aiEnabled ? 'right-1' : 'left-1') : (aiEnabled ? 'left-1' : 'right-1')}`}></div>
+                                <div className={`absolute top-[3px] w-3 h-3 rounded-full bg-white transition-all duration-300 ${lang === 'en' ? (aiEnabled ? 'right-[3px]' : 'left-[3px]') : (aiEnabled ? 'left-[3px]' : 'right-[3px]')}`}></div>
                             </button>
                         </div>
-
-                        <span className="text-xs text-brand-muted">{new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                     </div>
-
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                    {activeTab === 'dash' && <Dashboard inbox={inbox} orders={orders} onOpenChat={handleOpenChat} setActiveTab={setActiveTab} lang={lang} aiEnabled={aiEnabled} />}
-
+                {activeTab === 'chat' ? (
+                    <ChatInterface inbox={inbox} orders={orders} activePhone={activeChatPhone} onSelectChat={setActiveChatPhone} refreshInbox={fetchInbox} templates={templates} showToast={showToast} lang={lang} />
+                ) : (
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {activeTab === 'dash' && <Dashboard inbox={inbox} orders={orders} abandonedCarts={abandonedCarts} onOpenChat={handleOpenChat} setActiveTab={setActiveTab} lang={lang} aiEnabled={aiEnabled} />}
                     {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} />}
-                    {activeTab === 'chat' && <ChatInterface inbox={inbox} orders={orders} activePhone={activeChatPhone} onSelectChat={setActiveChatPhone} refreshInbox={fetchInbox} templates={templates} showToast={showToast} lang={lang} />}
                     {activeTab === 'campaigns' && <CampaignsManager templates={templates} showToast={showToast} lang={lang} />}
                     {activeTab === 'automations' && <AutomationsManager templates={templates} showToast={showToast} lang={lang} />}
                     {activeTab === 'quick-replies' && <QuickRepliesManager showToast={showToast} lang={lang} />}
                     {activeTab === 'settings' && <TemplatesManager templates={templates} fetchTemplates={fetchTemplates} showToast={showToast} lang={lang} />}
                     {activeTab === 'config' && <SetupManager showToast={showToast} lang={lang} onSave={(name) => setBusinessName(name)} />}
                     {activeTab === 'abandoned' && <AbandonedCartsManager carts={abandonedCarts} refresh={fetchAbandonedCarts} showToast={showToast} lang={lang} />}
-                    {activeTab === 'catalog' && <CatalogManager showToast={showToast} lang={lang} />}
+                    {activeTab === 'catalog' && <CatalogManager showToast={showToast} lang={lang} inbox={inbox} />}
                     {activeTab === 'logs' && <AnalyticsDashboard lang={lang} />}
                 </div>
+                )}
 
                 {/* Global Toast Notification */}
                 {toast && (
                     <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-10 fade-in duration-300">
-                        <div className={`px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 font-bold text-sm ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-brand-bg'}`}>
+                        <div className={`px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 font-bold text-sm backdrop-blur-xl ${toast.type === 'error' ? 'bg-red-500/90 text-white' : 'bg-brand-accent text-brand-bg glow-salad'}`}>
                             {toast.type === 'error' ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
                             {toast.message}
                         </div>
@@ -358,13 +384,13 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500">
-            <div className="glass p-8 rounded-3xl space-y-8">
+            <div className="glass p-8 rounded-2xl space-y-8">
                 <div className="flex justify-between items-center">
                     <div>
                         <h3 className="text-xl font-bold text-brand-accent">{isEn ? 'Meta Verified Templates Management' : 'إدارة قوالب Meta المعتمدة'}</h3>
                         <p className="text-sm text-brand-muted mt-1">{isEn ? 'Link approved Facebook template names to the CRM system.' : 'اربط أسماء القوالب المعتمدة في فيسبوك بنظام الـ CRM.'}</p>
                     </div>
-                    <button onClick={handleSave} disabled={saving} className="bg-green-500 text-brand-bg px-6 py-3 rounded-xl font-bold hover:bg-green-400 transition-all">
+                    <button onClick={handleSave} disabled={saving} className="bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:bg-brand-salad-deep transition-all">
                         {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save Changes' : 'حفظ التعديلات')}
                     </button>
                 </div>
@@ -430,84 +456,205 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
 
 const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [lastUpdated, setLastUpdated] = useState(Date.now());
     const isEn = lang === 'en';
 
-    const getStatusInfo = (localStatus) => {
-        switch (localStatus) {
-            case 'followed_up': return { label: isEn ? 'Followed Up' : 'تمت المتابعة', color: 'bg-brand-accent/20 text-brand-accent', icon: Clock };
-            case 'confirmed': return { label: isEn ? 'Confirmed' : 'تم التأكيد', color: 'bg-green-500/20 text-green-500', icon: CheckCircle2 };
-            case 'shipped': return { label: isEn ? 'Shipped' : 'تم الشحن', color: 'bg-blue-500/20 text-blue-500', icon: Truck };
-            case 'cancelled': return { label: isEn ? 'Cancelled' : 'ملغى', color: 'bg-red-500/20 text-red-500', icon: XCircle };
-            default: return { label: isEn ? 'New' : 'جديد', color: 'bg-brand-muted/20 text-brand-muted', icon: LayoutDashboard };
+    const handleRefresh = async () => { await refresh(); setLastUpdated(Date.now()); };
+
+    const getStatusInfo = (s) => {
+        switch (s) {
+            case 'confirmed':   return { label: isEn ? 'Confirmed'   : 'مؤكد',     color: 'bg-green-500/15 text-green-400 border-green-500/20',       dot: 'bg-green-400',    icon: CheckCircle2 };
+            case 'shipped':     return { label: isEn ? 'Shipped'     : 'مشحون',    color: 'bg-blue-500/15 text-blue-400 border-blue-500/20',           dot: 'bg-blue-400',     icon: Truck };
+            case 'pending':     return { label: isEn ? 'Pending'     : 'معلق',     color: 'bg-brand-gold/15 text-brand-gold border-brand-gold/20',     dot: 'bg-brand-gold',   icon: Clock };
+            case 'cancelled':   return { label: isEn ? 'Cancelled'   : 'ملغى',     color: 'bg-red-500/15 text-red-400 border-red-500/20',             dot: 'bg-red-400',      icon: XCircle };
+            case 'followed_up': return { label: isEn ? 'Followed Up' : 'تمت المتابعة', color: 'bg-brand-accent/15 text-brand-accent border-brand-accent/20', dot: 'bg-brand-accent', icon: CheckCheck };
+            default:            return { label: isEn ? 'New'         : 'جديد',     color: 'bg-brand-accent/8 text-brand-accent/70 border-brand-accent/15', dot: 'bg-brand-accent/50', icon: Plus };
         }
     };
 
+    const avatarColors = ['bg-teal-600','bg-blue-600','bg-purple-600','bg-pink-600','bg-orange-600','bg-emerald-600'];
+    const getAvatarColor = (n) => avatarColors[Math.abs([...(n||'')].reduce((a,c)=>a+c.charCodeAt(0),0)) % avatarColors.length];
+    const getInitials = (f,l) => ((f?.[0]||'')+(l?.[0]||'')).toUpperCase() || '??';
+
+    const today = new Date().toDateString();
+    const todayOrders  = orders.filter(o => new Date(o.created_at).toDateString() === today);
+    const todayRevenue = todayOrders.reduce((s,o) => s + parseFloat(o.total_price||0), 0);
+    const totalRevenue = orders.reduce((s,o) => s + parseFloat(o.total_price||0), 0);
+    const avgValue     = orders.length ? Math.round(totalRevenue / orders.length) : 0;
+    const pendingCount   = orders.filter(o => o.local_status === 'pending' || !o.local_status).length;
+    const confirmedCount = orders.filter(o => o.local_status === 'confirmed').length;
+    const shippedCount   = orders.filter(o => o.local_status === 'shipped').length;
+    const cancelledCount = orders.filter(o => o.local_status === 'cancelled').length;
+
+    const secAgo = Math.floor((Date.now() - lastUpdated) / 1000);
+    const lastUpdatedText = secAgo < 60 ? `${secAgo} ${isEn?'SECONDS AGO':'ثانية'}` : `${Math.floor(secAgo/60)} ${isEn?'MIN AGO':'د'}`;
+
+    const filtered = orders.filter(o => {
+        if (statusFilter === 'confirmed') return o.local_status === 'confirmed';
+        if (statusFilter === 'pending')   return o.local_status === 'pending' || !o.local_status;
+        if (statusFilter === 'shipped')   return o.local_status === 'shipped';
+        if (statusFilter === 'cancelled') return o.local_status === 'cancelled';
+        return true;
+    });
+
+    const getWAStatus = (o) => {
+        if (!o.last_whatsapp_action) return { text: 'queued', cls: 'text-brand-muted' };
+        if (o.last_whatsapp_action === 'seen') {
+            const t = o.last_whatsapp_time ? new Date(o.last_whatsapp_time).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+            return { text: `seen ${t}`, cls: 'text-brand-accent' };
+        }
+        if (o.last_whatsapp_action === 'delivered')   return { text: 'delivered',     cls: 'text-blue-400' };
+        if (o.last_whatsapp_action === 'sent')        return { text: 'awaiting reply', cls: 'text-brand-gold' };
+        if (o.last_whatsapp_action === 'failed')      return { text: 'declined',       cls: 'text-red-400' };
+        return { text: o.last_whatsapp_action, cls: 'text-brand-muted' };
+    };
+
+    const handleConfirm = async (e, o) => {
+        e.stopPropagation();
+        try {
+            const phone = o.shipping_address?.phone || o.customer?.phone || '';
+            await axios.patch(`${API_URL}/orders/status`, { phone, orderId: String(o.id), status: 'confirmed' });
+            await refresh();
+            showToast(isEn ? `Order ${o.name} confirmed` : `تم تأكيد الطلب ${o.name}`);
+        } catch { showToast(isEn ? 'Failed to confirm' : 'فشل التأكيد', 'error'); }
+    };
+
     return (
-        <div className={`relative h-full ${isEn ? 'text-left' : 'text-right'}`}>
-            <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted" size={18} />
-                        <input
-                            type="text"
-                            placeholder={isEn ? "Search orders..." : "بحث في الطلبات..."}
-                            className="w-full bg-brand-card/50 border border-brand-accent/10 rounded-2xl py-3 pr-12 pl-4 text-sm focus:outline-none focus:border-brand-accent/40 transition-all"
-                        />
-                    </div>
-                    <button
-                        onClick={refresh}
-                        disabled={loading}
-                        className="bg-brand-accent text-brand-bg px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-brand-gold transition-all disabled:opacity-50 shrink-0"
-                    >
-                        <RefreshCcw size={18} className={loading ? "animate-spin" : ""} />
-                        {loading ? (isEn ? "Updating..." : "جاري التحديث...") : (isEn ? "Refresh Orders" : "تحديث الطلبات")}
+        <div className={`space-y-4 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Subtitle + action buttons */}
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">
+                    {isEn ? 'LIVE SYNC · LAST UPDATED' : 'مزامنة مباشرة ·'} {lastUpdatedText}
+                </p>
+                <div className="flex gap-2">
+                    <button onClick={handleRefresh} disabled={loading}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl glass border border-brand-border/30 text-xs font-bold text-brand-egg hover:border-brand-accent/30 transition-all disabled:opacity-50">
+                        <RefreshCcw size={13} className={loading ? 'animate-spin text-brand-accent' : ''} />
+                        {isEn ? 'Sync now' : 'مزامنة'}
+                    </button>
+                    <button className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-all" style={{background:'#FF6400'}}>
+                        <Send size={13} />
+                        {isEn ? 'Send bulk update' : 'إرسال جماعي'}
                     </button>
                 </div>
+            </div>
 
-                <div className="glass rounded-3xl overflow-hidden animate-in fade-in">
-                    <table className={`w-full ${isEn ? 'text-left' : 'text-right'}`}>
-                        <thead>
-                            <tr className="bg-brand-sidebar/50 text-brand-muted text-xs uppercase tracking-wider">
-                                <th className="px-6 py-4 font-bold">{isEn ? "Order ID" : "رقم الطلب"}</th>
-                                <th className="px-6 py-4 font-bold">{isEn ? "Customer" : "العميل"}</th>
-                                <th className="px-6 py-4 font-bold">{isEn ? "Product" : "المنتج"}</th>
-                                <th className="px-6 py-4 font-bold">{isEn ? "Status (CRM)" : "الحالة (CRM)"}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-brand-accent/5">
-                            {orders.map(o => {
-                                const statusObj = getStatusInfo(o.local_status);
-                                const StatusIcon = statusObj.icon;
-                                return (
-                                    <tr key={o.id} onClick={() => setSelectedOrder(o)} className="hover:bg-brand-accent/10 transition-all cursor-pointer group">
-                                        <td className="px-6 py-4 font-mono text-sm">{o.name}</td>
-                                        <td className="px-6 py-4 font-bold text-sm">{o.customer?.first_name} {o.customer?.last_name}</td>
-                                        <td className="px-6 py-4 text-brand-muted text-sm font-bold truncate max-w-[200px]">{o.line_items?.[0]?.title}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusObj.color}`}>
-                                                <StatusIcon size={14} />
-                                                {statusObj.label}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
+            {/* Stat cards */}
+            <div className="grid grid-cols-4 gap-3">
+                {[
+                    { label: isEn?'OPEN ORDERS':'الطلبات المفتوحة',         value: orders.length,                            sub: `+ ${todayOrders.length} ${isEn?'today':'اليوم'}`,         subCls:'text-brand-accent' },
+                    { label: isEn?'AWAITING CONFIRMATION':'بانتظار التأكيد', value: pendingCount,                             sub: isEn?'WhatsApp queued':'في قائمة WhatsApp',                 subCls:'text-brand-gold' },
+                    { label: isEn?"TODAY'S REVENUE":'إيرادات اليوم',         value: null, rev: todayRevenue,                  sub: '+18% '+( isEn?'vs y/day':'مقارنة بالأمس'),                  subCls:'text-brand-accent' },
+                    { label: isEn?'AVG ORDER VALUE':'متوسط قيمة الطلب',      value: null, rev: avgValue,                      sub: '↑ EGP 22',                                                 subCls:'text-brand-accent' },
+                ].map((c,i) => (
+                    <div key={i} className="glass rounded-2xl p-5">
+                        <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-2">{c.label}</p>
+                        {c.rev !== undefined
+                            ? <h3 className="text-3xl font-bold text-brand-egg"><span className="text-sm text-brand-muted font-mono">EGP </span>{c.rev.toLocaleString()}</h3>
+                            : <h3 className="text-3xl font-bold text-brand-egg">{c.value}</h3>
+                        }
+                        <p className={`text-[11px] font-mono mt-1 ${c.subCls}`}>{c.sub}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filter chips + sort */}
+            <div className="flex items-center justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                    {[
+                        { id:'all',       label:isEn?'All':'الكل',         count:orders.length,  dot:null },
+                        { id:'confirmed', label:isEn?'Confirmed':'مؤكد',   count:confirmedCount, dot:'bg-green-400' },
+                        { id:'pending',   label:isEn?'Pending':'معلق',     count:pendingCount,   dot:'bg-brand-gold' },
+                        { id:'shipped',   label:isEn?'Shipped':'مشحون',    count:shippedCount,   dot:'bg-blue-400' },
+                        { id:'cancelled', label:isEn?'Cancelled':'ملغى',   count:cancelledCount, dot:'bg-red-400' },
+                    ].map(f => (
+                        <button key={f.id} onClick={() => setStatusFilter(f.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${statusFilter===f.id ? 'bg-brand-accent text-brand-bg' : 'glass border border-brand-border/30 text-brand-muted hover:border-brand-accent/30'}`}>
+                            {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`}></span>}
+                            {f.label} · {f.count}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-brand-muted">
+                    <span>{isEn?'Sort by':'ترتيب'}</span>
+                    <span className="glass border border-brand-border/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                        {isEn?'Newest':'الأحدث'} <ChevronDown size={12} />
+                    </span>
                 </div>
             </div>
 
-            {/* CRM Drawer Overlay */}
-            {selectedOrder && (
-                <div
-                    className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 animate-in fade-in duration-300"
-                    onClick={() => setSelectedOrder(null)}
-                ></div>
-            )}
-            <div className={`fixed ${isEn ? 'right-0' : 'left-0'} top-0 bottom-0 w-[420px] bg-brand-sidebar border-x border-brand-accent/10 transform transition-transform duration-300 z-50 flex flex-col shadow-2xl ${selectedOrder ? 'translate-x-0' : (isEn ? 'translate-x-full' : '-translate-x-full')}`}>
-                {selectedOrder && <CRMDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} templates={templates} onOpenChat={onOpenChat} refresh={refresh} getStatusInfo={getStatusInfo} showToast={showToast} lang={lang} />}
+            {/* Table */}
+            <div className="glass rounded-2xl overflow-hidden">
+                <table className={`w-full ${isEn?'text-left':'text-right'}`}>
+                    <thead>
+                        <tr className="border-b border-brand-accent/10">
+                            {[isEn?'ORDER':'الطلب', isEn?'CUSTOMER':'العميل', isEn?'ITEMS':'المنتجات', isEn?'TOTAL':'الإجمالي', isEn?'STATUS':'الحالة', isEn?'WHATSAPP':'واتساب', isEn?'DATE':'التاريخ', ''].map((h,i) => (
+                                <th key={i} className="px-5 py-3.5 text-[10px] font-bold text-brand-muted uppercase tracking-wider">{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-brand-accent/5">
+                        {filtered.map(o => {
+                            const st = getStatusInfo(o.local_status);
+                            const fn = o.customer?.first_name||'', ln = o.customer?.last_name||'';
+                            const name = `${fn} ${ln}`.trim() || 'Unknown';
+                            const itemCount = o.line_items?.reduce((s,i)=>s+(i.quantity||1),0) || 0;
+                            const wa = getWAStatus(o);
+                            const date = o.created_at ? new Date(o.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+                            return (
+                                <tr key={o.id} onClick={() => setSelectedOrder(o)} className="hover:bg-brand-accent/5 transition-all cursor-pointer group">
+                                    <td className="px-5 py-4">
+                                        <span className="text-sm font-bold text-brand-accent font-mono">{o.name}</span>
+                                    </td>
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 ${getAvatarColor(name)}`}>{getInitials(fn,ln)}</div>
+                                            <span className="font-bold text-sm">{name}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-5 py-4 text-sm text-brand-muted">{itemCount} {isEn?(itemCount===1?'item':'items'):'منتج'}</td>
+                                    <td className="px-5 py-4">
+                                        <span className="text-[11px] text-brand-muted font-mono">EGP </span>
+                                        <span className="font-bold text-sm">{parseFloat(o.total_price||0).toLocaleString()}</span>
+                                    </td>
+                                    <td className="px-5 py-4">
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${st.color}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
+                                            {st.label}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-4 text-xs font-mono">
+                                        <span className={wa.cls}>{wa.text}</span>
+                                    </td>
+                                    <td className="px-5 py-4 text-xs text-brand-muted font-mono">{date}</td>
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={e => { e.stopPropagation(); const p=o.shipping_address?.phone||o.customer?.phone; if(p) onOpenChat(p); }}
+                                                className="p-1.5 glass rounded-lg border border-brand-border/30 hover:border-brand-accent/30 transition-all">
+                                                <MessageCircle size={13} className="text-brand-muted" />
+                                            </button>
+                                            <button onClick={e => handleConfirm(e,o)}
+                                                className="flex items-center gap-1 px-3 py-1.5 bg-brand-accent/15 border border-brand-accent/25 text-brand-accent rounded-lg text-[11px] font-bold hover:bg-brand-accent hover:text-brand-bg transition-all whitespace-nowrap">
+                                                <Check size={11} /> {isEn?'Confirm':'تأكيد'}
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {filtered.length === 0 && (
+                            <tr><td colSpan={8} className="px-5 py-12 text-center text-brand-muted text-sm">{isEn?'No orders found':'لا توجد طلبات'}</td></tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
 
+            {/* CRM Drawer */}
+            {selectedOrder && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 animate-in fade-in duration-300" onClick={() => setSelectedOrder(null)} />}
+            <div className={`fixed ${isEn?'right-0':'left-0'} top-0 bottom-0 w-[420px] bg-brand-sidebar border-x border-brand-accent/10 transform transition-transform duration-300 z-50 flex flex-col shadow-2xl ${selectedOrder ? 'translate-x-0' : (isEn?'translate-x-full':'-translate-x-full')}`}>
+                {selectedOrder && <CRMDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} templates={templates} onOpenChat={onOpenChat} refresh={refresh} getStatusInfo={getStatusInfo} showToast={showToast} lang={lang} />}
+            </div>
         </div>
     );
 };
@@ -573,7 +720,7 @@ const CRMDrawer = ({ order, onClose, templates, onOpenChat, refresh, getStatusIn
         setSending(true);
         try {
             if (templateKey === 'shipping') {
-                const messageBody = (tpl.preview || (isEn ? `Hello [Name],\nYour order is on its way! 🚚` : `مرحباً [Name]،\nطلبك الآن في طريقه إليك! 🚚`)).replace('[Name]', customerName);
+                const messageBody = (tpl.preview || (isEn ? `Hello [Name],\nYour order is on its way! ًںڑڑ` : `مرحباً [Name]،\nطلبك الآن في طريقه إليك! 🚚`)).replace('[Name]', customerName);
                 await axios.post(`${API_URL}/whatsapp/send`, {
                     phone: phone,
                     textMsg: messageBody,
@@ -624,7 +771,7 @@ const CRMDrawer = ({ order, onClose, templates, onOpenChat, refresh, getStatusIn
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                 {/* Status Badge + Direct Change */}
-                <div className="flex flex-col items-center justify-center p-5 bg-brand-bg/30 rounded-3xl border border-brand-accent/5 space-y-4">
+                <div className="flex flex-col items-center justify-center p-5 bg-brand-bg/30 rounded-2xl border border-brand-accent/5 space-y-4">
                     <div className="flex flex-col items-center">
                         <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-2 ${statusObj.color.split(' ')[0]}`}>
                             <StatusIcon size={26} className={statusObj.color.split(' ')[1]} />
@@ -884,11 +1031,58 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
         } catch (e) { showToast(isEn ? 'Failed to delete note' : 'فشل حذف الملاحظة', 'error'); }
     };
 
+    const [chatSearch, setChatSearch] = useState('');
+    const [chatFilter, setChatFilter] = useState('all');
+
     const filteredInbox = displayInbox.filter(chat => {
         if (filterLabel && !(chat.labels || []).includes(filterLabel)) return false;
         if (filterAssignee && !(chat.assigned_to || '').toLowerCase().includes(filterAssignee.toLowerCase())) return false;
+        if (chatSearch) {
+            const q = chatSearch.toLowerCase();
+            if (!chat.name?.toLowerCase().includes(q) && !chat.phone?.includes(q)) return false;
+        }
+        if (chatFilter === 'live') {
+            const lastMsg = chat.messages?.[chat.messages.length - 1];
+            const mins = lastMsg?.time ? (Date.now() - new Date(lastMsg.time).getTime()) / 60000 : Infinity;
+            if (mins > 30) return false;
+        }
+        if (chatFilter === 'cart') {
+            if (!(chat.labels || []).includes('cart_abandoned')) return false;
+        }
+        if (chatFilter === 'mine') {
+            if (!chat.assigned_to) return false;
+        }
         return true;
     });
+
+    const liveCount = displayInbox.filter(c => { const lm = c.messages?.[c.messages.length - 1]; return lm?.time && (Date.now() - new Date(lm.time).getTime()) / 60000 < 30; }).length;
+    const cartCount = displayInbox.filter(c => (c.labels || []).includes('cart_abandoned')).length;
+    const mineCount = displayInbox.filter(c => !!c.assigned_to).length;
+
+    const getInitials = (name) => {
+        if (!name) return '??';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return name.slice(0, 2).toUpperCase();
+    };
+
+    const getTimeAgo = (timeStr) => {
+        if (!timeStr) return '';
+        const diff = Date.now() - new Date(timeStr.replace(' ', 'T')).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'now';
+        if (mins < 60) return `${mins}m`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h`;
+        return `${Math.floor(hrs / 24)}d`;
+    };
+
+    const avatarColors = ['bg-brand-accent', 'bg-brand-gold', 'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-teal-500'];
+    const getAvatarColor = (name) => avatarColors[Math.abs([...name || ''].reduce((a, c) => a + c.charCodeAt(0), 0)) % avatarColors.length];
+
+    const matchedOrder = activeChat ? orders.find(o => o.shipping_address?.phone === activeChat.phone || o.customer?.phone === activeChat.phone) : null;
+    const customerOrders = activeChat ? orders.filter(o => o.shipping_address?.phone === activeChat.phone || o.customer?.phone === activeChat.phone) : [];
+    const customerLTV = customerOrders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
 
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
@@ -954,68 +1148,70 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
     };
 
 
+    const maskedPhone = activeChat ? activeChat.phone.replace(/(\d{4})\d{3,}(\d{2})/, '$1 ··· $2') : '';
+
     return (
-        <div className={`flex h-[calc(100vh-10rem)] bg-brand-card/30 border border-brand-accent/10 rounded-3xl overflow-hidden glass animate-in fade-in duration-500 shadow-2xl ${isEn ? 'text-left' : 'text-right'}`}>
-            {/* القائمة الجانبية للمحادثات */}
-            <div className={`w-80 border-${isEn ? 'r' : 'l'} border-brand-accent/10 flex flex-col bg-brand-sidebar/80`}>
-                <div className="p-4 border-b border-brand-accent/10 space-y-2">
-                    <div className="flex items-center justify-between">
-                        <span className="font-bold text-base">{isEn ? 'Recent Chats' : 'المحادثات'}</span>
-                        <MessageCircle size={16} className="text-brand-accent shrink-0" />
+        <div className={`flex flex-1 min-h-0 gap-3 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Chat List */}
+            <div className={`w-80 flex flex-col glass rounded-2xl overflow-hidden shrink-0`}>
+                <div className="p-4 border-b border-brand-accent/10 space-y-3">
+                    <div>
+                        <h3 className="font-bold text-lg">{isEn ? 'Inbox' : 'المحادثات'}</h3>
+                        <p className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">{isEn ? 'ALL CONVERSATIONS' : 'كل المحادثات'} · {displayInbox.length} {isEn ? 'OPEN' : 'مفتوحة'}</p>
                     </div>
-                    <div className="flex gap-1.5">
-                        <div className="relative flex-1">
-                            <Filter size={11} className="absolute top-1/2 -translate-y-1/2 text-brand-muted pointer-events-none" style={{ [isEn ? 'left' : 'right']: '8px' }} />
-                            <select value={filterLabel} onChange={e => setFilterLabel(e.target.value)}
-                                className={`w-full bg-brand-bg/60 border border-brand-accent/10 rounded-lg text-[11px] py-1.5 focus:outline-none focus:border-brand-accent/30 appearance-none ${isEn ? 'pl-6 pr-2' : 'pr-6 pl-2'}`}>
-                                <option value="">{isEn ? 'All labels' : 'كل التصنيفات'}</option>
-                                {CHAT_LABELS.map(l => <option key={l.id} value={l.id}>{isEn ? l.en : l.ar}</option>)}
-                            </select>
-                        </div>
-                        <input value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
-                            placeholder={isEn ? 'Agent...' : 'موظف...'}
-                            className="w-20 bg-brand-bg/60 border border-brand-accent/10 rounded-lg text-[11px] px-2 py-1.5 focus:outline-none focus:border-brand-accent/30" />
+                    <div className="flex flex-wrap gap-1.5">
+                        {[
+                            { id: 'all', label: isEn ? 'All' : 'الكل', count: displayInbox.length },
+                            { id: 'live', label: isEn ? 'Live' : 'مباشر', count: liveCount, dot: 'bg-brand-accent' },
+                            { id: 'cart', label: isEn ? 'Cart' : 'سلة', count: cartCount, dot: 'bg-brand-gold' },
+                            { id: 'mine', label: isEn ? 'Mine' : 'لي', count: mineCount },
+                        ].map(f => (
+                            <button key={f.id} onClick={() => setChatFilter(f.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${chatFilter === f.id ? 'bg-brand-accent text-brand-bg' : 'bg-brand-bg/60 text-brand-muted hover:bg-brand-accent/10 border border-brand-accent/10'}`}>
+                                {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`}></span>}
+                                {f.label} · {f.count}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="relative">
+                        <Search size={14} className={`absolute top-1/2 -translate-y-1/2 text-brand-muted ${isEn ? 'left-3' : 'right-3'}`} />
+                        <input value={chatSearch} onChange={e => setChatSearch(e.target.value)}
+                            placeholder={isEn ? 'Search conversations' : 'بحث في المحادثات'}
+                            className={`w-full bg-brand-bg/60 border border-brand-accent/10 rounded-xl text-xs py-2.5 focus:outline-none focus:border-brand-accent/30 ${isEn ? 'pl-9 pr-3' : 'pr-9 pl-3'}`}
+                        />
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {filteredInbox.map(chat => {
                         const lastMsg = chat.messages?.[chat.messages.length - 1];
-                        const chatLabels = (chat.labels || []).map(id => CHAT_LABELS.find(l => l.id === id)).filter(Boolean);
+                        const unread = chat.messages?.filter(m => m.from !== 'agent' && !m.seen).length || 0;
+                        const isActive = activePhone === chat.phone;
+                        const color = getAvatarColor(chat.name);
+                        const isCartChat = (chat.labels || []).includes('cart_abandoned');
                         return (
                             <div
                                 key={chat.phone}
                                 onClick={() => onSelectChat(chat.phone)}
-                                className={`p-4 border-b border-brand-accent/5 cursor-pointer transition-all hover:bg-brand-accent/5 ${activePhone === chat.phone ? `bg-brand-accent/10 border-${isEn ? 'l' : 'r'}-4 border-${isEn ? 'l' : 'r'}-brand-accent` : `border-${isEn ? 'l' : 'r'}-4 border-${isEn ? 'l' : 'r'}-transparent`}`}
+                                className={`px-3 py-3.5 cursor-pointer transition-all hover:bg-brand-accent/5 flex items-start gap-3 relative ${isActive ? 'bg-brand-accent/10' : ''}`}
                             >
-                                <div className="flex justify-between items-center mb-1">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                        {chatLabels.slice(0, 3).map(l => (
-                                            <span key={l.id} className={`w-2 h-2 rounded-full shrink-0 ${l.dot}`} title={isEn ? l.en : l.ar} />
-                                        ))}
-                                        <span className="font-bold text-sm truncate text-brand-text">{chat.name}</span>
+                                {isActive && <span className={`absolute ${isEn ? 'left-0' : 'right-0'} top-2 bottom-2 w-0.5 rounded-full bg-brand-accent`}></span>}
+                                <div className="relative shrink-0">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white ${color}`}>
+                                        {getInitials(chat.name)}
                                     </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        {sentiments[chat.phone] === 'positive' && <span title={isEn ? 'Happy' : 'سعيد'} className="text-xs">😊</span>}
-                                        {sentiments[chat.phone] === 'negative' && <span title={isEn ? 'Upset' : 'غير راضٍ'} className="text-xs">😤</span>}
-                                        <span className="text-[9px] text-brand-muted">{chat.lastUpdated?.split(' ')[1]}</span>
-                                    </div>
-                                </div>
-                                {chat.assigned_to && (
-                                    <p className="text-[10px] text-brand-accent/70 mb-0.5 flex items-center gap-1">
-                                        <UserCheck size={10} /> {chat.assigned_to}
-                                    </p>
-                                )}
-                                <div className="flex items-center gap-1.5">
-                                    {lastMsg?.from === 'agent' && (
-                                        lastMsg.status === 'seen' || lastMsg.seen === true ? (
-                                            <CheckCheck size={14} className="text-sky-400 drop-shadow-sm shrink-0" title={isEn ? 'Seen' : 'تم العرض'} />
-                                        ) : lastMsg.status === 'delivered' || lastMsg.delivered === true ? (
-                                            <CheckCheck size={14} className="opacity-60 shrink-0" title={isEn ? 'Delivered' : 'تم التسليم'} />
-                                        ) : (
-                                            <Check size={13} className="opacity-50 shrink-0" title={isEn ? 'Sent' : 'تم الإرسال'} />
-                                        )
+                                    {(lastMsg?.time && (Date.now() - new Date(lastMsg.time.replace(' ', 'T')).getTime()) / 60000 < 30) && (
+                                        <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-brand-sidebar ${isCartChat ? 'bg-brand-gold' : 'bg-brand-accent'}`}></span>
                                     )}
-                                    <p className="text-xs text-brand-muted truncate flex-1">{lastMsg?.text || (isEn ? 'Start chat...' : 'بدء محادثة...')}</p>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <span className="font-bold text-sm truncate text-brand-text">{chat.name}</span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <span className="text-[10px] text-brand-muted">{getTimeAgo(chat.lastUpdated)}</span>
+                                            {unread > 0 && <span className="w-5 h-5 rounded-full bg-brand-accent text-brand-bg text-[10px] font-bold flex items-center justify-center">{unread}</span>}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-brand-muted truncate">{lastMsg?.text || (isEn ? 'Start chat...' : 'بدء محادثة...')}</p>
                                 </div>
                             </div>
                         )
@@ -1024,115 +1220,125 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                 </div>
             </div>
 
-            {/* مساحة المحادثة النشطة */}
-            <div className="flex-1 flex flex-col relative bg-brand-bg/40">
-                {/* Background Pattern */}
-                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#d5aa65 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+            {/* Active Chat */}
+            <div className="flex-1 flex flex-col relative glass rounded-2xl overflow-hidden min-w-0">
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#8CC850 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
                 {activeChat ? (
                     <>
-                        <div className="p-4 border-b border-brand-accent/10 bg-brand-card/60 flex justify-between items-center backdrop-blur-md z-10">
+                        {/* Chat Header */}
+                        <div className="px-5 py-3 border-b border-brand-accent/10 bg-brand-card/60 flex justify-between items-center backdrop-blur-md z-10">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-brand-accent/20 rounded-full flex items-center justify-center text-brand-accent border border-brand-accent/30 shadow-[0_0_15px_rgba(213,170,101,0.1)] shrink-0">
-                                    <User size={20} />
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${getAvatarColor(activeChat.name)}`}>
+                                    {getInitials(activeChat.name)}
                                 </div>
                                 <div>
                                     <h4 className="font-bold text-brand-text">{activeChat.name}</h4>
-                                    <p className="text-[10px] text-brand-muted dir-ltr text-left flex items-center gap-1">
-                                        <Phone size={10} /> {activeChat.phone}
+                                    <p className="text-[10px] text-brand-muted dir-ltr flex items-center gap-1.5 font-mono">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-brand-accent"></span>
+                                        <span className="text-brand-accent">{isEn ? 'online' : 'متصل'}</span>
+                                        <span>·</span>
+                                        <span>{maskedPhone}</span>
+                                        <span>···</span>
                                     </p>
                                 </div>
                             </div>
                             <div className="flex gap-2 items-center">
-                                {activeChat.assigned_to && (
-                                    <span className="text-[11px] bg-brand-accent/10 text-brand-accent px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
-                                        <UserCheck size={12} /> {activeChat.assigned_to}
-                                    </span>
-                                )}
-                                <button
-                                    onClick={() => fetchSummary(activeChat)}
-                                    disabled={loadingSummary}
-                                    title={isEn ? 'AI Summary' : 'ملخص ذكي'}
-                                    className="p-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-all disabled:opacity-50">
-                                    {loadingSummary ? <RefreshCcw size={15} className="animate-spin" /> : <FileText size={15} />}
+                                <button onClick={() => fetchSuggestions(activeChat)} disabled={loadingSuggestions}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-green-soft border border-brand-border/50 text-brand-egg text-xs font-bold hover:bg-brand-green-mid transition-all disabled:opacity-50">
+                                    <Package size={14} /> {isEn ? 'Send Product' : 'إرسال منتج'}
                                 </button>
-                                <button
-                                    onClick={() => fetchSuggestions(activeChat)}
-                                    disabled={loadingSuggestions}
-                                    title={isEn ? 'AI Reply Suggestions' : 'اقتراحات رد ذكية'}
-                                    className="p-2 rounded-xl bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20 transition-all disabled:opacity-50">
-                                    {loadingSuggestions ? <RefreshCcw size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                                </button>
-                                <button
-                                    onClick={() => setShowTeamPanel(p => !p)}
-                                    title={isEn ? 'Team Info' : 'بيانات الفريق'}
-                                    className={`p-2 rounded-xl transition-all ${showTeamPanel ? 'bg-brand-accent text-brand-bg' : 'bg-brand-accent/10 text-brand-accent hover:bg-brand-accent/20'}`}>
-                                    <Users size={16} />
+                                <button onClick={() => setShowTeamPanel(p => !p)}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${showTeamPanel ? 'bg-brand-accent text-brand-bg' : 'bg-brand-green-soft border border-brand-border/50 text-brand-egg hover:bg-brand-green-mid'}`}>
+                                    <Star size={14} /> {isEn ? 'Tag' : 'تصنيف'}
                                 </button>
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar z-10">
+                        {/* Messages */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar z-10">
+                            {/* Date separator */}
+                            {activeChat.messages?.length > 0 && (
+                                <div className="flex items-center justify-center py-2">
+                                    <span className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">
+                                        {isEn ? 'Today' : 'اليوم'} · {new Date().toLocaleDateString(isEn ? 'en-US' : 'ar-EG', { month: 'short', day: 'numeric' })}
+                                    </span>
+                                </div>
+                            )}
                             {activeChat.messages?.map((msg, idx) => {
                                 const isAgent = msg.from === 'agent';
                                 return (
-                                    <div key={idx} className={`flex ${isAgent ? (isEn ? 'justify-end' : 'justify-end') : (isEn ? 'justify-start' : 'justify-start')}`}>
-                                        <div className={`max-w-[70%] p-4 rounded-[1.2rem] shadow-sm relative ${isAgent
-                                                ? `bg-brand-accent/90 text-brand-bg rounded-t${isEn ? 'r' : 'l'}-sm`
-                                                : `bg-brand-card/90 border border-brand-accent/20 rounded-t${isEn ? 'l' : 'r'}-sm backdrop-blur-md`
+                                    <div key={idx} className={`flex ${isAgent ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[65%] px-4 py-3 rounded-2xl relative ${isAgent
+                                                ? 'bg-brand-bg text-brand-egg border border-brand-border/30'
+                                                : 'glass border border-brand-accent/10'
                                             }`}>
                                             {msg.image && (
-                                                <div className="mb-3">
+                                                <div className="mb-2">
                                                     {msg.image.toLowerCase().match(/\.(pdf|doc|docx|xls|xlsx|txt|zip|bin)$/) || msg.text?.includes('[مستند') ? (
-                                                        <div 
-                                                            className="flex items-center gap-3 p-3 bg-white/10 rounded-xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all"
-                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')}
-                                                        >
-                                                            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400">
-                                                                <FileText size={20} />
-                                                            </div>
+                                                        <div className="flex items-center gap-3 p-3 bg-white/10 rounded-xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all"
+                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')}>
+                                                            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400"><FileText size={20} /></div>
                                                             <div className="flex flex-col min-w-0">
-                                                                <span className="text-xs font-bold truncate text-white">{isEn ? 'Document' : 'مستند'}</span>
+                                                                <span className="text-xs font-bold truncate">{isEn ? 'Document' : 'مستند'}</span>
                                                                 <span className="text-[10px] opacity-60">PDF / Doc</span>
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <img
-                                                            src={`${API_URL.replace('/api', '')}${msg.image}`}
-                                                            alt={isEn ? "Attached Media" : "وسائط مرفقة"}
-                                                            className="max-w-[250px] w-full rounded-xl object-cover border border-brand-accent/20 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
-                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')}
-                                                        />
+                                                        <img src={`${API_URL.replace('/api', '')}${msg.image}`} alt=""
+                                                            className="max-w-[250px] w-full rounded-xl object-cover border border-brand-accent/20 cursor-pointer hover:opacity-90 transition-opacity"
+                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')} />
                                                     )}
                                                 </div>
                                             )}
-
-                                            <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isEn ? 'text-left' : 'text-right'}`}>{msg.text}</p>
-                                            <div className={`text-[9px] mt-2 flex items-center gap-1 font-bold ${isAgent ? 'text-brand-bg/70 justify-end' : 'text-brand-accent/70 justify-start'} dir-ltr`}>
+                                            <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                            <div className={`text-[9px] mt-1.5 flex items-center gap-1 ${isAgent ? 'text-brand-egg-mute justify-end' : 'text-brand-egg-mute justify-start'} dir-ltr`}>
                                                 <span>{msg.time?.split(' ')[1]}</span>
                                                 {isAgent && (
-                                                    msg.status === 'seen' || msg.seen === true ? (
-                                                        <span title={isEn ? 'Seen' : 'تم العرض'}>
-                                                            <CheckCheck size={14} className="text-sky-400 drop-shadow-sm inline-block" />
-                                                        </span>
-                                                    ) : msg.status === 'delivered' || msg.delivered === true ? (
-                                                        <span title={isEn ? 'Delivered' : 'تم التسليم'}>
-                                                            <CheckCheck size={14} className="opacity-60 inline-block" />
-                                                        </span>
-                                                    ) : (
-                                                        <span title={isEn ? 'Sent' : 'تم الإرسال'}>
-                                                            <Check size={13} className="opacity-50 inline-block" />
-                                                        </span>
-                                                    )
+                                                    msg.status === 'seen' || msg.seen === true ? <CheckCheck size={13} className="text-sky-400 inline-block" />
+                                                    : msg.status === 'delivered' || msg.delivered === true ? <CheckCheck size={13} className="opacity-60 inline-block" />
+                                                    : <Check size={12} className="opacity-50 inline-block" />
                                                 )}
                                             </div>
                                         </div>
                                     </div>
                                 )
                             })}
+
+                            {/* Smart Reply card */}
+                            {aiSuggestions.length > 0 && (
+                                <div className="border border-brand-accent/25 rounded-2xl p-4 space-y-3 animate-in slide-in-from-bottom-2" style={{background:'color-mix(in srgb, var(--color-brand-accent) 6%, var(--color-brand-card))'}}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-[10px] font-mono text-brand-accent tracking-wider uppercase font-bold">
+                                            <Sparkles size={11} className="text-brand-accent" />
+                                            {isEn ? 'GEMINI · SMART REPLY' : 'جيميني · رد ذكي'}
+                                        </div>
+                                        <span className="text-[10px] font-mono text-brand-muted">1.4s · 92% {isEn ? 'confidence' : 'دقة'}</span>
+                                    </div>
+                                    <p className="text-sm text-brand-text leading-relaxed font-medium">{aiSuggestions[0]}</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => { setMsgText(aiSuggestions[0]); handleSend(); setAiSuggestions([]); }}
+                                            className="px-4 py-2 bg-brand-accent text-brand-bg rounded-xl text-xs font-bold hover:bg-brand-salad-deep transition-all">{isEn ? 'Send' : 'إرسال'}</button>
+                                        <button onClick={() => { setMsgText(aiSuggestions[0]); setAiSuggestions([]); }}
+                                            className="px-4 py-2 glass-subtle rounded-xl text-xs font-bold text-brand-egg hover:bg-brand-egg/10 transition-all border border-brand-accent/15">{isEn ? 'Edit' : 'تعديل'}</button>
+                                        <button onClick={() => fetchSuggestions(activeChat)}
+                                            className="px-4 py-2 glass-subtle rounded-xl text-xs font-bold text-brand-egg hover:bg-brand-egg/10 transition-all border border-brand-accent/15">{isEn ? 'Regenerate' : 'إعادة'}</button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* AI Summary */}
+                            {aiSummary && (
+                                <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl px-4 py-3 flex items-start gap-2">
+                                    <Sparkles size={14} className="text-purple-400 shrink-0 mt-0.5" />
+                                    <p className="text-xs text-purple-300 leading-relaxed flex-1">{aiSummary}</p>
+                                    <button onClick={() => setAiSummary('')} className="text-purple-400/50 hover:text-purple-400 transition-colors shrink-0"><X size={13} /></button>
+                                </div>
+                            )}
+
                             {isTyping && (
-                                <div className={`flex mb-4 justify-start`}>
-                                    <div className="max-w-[80%] rounded-2xl px-4 py-2 bg-brand-accent/5 border border-brand-accent/10">
+                                <div className="flex justify-start">
+                                    <div className="rounded-2xl px-4 py-2 bg-brand-accent/5 border border-brand-accent/10">
                                         <div className="flex gap-1.5 items-center">
                                             <div className="w-1.5 h-1.5 bg-brand-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                                             <div className="w-1.5 h-1.5 bg-brand-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -1144,52 +1350,28 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                             <div ref={messagesEndRef} />
                         </div>
 
+                        {/* File preview */}
                         {selectedImage && (
-                            <div className="px-6 py-3 bg-brand-accent/5 border-t border-brand-accent/10 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                            <div className="px-6 py-3 bg-brand-accent/5 border-t border-brand-accent/10 flex items-center justify-between animate-in slide-in-from-bottom-2 z-10">
                                 <div className="flex items-center gap-3">
                                     {selectedImage.type === 'image' ? (
-                                        <img src={selectedImage.base64} className="w-12 h-12 rounded-lg object-cover border border-brand-accent/20" alt="preview" />
+                                        <img src={selectedImage.base64} className="w-12 h-12 rounded-lg object-cover border border-brand-accent/20" alt="" />
                                     ) : (
-                                        <div className="w-12 h-12 rounded-lg bg-brand-accent/20 flex items-center justify-center text-brand-accent">
-                                            <Paperclip size={20} />
-                                        </div>
+                                        <div className="w-12 h-12 rounded-lg bg-brand-accent/20 flex items-center justify-center text-brand-accent"><Paperclip size={20} /></div>
                                     )}
                                     <div className="flex flex-col">
                                         <span className="text-xs font-bold truncate max-w-[200px]">{selectedImage.name}</span>
                                         <span className="text-[10px] text-brand-muted uppercase">{selectedImage.type}</span>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedImage(null)} className="p-1.5 hover:bg-brand-accent/10 rounded-full text-brand-muted hover:text-brand-accent transition-all">
-                                    <X size={16} />
-                                </button>
+                                <button onClick={() => setSelectedImage(null)} className="p-1.5 hover:bg-brand-accent/10 rounded-full text-brand-muted hover:text-brand-accent transition-all"><X size={16} /></button>
                             </div>
                         )}
 
-                        <div className="p-4 border-t border-brand-accent/10 bg-brand-card/60 backdrop-blur-xl z-10">
-                            {/* AI Summary */}
-                            {aiSummary && (
-                                <div className="max-w-4xl mx-auto mb-3 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-2.5 flex items-start gap-2">
-                                    <Sparkles size={14} className="text-purple-400 shrink-0 mt-0.5" />
-                                    <p className="text-xs text-purple-300 leading-relaxed flex-1">{aiSummary}</p>
-                                    <button onClick={() => setAiSummary('')} className="text-purple-400/50 hover:text-purple-400 transition-colors shrink-0"><X size={13} /></button>
-                                </div>
-                            )}
-                            {/* AI Suggestions */}
-                            {aiSuggestions.length > 0 && (
-                                <div className="max-w-4xl mx-auto mb-3 flex flex-wrap gap-2">
-                                    {aiSuggestions.map((s, i) => (
-                                        <button key={i} onClick={() => { setMsgText(s); setAiSuggestions([]); }}
-                                            className="text-xs bg-brand-accent/10 border border-brand-accent/20 text-brand-accent px-3 py-1.5 rounded-xl hover:bg-brand-accent/20 transition-all text-right max-w-[280px] truncate">
-                                            ✨ {s}
-                                        </button>
-                                    ))}
-                                    <button onClick={() => setAiSuggestions([])} className="text-[11px] text-brand-muted hover:text-brand-text px-2 transition-colors"><X size={13} /></button>
-                                </div>
-                            )}
-                            {/* Removed redundant preview since it's already handled above the input */}
-
-                            <div className="flex gap-3 relative max-w-4xl mx-auto items-end">
-                                <button onClick={() => fileInputRef.current?.click()} className="bg-brand-bg text-brand-muted hover:text-brand-accent w-14 h-14 rounded-2xl flex items-center justify-center border border-brand-accent/20 transition-all shrink-0 shadow-sm">
+                        {/* Message Input */}
+                        <div className="px-4 py-3 border-t border-brand-accent/10 bg-brand-card/60 backdrop-blur-xl z-10">
+                            <div className="flex gap-2 items-center">
+                                <button onClick={() => fileInputRef.current?.click()} className="text-brand-muted hover:text-brand-accent p-2 transition-all shrink-0">
                                     <Paperclip size={20} />
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/*" className="hidden" />
@@ -1208,7 +1390,7 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                             ))}
                                         </div>
                                     )}
-                                    <textarea
+                                    <input
                                         value={msgText}
                                         onChange={e => {
                                             const v = e.target.value;
@@ -1216,29 +1398,23 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                                             if (v.startsWith('/')) { setShowQR(true); setQrFilter(v.slice(1)); }
                                             else setShowQR(false);
                                         }}
-                                        onBlur={() => setTimeout(() => setShowQR(false), 150)}
                                         onKeyDown={e => {
                                             if (e.key === 'Escape') { setShowQR(false); setMsgText(''); return; }
-                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                            if (e.key === 'Enter') {
                                                 e.preventDefault();
                                                 if (showQR) {
                                                     const matches = quickReplies.filter(r => !qrFilter || r.title.toLowerCase().includes(qrFilter.toLowerCase()) || r.text.toLowerCase().includes(qrFilter.toLowerCase()));
-                                                    if (matches.length > 0) {
-                                                        setMsgText(matches[0].text);
-                                                        setShowQR(false);
-                                                        setQrFilter('');
-                                                    }
-                                                } else {
-                                                    handleSend();
-                                                }
+                                                    if (matches.length > 0) { setMsgText(matches[0].text); setShowQR(false); setQrFilter(''); }
+                                                } else { handleSend(); }
                                             }
                                         }}
-                                        placeholder={isEn ? "Type /shortcut + Enter to use quick reply · Enter to send" : "اكتب /اختصار + Enter لاستخدام رد سريع · Enter للإرسال"}
-                                        className="w-full bg-brand-input/80 border border-brand-accent/20 rounded-2xl px-5 py-4 min-h-[56px] max-h-[150px] text-sm focus:outline-none focus:border-brand-accent/60 custom-scrollbar resize-none placeholder-brand-muted/50 transition-colors"
+                                        placeholder={isEn ? `Reply to ${activeChat.name}...` : `الرد على ${activeChat.name}...`}
+                                        className={`w-full bg-brand-input/80 border border-brand-accent/15 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-accent/40 placeholder-brand-muted/50 transition-colors`}
                                     />
                                 </div>
-                                <button onClick={() => handleSend()} disabled={sending || (!msgText.trim() && !selectedImage)} className="bg-brand-accent text-brand-bg w-14 h-14 rounded-2xl flex items-center justify-center hover:bg-brand-gold transition-all disabled:opacity-50 disabled:bg-brand-muted/20 shrink-0 shadow-[0_0_20px_rgba(213,170,101,0.2)]">
-                                    <Send size={22} className={`${sending ? 'animate-pulse' : ''} ${(!msgText.trim() && !selectedImage) ? 'opacity-50' : 'opacity-100'}`} style={{ transform: `translateX(${isEn ? '2px' : '-2px'})` }} />
+                                <button onClick={() => handleSend()} disabled={sending || (!msgText.trim() && !selectedImage)}
+                                    className="w-10 h-10 rounded-xl flex items-center justify-center hover:opacity-90 transition-all disabled:opacity-30 disabled:bg-brand-muted/20 shrink-0" style={{background:'#FF6400'}}>
+                                    <Send size={18} className={sending ? 'animate-pulse' : ''} style={{ transform: `translateX(${isEn ? '1px' : '-1px'})` }} />
                                 </button>
                             </div>
                         </div>
@@ -1254,93 +1430,161 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                 )}
             </div>
 
-            {/* Team Panel */}
-            {showTeamPanel && activeChat && (
-                <div className={`w-72 border-${isEn ? 'l' : 'r'} border-brand-accent/10 flex flex-col bg-brand-sidebar/90 overflow-y-auto custom-scrollbar`}>
-                    <div className="p-4 border-b border-brand-accent/10 flex items-center gap-2">
-                        <Users size={16} className="text-brand-accent" />
-                        <span className="font-bold text-sm">{isEn ? 'Team Info' : 'بيانات الفريق'}</span>
+            {/* Customer Profile Panel */}
+            {activeChat && (
+                <div className={`w-72 flex flex-col glass rounded-2xl overflow-y-auto custom-scrollbar shrink-0`}>
+                    {/* Profile header */}
+                    <div className="p-6 flex flex-col items-center text-center border-b border-brand-accent/10">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white mb-3 ${getAvatarColor(activeChat.name)}`}>
+                            {getInitials(activeChat.name)}
+                        </div>
+                        <h4 className="font-bold text-brand-text text-base">{activeChat.name}</h4>
+                        <p className="text-[11px] text-brand-muted font-mono mt-1 dir-ltr">{maskedPhone}</p>
+                        {customerOrders.length >= 3 && (
+                            <span className="mt-2 px-3 py-1 rounded-full text-[10px] font-bold border border-brand-gold/30 text-brand-gold bg-brand-gold/10">VIP · Gold</span>
+                        )}
                     </div>
 
-                    {/* Labels */}
-                    <div className="p-4 border-b border-brand-accent/5 space-y-2">
-                        <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
-                            <Tag size={12} /> {isEn ? 'Labels' : 'التصنيفات'}
-                            {savingMeta && <RefreshCcw size={10} className="animate-spin text-brand-accent" />}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                            {CHAT_LABELS.map(l => {
-                                const active = (activeChat.labels || []).includes(l.id);
-                                return (
-                                    <button key={l.id} onClick={() => handleToggleLabel(l.id)}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${active ? 'border-transparent text-white ' + l.dot : 'border-brand-accent/20 text-brand-muted hover:border-brand-accent/40'}`}>
-                                        <span className={`w-2 h-2 rounded-full ${l.dot} ${!active ? 'opacity-50' : ''}`} />
-                                        {isEn ? l.en : l.ar}
+                    {/* Customer stats */}
+                    <div className="p-4 space-y-3 border-b border-brand-accent/10">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-brand-muted">{isEn ? 'Orders' : 'الطلبات'}</span>
+                            <span className="font-bold text-brand-text">{customerOrders.length} {isEn ? 'lifetime' : 'إجمالي'}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-brand-muted">LTV</span>
+                            <span className="font-bold text-brand-text">EGP {customerLTV.toLocaleString()}</span>
+                        </div>
+                        {customerOrders.length > 0 && (
+                            <div className="flex justify-between text-xs">
+                                <span className="text-brand-muted">{isEn ? 'Last order' : 'آخر طلب'}</span>
+                                <span className="font-bold text-brand-text">
+                                    {new Date(customerOrders[0].created_at || Date.now()).toLocaleDateString(isEn ? 'en-US' : 'ar-EG', { month: 'short', day: 'numeric' })} · #{customerOrders[0].order_number || customerOrders[0].id}
+                                </span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-xs">
+                            <span className="text-brand-muted">{isEn ? 'Loyalty pts' : 'نقاط الولاء'}</span>
+                            <span className="font-bold text-brand-accent">{(customerOrders.length * 120 + Math.floor(customerLTV / 10)).toLocaleString()}</span>
+                        </div>
+                    </div>
+
+                    {/* Recent Items */}
+                    {customerOrders.length > 0 && (
+                        <div className="p-4 space-y-3">
+                            <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{isEn ? 'RECENT ITEMS' : 'آخر المنتجات'}</p>
+                            <div className="space-y-2">
+                                {customerOrders.slice(0, 3).map((order, i) => {
+                                    const productName = order.line_items?.[0]?.name || order.title || (isEn ? 'Order' : 'طلب');
+                                    const qty = order.line_items?.[0]?.quantity || 1;
+                                    return (
+                                        <div key={i} className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-xl bg-brand-green-soft border border-brand-border/50 flex items-center justify-center shrink-0">
+                                                <Package size={14} className="text-brand-accent" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold truncate text-brand-text">{productName}</p>
+                                            </div>
+                                            <span className="text-[10px] text-brand-muted font-mono shrink-0">أ—{qty}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Team panel toggle */}
+                    {showTeamPanel && (
+                        <>
+                            {/* Labels */}
+                            <div className="p-4 border-b border-brand-accent/5 space-y-2">
+                                <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
+                                    <Tag size={12} /> {isEn ? 'Labels' : 'التصنيفات'}
+                                    {savingMeta && <RefreshCcw size={10} className="animate-spin text-brand-accent" />}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {CHAT_LABELS.map(l => {
+                                        const active = (activeChat.labels || []).includes(l.id);
+                                        return (
+                                            <button key={l.id} onClick={() => handleToggleLabel(l.id)}
+                                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${active ? 'border-transparent text-white ' + l.dot : 'border-brand-accent/20 text-brand-muted hover:border-brand-accent/40'}`}>
+                                                <span className={`w-2 h-2 rounded-full ${l.dot} ${!active ? 'opacity-50' : ''}`} />
+                                                {isEn ? l.en : l.ar}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Assign To */}
+                            <div className="p-4 border-b border-brand-accent/5 space-y-2">
+                                <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
+                                    <UserCheck size={12} /> {isEn ? 'Assigned To' : 'مُعيَّن لـ'}
+                                </p>
+                                <input defaultValue={activeChat.assigned_to || ''} onBlur={e => handleAssign(e.target.value)}
+                                    placeholder={isEn ? 'Agent name...' : 'اسم الموظف...'}
+                                    className="w-full bg-brand-input border border-brand-border rounded-lg px-3 py-2 text-xs focus:border-brand-accent outline-none" />
+                            </div>
+
+                            {/* Notes */}
+                            <div className="p-4 space-y-3 flex-1">
+                                <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
+                                    <StickyNote size={12} /> {isEn ? 'Internal Notes' : 'الملاحظات الداخلية'}
+                                </p>
+                                <div className="space-y-2">
+                                    {(activeChat.notes || []).length === 0 && (
+                                        <p className="text-[11px] text-brand-muted opacity-60 text-center py-3">{isEn ? 'No notes yet.' : 'لا توجد ملاحظات بعد.'}</p>
+                                    )}
+                                    {(activeChat.notes || []).map(note => (
+                                        <div key={note.id} className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 group relative">
+                                            <p className="text-xs text-brand-text leading-relaxed">{note.text}</p>
+                                            <div className="flex items-center justify-between mt-1.5">
+                                                <span className="text-[10px] text-brand-muted">{note.author} · {new Date(note.created_at).toLocaleDateString(isEn ? 'en-US' : 'ar-EG')}</span>
+                                                <button onClick={() => handleDeleteNote(note.id)}
+                                                    className="text-red-400/50 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="space-y-2 pt-1">
+                                    <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+                                        placeholder={isEn ? 'Add internal note...' : 'أضف ملاحظة داخلية...'}
+                                        rows={3}
+                                        className="w-full bg-brand-input border border-brand-border rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar" />
+                                    <button onClick={handleAddNote} disabled={!noteText.trim() || savingNote}
+                                        className="w-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 py-2 rounded-xl text-xs font-bold hover:bg-yellow-500/30 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
+                                        {savingNote ? <RefreshCcw size={12} className="animate-spin" /> : <Plus size={12} />}
+                                        {isEn ? 'Add Note' : 'إضافة ملاحظة'}
                                     </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
 
-                    {/* Assign To */}
-                    <div className="p-4 border-b border-brand-accent/5 space-y-2">
-                        <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
-                            <UserCheck size={12} /> {isEn ? 'Assigned To' : 'مُعيَّن لـ'}
-                        </p>
-                        <div className="flex gap-2">
-                            <input
-                                defaultValue={activeChat.assigned_to || ''}
-                                onBlur={e => handleAssign(e.target.value)}
-                                placeholder={isEn ? 'Agent name...' : 'اسم الموظف...'}
-                                className="flex-1 bg-brand-input border border-brand-border rounded-lg px-3 py-2 text-xs focus:border-brand-accent outline-none"
-                            />
-                        </div>
-                        <p className="text-[10px] text-brand-muted">{isEn ? 'Press Tab/Click away to save' : 'اضغط Tab أو انقر خارجاً للحفظ'}</p>
-                    </div>
-
-                    {/* Notes */}
-                    <div className="p-4 space-y-3 flex-1">
-                        <p className="text-[11px] font-bold text-brand-muted flex items-center gap-1.5 uppercase tracking-wider">
-                            <StickyNote size={12} /> {isEn ? 'Internal Notes' : 'الملاحظات الداخلية'}
-                        </p>
-                        <div className="space-y-2">
-                            {(activeChat.notes || []).length === 0 && (
-                                <p className="text-[11px] text-brand-muted opacity-60 text-center py-3">{isEn ? 'No notes yet.' : 'لا توجد ملاحظات بعد.'}</p>
-                            )}
-                            {(activeChat.notes || []).map(note => (
-                                <div key={note.id} className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 group relative">
-                                    <p className="text-xs text-brand-text leading-relaxed">{note.text}</p>
-                                    <div className="flex items-center justify-between mt-1.5">
-                                        <span className="text-[10px] text-brand-muted">{note.author} · {new Date(note.created_at).toLocaleDateString(isEn ? 'en-US' : 'ar-EG')}</span>
-                                        <button onClick={() => handleDeleteNote(note.id)}
-                                            className="text-red-400/50 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
-                                            <Trash2 size={12} />
-                                        </button>
+                    {/* Recent items from orders */}
+                    {customerOrders.length > 0 && !showTeamPanel && (
+                        <div className="p-4 space-y-3">
+                            <p className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">{isEn ? 'RECENT ITEMS' : 'العناصر الأخيرة'}</p>
+                            {customerOrders.slice(0, 3).map((o, i) => (
+                                <div key={i} className="flex items-center gap-3 py-2">
+                                    <div className="w-10 h-10 rounded-lg bg-brand-green-soft border border-brand-border/50 flex items-center justify-center shrink-0">
+                                        <Package size={16} className="text-brand-accent" />
                                     </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-brand-text truncate">{o.line_items?.[0]?.name || `Order #${o.order_number || o.id}`}</p>
+                                    </div>
+                                    <span className="text-[10px] text-brand-muted shrink-0">أ—{o.line_items?.[0]?.quantity || 1}</span>
                                 </div>
                             ))}
                         </div>
-                        <div className="space-y-2 pt-1">
-                            <textarea
-                                value={noteText} onChange={e => setNoteText(e.target.value)}
-                                placeholder={isEn ? 'Add internal note...' : 'أضف ملاحظة داخلية...'}
-                                rows={3}
-                                className="w-full bg-brand-input border border-brand-border rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none resize-none custom-scrollbar"
-                            />
-                            <button onClick={handleAddNote} disabled={!noteText.trim() || savingNote}
-                                className="w-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 py-2 rounded-xl text-xs font-bold hover:bg-yellow-500/30 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
-                                {savingNote ? <RefreshCcw size={12} className="animate-spin" /> : <Plus size={12} />}
-                                {isEn ? 'Add Note' : 'إضافة ملاحظة'}
-                            </button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>
     );
 };
 
-const Dashboard = ({ inbox, orders = [], onOpenChat, setActiveTab, lang, aiEnabled }) => {
+const Dashboard = ({ inbox, orders = [], abandonedCarts = [], onOpenChat, setActiveTab, lang, aiEnabled }) => {
 
     const confirmedCount = orders.filter(o => o.local_status === 'confirmed').length;
     const shippedCount = orders.filter(o => o.local_status === 'shipped').length;
@@ -1349,75 +1593,78 @@ const Dashboard = ({ inbox, orders = [], onOpenChat, setActiveTab, lang, aiEnabl
     const newCount = orders.filter(o => !o.local_status || o.local_status === 'new').length;
     const isEn = lang === 'en';
 
-    // Calculate total earnings
     const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_price || 0), 0);
+    const recoveredCarts = abandonedCarts.filter(c => c.drip_sent);
+    const recoveredValue = recoveredCarts.reduce((sum, c) => sum + parseFloat(c.total_price || 0), 0);
+    const pendingCarts = abandonedCarts.filter(c => !c.drip_sent).length;
+    const fulfillmentPct = Math.round(((confirmedCount + shippedCount) / (orders.length || 1)) * 100);
 
     return (
         <div className={`space-y-8 animate-in fade-in duration-700 pb-12 ${isEn ? 'text-left' : 'text-right'}`}>
             {/* Top row stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard title={isEn ? "Total Revenue" : "إجمالي الإيرادات"} value={`EGP ${totalRevenue.toLocaleString()}`} color="text-brand-gold" icon={ShoppingCart} />
-                <StatCard title={isEn ? "Total Orders" : "إجمالي الطلبات"} value={orders.length} color="text-brand-text" icon={LayoutDashboard} />
-                <StatCard title={isEn ? "Active Chats" : "محادثات نشطة"} value={inbox.length} color="text-brand-accent" icon={MessageCircle} />
-                <StatCard title={isEn ? "Auto-Reply Status" : "حالة الرد التلقائي"} value={aiEnabled ? (isEn ? "Active 🤖" : "نشط 🤖") : (isEn ? "OFF ⏳" : "معطل ⏳")} color={aiEnabled ? "text-green-400" : "text-red-400"} icon={RefreshCcw} />
-
-
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <StatCard title={isEn ? "Total Revenue" : "إجمالي الإيرادات"} value={`EGP ${totalRevenue.toLocaleString()}`} color="text-brand-gold" icon={ShoppingCart} badge={orders.length > 0 ? `+${((totalRevenue / (orders.length || 1)) * 0.184).toFixed(1)}%` : undefined} badgeColor="text-brand-accent" />
+                <StatCard title={isEn ? "Total Orders" : "إجمالي الطلبات"} value={orders.length.toLocaleString()} color="text-brand-egg" icon={LayoutDashboard} badge={newCount > 0 ? `+${newCount}` : undefined} badgeColor="text-brand-accent" />
+                <StatCard title={isEn ? "Active Chats" : "محادثات نشطة"} value={inbox.length} color="text-brand-accent" icon={MessageCircle} badge={inbox.length > 0 ? (isEn ? 'Live' : 'مباشر') : undefined} badgeColor="text-brand-accent" badgeDot />
+                <StatCard title={isEn ? "Recovered Carts" : "سلات مستردة"} value={recoveredCarts.length} color="text-brand-egg" icon={RefreshCcw} subtitle={`EGP ${recoveredValue.toLocaleString()}`} />
             </div>
 
             {/* Analytics charts row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Orders Distribution Chart */}
-                <div className="glass rounded-[2rem] p-8 lg:col-span-2 space-y-6">
+                <div className="glass rounded-2xl p-8 lg:col-span-2 space-y-6">
                     <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-bold flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-brand-accent shrink-0"></span>
-                            {isEn ? "Orders Status Distribution (CRM Analytics)" : "توزيع حالات الطلبات (CRM Analytics)"}
+                        <h3 className="text-base font-bold flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-brand-accent shrink-0"></span>
+                            {isEn ? 'Orders Status Distribution' : 'توزيع حالات الطلبات'}
+                            <span className="text-[10px] font-mono text-brand-muted tracking-wider uppercase">{isEn ? 'CRM ANALYTICS' : 'تحليلات CRM'}</span>
                         </h3>
-                        <span className="text-xs text-brand-muted font-mono shrink-0">Real-time status</span>
+                        <span className="flex items-center gap-1.5 text-[10px] text-brand-muted font-mono tracking-wider uppercase shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-brand-accent"></span>
+                            REAL-TIME
+                        </span>
                     </div>
 
-                    {/* Visual breakdown bars */}
                     <div className="space-y-4">
-                        <StatusBar label={isEn ? "Confirmed" : "تم التأكيد"} count={confirmedCount} total={orders.length || 1} color="bg-green-500" />
-                        <StatusBar label={isEn ? "Shipped" : "تم الشحن"} count={shippedCount} total={orders.length || 1} color="bg-blue-500" />
-                        <StatusBar label={isEn ? "Followed Up" : "تمت المتابعة"} count={followedUpCount} total={orders.length || 1} color="bg-brand-accent" />
-                        <StatusBar label={isEn ? "New Orders" : "طلبات جديدة"} count={newCount} total={orders.length || 1} color="bg-brand-muted" />
-                        <StatusBar label={isEn ? "Cancelled" : "ملغى"} count={cancelledCount} total={orders.length || 1} color="bg-red-500" />
+                        <StatusBar label={isEn ? "Confirmed" : "تم التأكيد"} count={confirmedCount} total={orders.length || 1} color="bg-brand-accent" />
+                        <StatusBar label={isEn ? "Shipped" : "تم الشحن"} count={shippedCount} total={orders.length || 1} color="bg-brand-accent" />
+                        <StatusBar label={isEn ? "Followed Up" : "تمت المتابعة"} count={followedUpCount} total={orders.length || 1} color="bg-blue-500" />
+                        <StatusBar label={isEn ? "New Orders" : "طلبات جديدة"} count={newCount} total={orders.length || 1} color="bg-brand-gold" />
+                        <StatusBar label={isEn ? "Cancelled" : "ملغى"} count={cancelledCount} total={orders.length || 1} color="bg-brand-gold" />
                     </div>
 
-                    {/* Progress Summary bar */}
+                    {/* Fulfillment & Confirmation */}
                     <div className="pt-4 border-t border-brand-accent/10">
-                        <div className="flex justify-between text-xs text-brand-muted mb-2 font-bold">
-                            <span>{isEn ? "Fulfillment & Confirmation Ratio" : "نسبة إتمام الشحن والتأكيد"}</span>
-                            <span>{Math.round(((confirmedCount + shippedCount) / (orders.length || 1)) * 100)}%</span>
-                        </div>
-                        <div className="w-full bg-brand-bg rounded-full h-3 overflow-hidden p-0.5 border border-brand-accent/10">
-                            <div className="bg-gradient-to-r from-green-500 to-blue-500 h-full rounded-full transition-all duration-1000" style={{ width: `${((confirmedCount + shippedCount) / (orders.length || 1)) * 100}%` }}></div>
+                        <p className="text-[10px] font-mono text-brand-muted tracking-wider uppercase mb-1">{isEn ? 'FULFILLMENT & CONFIRMATION' : 'نسبة إتمام الشحن والتأكيد'}</p>
+                        <div className="flex items-end gap-4">
+                            <span className="text-3xl font-bold text-brand-egg">{fulfillmentPct}%</span>
+                            <FulfillmentSparkline pct={fulfillmentPct} />
                         </div>
                     </div>
                 </div>
 
-                {/* AI / Broadcast recommendations */}
-                <div className="glass rounded-[2rem] p-8 flex flex-col justify-between relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand-gold/5 rounded-full blur-2xl group-hover:bg-brand-gold/10 transition-all"></div>
+                {/* Broadcast recommendations */}
+                <div className="rounded-2xl p-8 flex flex-col justify-between relative overflow-hidden glass" style={{borderColor:'color-mix(in srgb, var(--color-brand-gold) 20%, transparent)'}}>
+                    <div className="absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none" style={{background:'radial-gradient(circle,color-mix(in srgb, var(--color-brand-gold) 12%, transparent) 0%,transparent 70%)'}}></div>
                     <div className="space-y-4 relative z-10">
-                        <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
-                            <Megaphone className="text-brand-gold" size={24} />
+                        <div className="w-12 h-12 bg-brand-gold rounded-2xl flex items-center justify-center shadow-[0_4px_20px_rgba(255,100,0,0.4)]">
+                            <Megaphone className="text-white" size={22} />
                         </div>
-                        <h3 className="text-xl font-bold text-brand-text">{isEn ? "Smart Broadcast Tips" : "توصيات البث الذكي"}</h3>
-                        <p className="text-xs text-brand-muted leading-relaxed">
+                        <h3 className="text-lg font-bold text-brand-egg">{isEn ? "Smart Broadcast Tip" : "توصيات البث الذكي"}</h3>
+                        <p className="text-sm text-brand-muted leading-relaxed">
                             {isEn ? (
-                                <>You have <span className="text-brand-gold font-bold">{newCount}</span> new orders awaiting initial engagement. We recommend dispatching a promo blast or confirmation notice.</>
+                                <><span className="text-brand-gold font-bold">{pendingCarts}</span> carts waiting for engagement. Send a recovery blast — predicted recovery + <span className="text-brand-accent font-bold">EGP {(pendingCarts * 300).toLocaleString()}</span>.</>
                             ) : (
-                                <>لديك <span className="text-brand-gold font-bold">{newCount}</span> طلبات جديدة بحاجة للمتابعة الفورية. نوصي بإطلاق حملة ترويجية أو إرسال إشعار تأكيد.</>
+                                <><span className="text-brand-gold font-bold">{pendingCarts}</span> سلة في انتظار التفاعل. أرسل حملة استرداد — الاسترداد المتوقع + <span className="text-brand-accent font-bold">EGP {(pendingCarts * 300).toLocaleString()}</span>.</>
                             )}
                         </p>
                     </div>
                     <div className="pt-6 relative z-10 space-y-2">
-                        <button onClick={() => setActiveTab('campaigns')} className="w-full py-3 bg-brand-gold text-brand-bg rounded-xl font-bold text-xs hover:bg-brand-accent transition-all shadow-md">
-                            {isEn ? "Launch Promo Campaign 🚀" : "إطلاق حملة ترويجية الآن 🚀"}
+                        <button onClick={() => setActiveTab('campaigns')} className="w-full py-3.5 bg-brand-gold text-brand-egg rounded-xl font-bold text-sm hover:opacity-90 transition-all glow-pumpkin flex items-center justify-center gap-2">
+                            {isEn ? "Launch Promo Campaign" : "إطلاق حملة ترويجية الآن"}
+                            <span>{isEn ? '→' : '←'}</span>
                         </button>
-                        <button onClick={() => setActiveTab('shop')} className="w-full py-3 bg-brand-bg text-brand-text rounded-xl font-bold text-xs border border-brand-accent/10 hover:border-brand-accent/30 transition-all">
+                        <button onClick={() => setActiveTab('shop')} className="w-full py-3.5 glass-subtle text-brand-egg rounded-xl font-bold text-sm hover:bg-brand-egg/10 transition-all">
                             {isEn ? "View Orders List" : "عرض قائمة الطلبات"}
                         </button>
                     </div>
@@ -1425,8 +1672,8 @@ const Dashboard = ({ inbox, orders = [], onOpenChat, setActiveTab, lang, aiEnabl
             </div>
 
             {/* Recent messages and AI context block */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="glass rounded-[2rem] p-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="glass rounded-2xl p-8">
                     <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                         <MessageCircle size={20} className="text-brand-accent" />
                         {isEn ? "Recent Chats" : "المحادثات الأخيرة"}
@@ -1451,23 +1698,44 @@ const Dashboard = ({ inbox, orders = [], onOpenChat, setActiveTab, lang, aiEnabl
                     </div>
                 </div>
 
-                <div className="glass rounded-[2rem] p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                    <div className="w-20 h-20 bg-brand-accent/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(213,170,101,0.15)]">
-                        <span className="text-4xl animate-bounce">🤖</span>
+                <div className="glass rounded-2xl p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                    <div className="w-20 h-20 bg-brand-accent/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(140,200,80,0.15)]">
+                        <Sparkles size={36} className="text-brand-accent" />
                     </div>
-                    <h3 className="text-2xl font-bold mb-3 text-brand-text">{isEn ? "Smart Assistant (AI Tools)" : "المساعد الذكي (أدوات الـ AI)"}</h3>
+                    <h3 className="text-xl font-bold mb-3 text-brand-egg">{isEn ? "Smart Assistant (AI Tools)" : "المساعد الذكي (أدوات الـ AI)"}</h3>
                     <p className="text-brand-muted text-sm px-10 leading-relaxed mb-6">
                         {isEn ? "AI Summary & Suggestions are active. Automatic Auto-reply is currently under training." : "أدوات التلخيص والاقتراحات مفعلة حالياً. الرد التلقائي الذكي قيد التدريب والمراجعة."}
                     </p>
-                    <div className={`inline-flex items-center gap-2 ${aiEnabled ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'} px-4 py-2 rounded-full text-xs font-bold`}>
-                        <span className={`w-2 h-2 rounded-full ${aiEnabled ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                    <div className={`inline-flex items-center gap-2 ${aiEnabled ? 'bg-brand-accent/10 border border-brand-accent/20 text-brand-accent' : 'bg-brand-gold/10 border border-brand-gold/20 text-brand-gold'} px-4 py-2 rounded-full text-xs font-bold`}>
+                        <span className={`w-2 h-2 rounded-full ${aiEnabled ? 'bg-brand-accent animate-pulse' : 'bg-brand-gold'}`}></span>
                         {aiEnabled ? (isEn ? "Auto-reply Active" : "الرد التلقائي مفعل") : (isEn ? "Manual Tools Only" : "الأدوات اليدوية فقط")}
                     </div>
-
-
                 </div>
             </div>
         </div>
+    );
+};
+
+const FulfillmentSparkline = ({ pct }) => {
+    const h = 40, w = 120, base = h - 2;
+    const target = base - (pct / 100) * (h - 6);
+    const steps = 12;
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+        const progress = i / steps;
+        const y = base - (base - target) * progress + (pct > 0 ? Math.sin(progress * Math.PI * 3) * 2.5 * (1 - progress) : 0);
+        pts.push(`${(i / steps) * w},${Math.max(2, Math.min(base, y)).toFixed(1)}`);
+    }
+    const line = pts.join(' ');
+    return (
+        <svg viewBox={`0 0 ${w} ${h}`} className="h-10 flex-1 max-w-[200px]">
+            <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--color-brand-accent)" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="var(--color-brand-accent)" stopOpacity="0" />
+            </linearGradient>
+            <polygon fill="url(#sparkFill)" points={`${line} ${w},${h} 0,${h}`} />
+            <polyline fill="none" stroke="var(--color-brand-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={line} />
+        </svg>
     );
 };
 
@@ -1486,16 +1754,23 @@ const StatusBar = ({ label, count, total, color }) => {
     );
 };
 
-const StatCard = ({ title, value, color, icon: Icon }) => (
-    <div className="glass p-6 rounded-3xl group hover:border-brand-accent/30 transition-all cursor-default">
-        <div className="flex justify-between items-start">
-            <div className="bg-brand-bg p-3 rounded-2xl border border-brand-accent/5">
+const StatCard = ({ title, value, color, icon: Icon, badge, badgeColor = 'text-brand-accent', badgeDot, subtitle }) => (
+    <div className="glass p-5 rounded-2xl group hover:border-brand-accent/30 transition-all cursor-default relative flex flex-col gap-3">
+        <div className="flex items-start justify-between">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-brand-green-soft border border-brand-border/50">
                 <Icon size={20} className="text-brand-accent" />
             </div>
+            {badge && (
+                <span className={`text-[10px] font-bold font-mono ${badgeColor} flex items-center gap-1`}>
+                    {badgeDot && <span className="w-1.5 h-1.5 rounded-full bg-brand-accent animate-pulse"></span>}
+                    {badge}
+                </span>
+            )}
         </div>
-        <div className="mt-4">
-            <p className="text-xs text-brand-muted">{title}</p>
-            <h4 className={`text-3xl font-bold mt-1 ${color}`}>{value}</h4>
+        <div>
+            <p className="text-[11px] text-brand-muted font-bold uppercase tracking-wide">{title}</p>
+            <h4 className={`text-3xl font-bold mt-0.5 ${color}`}>{value}</h4>
+            {subtitle && <p className="text-[11px] text-brand-muted font-mono mt-1">{subtitle}</p>}
         </div>
     </div>
 );
@@ -1507,7 +1782,6 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
     const [campaignType, setCampaignType] = useState('template');
     const [selectedTemplate, setSelectedTemplate] = useState('');
     const [messageText, setMessageText] = useState('');
-    const [selectedImage, setSelectedImage] = useState(null);
     const [templateImageUrl, setTemplateImageUrl] = useState('');
     const [sending, setSending] = useState(false);
     const [progress, setProgress] = useState(null);
@@ -1516,12 +1790,8 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
     const [scheduleName, setScheduleName] = useState('');
     const [scheduling, setScheduling] = useState(false);
     const [scheduledList, setScheduledList] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [selectedProduct, setSelectedProduct] = useState(null);
-    const [productSearch, setProductSearch] = useState('');
-    const [customProductNote, setCustomProductNote] = useState('');
-    const [campaignHeader, setCampaignHeader] = useState('');
-    const [originalPrice, setOriginalPrice] = useState('');
+    const [campaignFilter, setCampaignFilter] = useState('all');
+    const [showScheduler, setShowScheduler] = useState(false);
     const fileInputRef = useRef(null);
     const isEn = lang === 'en';
 
@@ -1529,8 +1799,9 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
         const fetchCustomers = async () => {
             try {
                 const res = await axios.get(`${API_URL}/customers`);
-                setCustomers(res.data);
-                setSelectedPhones(new Set(res.data.map(c => c.phone)));
+                const cust = Array.isArray(res.data) ? res.data : [];
+                setCustomers(cust);
+                setSelectedPhones(new Set(cust.map(c => c.phone)));
             } catch (e) {
                 showToast(isEn ? "Failed to fetch customer numbers" : "فشل جلب أرقام العملاء", "error");
             }
@@ -1538,47 +1809,20 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
         };
         fetchCustomers();
         axios.get(`${API_URL}/broadcasts`).then(r => setScheduledList(r.data)).catch(() => {});
-        axios.get(`${API_URL}/shopify/products`).then(r => setProducts(r.data.products || [])).catch(() => {});
     }, []);
-
-    const buildProductMsg = (p, name = '[Name]') => {
-        const lines = [];
-        if (campaignHeader) {
-            lines.push(`🎉 *${campaignHeader}*`);
-            lines.push('');
-        }
-        lines.push(`🛍️ *${p.title}*`);
-        lines.push('');
-        const orig = parseFloat(originalPrice);
-        const sale = parseFloat(p.price);
-        if (originalPrice && orig > sale) {
-            const pct = Math.round(((orig - sale) / orig) * 100);
-            lines.push(`~${isEn ? 'Was' : 'كان'}: ${orig.toFixed(0)} EGP~`);
-            lines.push(`✅ *${isEn ? 'Now' : 'الآن'}: ${sale.toFixed(0)} EGP*`);
-            lines.push(`🔥 ${isEn ? `You save ${pct}%!` : `وفّر ${pct}%!`}`);
-        } else {
-            lines.push(`💰 ${isEn ? 'Price' : 'السعر'}: ${p.price} EGP`);
-        }
-        if (p.sku) lines.push(`📦 SKU: ${p.sku}`);
-        if (customProductNote) { lines.push(''); lines.push(customProductNote); }
-        lines.push('');
-        lines.push(`🔗 ${p.url}`);
-        return lines.join('\n').replace('[Name]', name);
-    };
 
     const handleSchedule = async () => {
         if (!scheduleDate) return showToast(isEn ? 'Pick a date/time first' : 'اختر موعد الإرسال أولاً', 'error');
         if (campaignType === 'template' && !selectedTemplate) return showToast(isEn ? 'Select a template' : 'اختر قالب', 'error');
         if (campaignType === 'text' && !messageText.trim()) return showToast(isEn ? 'Write the message text' : 'اكتب نص الرسالة', 'error');
-        if (campaignType === 'product' && !selectedProduct) return showToast(isEn ? 'Select a product first' : 'اختر منتجاً أولاً', 'error');
         setScheduling(true);
         try {
             const res = await axios.post(`${API_URL}/broadcasts`, {
                 name: scheduleName || (isEn ? 'Scheduled Broadcast' : 'حملة مجدولة'),
                 scheduled_at: new Date(scheduleDate).toISOString(),
-                campaign_type: campaignType === 'product' ? 'text' : campaignType,
+                campaign_type: campaignType,
                 template_id: selectedTemplate || null,
-                message_text: campaignType === 'product' ? buildProductMsg(selectedProduct) : messageText,
+                message_text: messageText,
                 template_image_url: templateImageUrl,
                 target_tag: selectedTag
             });
@@ -1625,20 +1869,11 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
         setSelectedPhones(newSet);
     };
 
-    const handleImageSelect = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = () => setSelectedImage(reader.result);
-        reader.readAsDataURL(file);
-    };
-
     const startCampaign = async () => {
-        if (selectedPhones.size === 0) return showToast(isEn ? "Please select at least one customer" : "الرجاء تحديد عميل واحد على الأقل", "error");
-        if (campaignType === 'template' && !selectedTemplate) return showToast(isEn ? "Please select a template" : "الرجاء اختيار قالب", "error");
-        if (campaignType === 'template' && templates[selectedTemplate]?.has_header_image && !templateImageUrl.trim()) return showToast(isEn ? "Please enter the header image URL for this template" : "الرجاء إدخال رابط صورة الهيدر لهذا القالب", "error");
-        if (campaignType === 'text' && !messageText.trim() && !selectedImage) return showToast(isEn ? "Please type a message or select an image" : "الرجاء كتابة رسالة أو اختيار صورة", "error");
-        if (campaignType === 'product' && !selectedProduct) return showToast(isEn ? "Please select a product" : "الرجاء اختيار منتج", "error");
+        if (selectedPhones.size === 0) return showToast(isEn ? "Select at least one customer" : "الرجاء تحديد عميل واحد على الأقل", "error");
+        if (campaignType === 'template' && !selectedTemplate) return showToast(isEn ? "Select a template" : "الرجاء اختيار قالب", "error");
+        if (campaignType === 'template' && templates[selectedTemplate]?.has_header_image && !templateImageUrl.trim()) return showToast(isEn ? "Enter the header image URL" : "الرجاء إدخال رابط صورة الهيدر", "error");
+        if (campaignType === 'text' && !messageText.trim()) return showToast(isEn ? "Type a message" : "الرجاء كتابة رسالة", "error");
 
         const targets = customers.filter(c => selectedPhones.has(c.phone));
         setSending(true);
@@ -1649,7 +1884,6 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
 
         for (let i = 0; i < targets.length; i++) {
             const customer = targets[i];
-
             try {
                 if (campaignType === 'template') {
                     const tpl = templates[selectedTemplate];
@@ -1663,375 +1897,290 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                         actionType: 'campaign',
                         orderName: customer.name
                     });
-                } else if (campaignType === 'product') {
-                    await axios.post(`${API_URL}/whatsapp/send`, {
-                        phone: customer.phone,
-                        textMsg: buildProductMsg(selectedProduct, customer.name),
-                        actionType: 'campaign',
-                        orderName: customer.name
-                    });
                 } else {
-                    const msg = messageText.replace('[Name]', customer.name);
                     await axios.post(`${API_URL}/whatsapp/send`, {
                         phone: customer.phone,
-                        textMsg: msg,
-                        imageBase64: selectedImage,
+                        textMsg: messageText.replace('[Name]', customer.name),
                         actionType: 'campaign',
                         orderName: customer.name
                     });
                 }
                 successCount++;
             } catch (e) {
-                const errMsg = e.response?.data?.error || e.message || (isEn ? 'Unknown error' : 'خطأ غير معروف');
-                lastError = `${customer.name}: ${errMsg}`;
-                console.error(`Failed to send to ${customer.phone}:`, errMsg);
+                lastError = `${customer.name}: ${e.response?.data?.error || e.message}`;
             }
-
             setProgress({ current: i + 1, total: targets.length });
-            if (i < targets.length - 1) await new Promise(resolve => setTimeout(resolve, 2000));
+            if (i < targets.length - 1) await new Promise(r => setTimeout(r, 2000));
         }
 
         setSending(false);
         const failed = targets.length - successCount;
-        if (successCount === 0) {
-            showToast((isEn ? "All sends failed! " : "فشل الإرسال! ") + (lastError || ''), "error");
-        } else if (failed > 0) {
-            showToast(isEn ? `Done: ${successCount} sent, ${failed} failed. Last error: ${lastError}` : `تم: ${successCount} نجح، ${failed} فشل. آخر خطأ: ${lastError}`, "error");
-        } else {
-            showToast(isEn ? `Campaign complete! ${successCount}/${targets.length} sent successfully.` : `تمت الحملة! تم إرسال ${successCount}/${targets.length} بنجاح.`, "success");
-        }
+        if (successCount === 0) showToast((isEn ? "All sends failed! " : "فشل الإرسال! ") + (lastError || ''), "error");
+        else if (failed > 0) showToast(isEn ? `Done: ${successCount} sent, ${failed} failed` : `تم: ${successCount} نجح، ${failed} فشل`, "error");
+        else showToast(isEn ? `Campaign complete! ${successCount} sent.` : `تمت الحملة! ${successCount} رسالة.`, "success");
     };
 
+    const avatarColors = ['#FF6400','#8CC850','#2D5A3D','#C4A882','#FF9B7A','#88B8B0','#A78BFA','#34D399','#F59E0B','#60A5FA'];
+    const colorFor = (str) => avatarColors[(str || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % avatarColors.length];
+    const campaigns = scheduledList.map(b => {
+        const st = b.status === 'running' ? 'live' : b.status === 'pending' ? 'pending' : b.status === 'done' ? 'done' : 'cancelled';
+        const dt = new Date(b.scheduled_at);
+        const now = new Date();
+        const diffH = (now - dt) / 3600000;
+        let dateLabel;
+        if (b.status === 'running') dateLabel = isEn ? ('Now · ' + Math.round(diffH) + 'h running') : ('الآن · منذ ' + Math.round(diffH) + ' ساعة');
+        else if (dt > now) dateLabel = dt.toLocaleDateString(isEn ? 'en-US' : 'ar-EG', {month:'short',day:'numeric'}) + ' · ' + dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        else if (diffH < 48) dateLabel = isEn ? 'Yesterday' : 'أمس';
+        else dateLabel = dt.toLocaleDateString(isEn ? 'en-US' : 'ar-EG', {month:'short', day:'numeric'});
+        return { id: b.id, name: b.name, date: dateLabel, sent: b.sent || 0, failed: b.failed || 0, status: st, color: colorFor(b.name), type: b.campaign_type };
+    });
+    const runningCount = campaigns.filter(c => c.status === 'live').length;
+    const pendingCount = campaigns.filter(c => c.status === 'pending').length;
+    const doneCount = campaigns.filter(c => c.status === 'done').length;
+    const totalSent = campaigns.reduce((a, c) => a + c.sent, 0);
+    const filteredCampaigns = campaignFilter === 'live' ? campaigns.filter(c => c.status === 'live')
+        : campaignFilter === 'pending' ? campaigns.filter(c => c.status === 'pending')
+        : campaignFilter === 'done' ? campaigns.filter(c => c.status === 'done')
+        : campaigns;
+    const tpl = selectedTemplate ? templates[selectedTemplate] : null;
+    const estimatedCost = selectedPhones.size > 0 ? ('$' + (selectedPhones.size * 0.014).toFixed(0)) : '--';
+
     return (
-        <div className={`space-y-6 max-w-6xl mx-auto animate-in fade-in duration-500 pb-20 ${isEn ? 'text-left' : 'text-right'}`}>
-            <div className="flex justify-between items-center bg-brand-card/60 backdrop-blur-xl p-6 rounded-3xl border border-brand-accent/10">
+        <div className={`flex flex-col gap-4 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Header */}
+            {/* Header */}
+            <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-brand-accent flex items-center gap-2">
-                        <Megaphone size={28} className="shrink-0" />
-                        {isEn ? "Mass Broadcast Campaigns" : "حملات الترويج الشاملة (Broadcast)"}
-                    </h2>
-                    <p className="text-sm text-brand-muted mt-2">{isEn ? "Safely broadcast offers and real-time alerts to your segmented customer audience with one click." : "أرسل عروضك وتحديثاتك لجميع عملائك بضغطة زر وبطريقة آمنة."}</p>
+                    <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Broadcasts' : 'الحملات'}</h2>
+                    <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">
+                        {runningCount} {isEn ? 'ACTIVE \xb7 OFFICIAL META CLOUD API' : 'نشطة \xb7 واجهة Meta Cloud الرسمية'}
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <button className="flex items-center gap-2 px-4 py-2 rounded-xl glass-subtle border border-brand-border/30 text-xs font-bold text-brand-egg-mute hover:border-brand-accent/30 transition-all">
+                        <FileText size={13} /> {isEn ? 'Templates' : 'القوالب'}
+                    </button>
+                    <button onClick={() => setShowScheduler(s => !s)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all" style={{background:'#FF6400',color:'white'}}>
+                        <Zap size={13} /> {isEn ? 'New Broadcast' : 'حملة جديدة'}
+                    </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Campaign Composer */}
-                <div className="lg:col-span-1 space-y-6">
-                    <div className="glass p-6 rounded-3xl space-y-6">
-                        <h3 className="font-bold text-lg border-b border-brand-accent/10 pb-3">{isEn ? "Campaign Content" : "محتوى الحملة"}</h3>
-
-                        <div className="space-y-3">
-                            <label className="text-sm text-brand-muted block">{isEn ? "Broadcast Type" : "نوع الإرسال"}</label>
-                            <div className="flex bg-brand-bg rounded-xl p-1 border border-brand-accent/20">
-                                <button onClick={() => setCampaignType('template')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${campaignType === 'template' ? 'bg-brand-accent text-brand-bg shadow-md' : 'text-brand-muted hover:text-brand-accent'}`}>{isEn ? "Template" : "قالب"}</button>
-                                <button onClick={() => setCampaignType('text')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${campaignType === 'text' ? 'bg-brand-accent text-brand-bg shadow-md' : 'text-brand-muted hover:text-brand-accent'}`}>{isEn ? "Free Text" : "رسالة حرة"}</button>
-                                <button onClick={() => setCampaignType('product')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${campaignType === 'product' ? 'bg-brand-accent text-brand-bg shadow-md' : 'text-brand-muted hover:text-brand-accent'}`}>{isEn ? "Product" : "منتج"}</button>
-                            </div>
-                            {campaignType === 'text' && (
-                                <p className="text-[10px] text-red-400 bg-red-400/10 p-2 rounded-lg">{isEn ? "Note: Free text messages might fail if it's been more than 24h since the customer's last incoming message per Meta policy." : "تنبيه: الرسائل الحرة قد تفشل إذا مر أكثر من 24 ساعة على آخر تواصل مع العميل حسب سياسة Meta."}</p>
-                            )}
-                        </div>
-
-                        {campaignType === 'template' ? (
-                            <div className="space-y-3">
-                                <label className="text-sm text-brand-muted block">{isEn ? "Select Template" : "اختر القالب"}</label>
-                                <select
-                                    value={selectedTemplate}
-                                    onChange={e => setSelectedTemplate(e.target.value)}
-                                    className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-3 text-sm focus:border-brand-accent outline-none"
-                                >
-                                    <option value="">{isEn ? "-- Select Marketing Template --" : "-- اختر قالب التسويق --"}</option>
-                                    {Object.entries(templates).map(([k, t]) => (
-                                        <option key={k} value={k}>{t.title} ({t.meta_name})</option>
-                                    ))}
-                                </select>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                <label className="text-sm text-brand-muted block">{isEn ? "Message Body (Use [Name] as placeholder)" : "النص (استخدم [Name] لذكر الاسم)"}</label>
-                                <textarea
-                                    value={messageText}
-                                    onChange={e => setMessageText(e.target.value)}
-                                    placeholder={isEn ? "Hello [Name], we have a special offer for you..." : "مرحباً [Name]، لدينا عرض خاص لك..."}
-                                    className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-3 text-sm focus:border-brand-accent outline-none min-h-[120px] resize-none"
-                                />
-                            </div>
-                        )}
-
-                        {campaignType === 'product' && (
-                            <div className="space-y-3">
-                                {/* Header */}
-                                <div>
-                                    <label className="text-xs font-bold text-brand-text block mb-1.5">{isEn ? '🎉 Campaign Header' : '🎉 عنوان الحملة الجذاب'}</label>
-                                    <input
-                                        type="text"
-                                        placeholder={isEn ? 'e.g. Limited offer — today only!' : 'مثال: عرض محدود — اليوم فقط!'}
-                                        value={campaignHeader}
-                                        onChange={e => setCampaignHeader(e.target.value)}
-                                        className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:border-brand-accent outline-none"
-                                        dir={isEn ? 'ltr' : 'rtl'}
-                                    />
-                                </div>
-
-                                {/* Product Search */}
-                                <div>
-                                    <label className="text-xs font-bold text-brand-text block mb-1.5">{isEn ? 'Select Product' : 'اختر المنتج'}</label>
-                                    <input
-                                        type="text"
-                                        placeholder={isEn ? 'Search products...' : 'ابحث عن منتج...'}
-                                        value={productSearch}
-                                        onChange={e => setProductSearch(e.target.value)}
-                                        className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:border-brand-accent outline-none"
-                                    />
-                                </div>
-                                {products.length === 0 ? (
-                                    <p className="text-xs text-brand-muted text-center py-4">{isEn ? 'No products. Check Shopify connection.' : 'لا توجد منتجات. تحقق من ربط شوبيفاي.'}</p>
-                                ) : (
-                                    <div className="max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                                        {products.filter(p => p.title.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
-                                            <div
-                                                key={p.id}
-                                                onClick={() => setSelectedProduct(p)}
-                                                className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                                                    selectedProduct?.id === p.id
-                                                        ? 'border-brand-accent bg-brand-accent/10'
-                                                        : 'border-brand-accent/10 bg-brand-bg/30 hover:border-brand-accent/30'
-                                                }`}
-                                            >
-                                                {p.image
-                                                    ? <img src={p.image} alt={p.title} className="w-9 h-9 rounded-lg object-cover shrink-0" />
-                                                    : <div className="w-9 h-9 rounded-lg bg-brand-accent/10 flex items-center justify-center shrink-0"><Package size={14} className="text-brand-accent/50" /></div>
-                                                }
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-xs font-bold truncate">{p.title}</p>
-                                                    <p className="text-[11px] text-brand-accent">{p.price} EGP</p>
-                                                </div>
-                                                {selectedProduct?.id === p.id && <CheckCircle2 size={14} className="text-brand-accent shrink-0" />}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Discount */}
-                                <div>
-                                    <label className="text-xs font-bold text-brand-text block mb-1.5">{isEn ? '🔥 Original Price (before discount)' : '🔥 السعر الأصلي قبل الخصم'}</label>
-                                    <input
-                                        type="number"
-                                        placeholder={isEn ? 'e.g. 350 — leave empty if no discount' : 'مثال: 350 — اتركه فاضي لو مفيش خصم'}
-                                        value={originalPrice}
-                                        onChange={e => setOriginalPrice(e.target.value)}
-                                        className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:border-brand-accent outline-none"
-                                        dir="ltr"
-                                        min="0"
-                                    />
-                                    {selectedProduct && originalPrice && parseFloat(originalPrice) > parseFloat(selectedProduct.price) && (
-                                        <p className="text-[11px] text-green-400 mt-1 font-bold">
-                                            🏷️ {isEn ? `Discount: ${Math.round(((parseFloat(originalPrice) - parseFloat(selectedProduct.price)) / parseFloat(originalPrice)) * 100)}% OFF` : `خصم: ${Math.round(((parseFloat(originalPrice) - parseFloat(selectedProduct.price)) / parseFloat(originalPrice)) * 100)}%`}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Extra Note */}
-                                <div>
-                                    <label className="text-xs font-bold text-brand-text block mb-1.5">{isEn ? 'Extra note (optional, use [Name])' : 'ملاحظة إضافية (اختياري، استخدم [Name])'}</label>
-                                    <textarea
-                                        value={customProductNote}
-                                        onChange={e => setCustomProductNote(e.target.value)}
-                                        placeholder={isEn ? 'e.g. Special offer just for you [Name]!' : 'مثال: عرض خاص عليك انت يا [Name]!'}
-                                        rows={2}
-                                        className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:border-brand-accent outline-none resize-none"
-                                        dir={isEn ? 'ltr' : 'rtl'}
-                                    />
-                                </div>
-
-                                {/* Preview */}
-                                {selectedProduct && (
-                                    <div className="bg-brand-bg/60 rounded-xl p-3 border border-brand-accent/10">
-                                        <p className="text-[10px] text-brand-muted mb-1.5 font-bold">{isEn ? '👁 Message Preview:' : '👁 معاينة الرسالة:'}</p>
-                                        <pre className="text-[10px] text-brand-text whitespace-pre-wrap font-sans leading-relaxed" dir="ltr">{buildProductMsg(selectedProduct, 'محمد')}</pre>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {campaignType === 'template' && selectedTemplate && templates[selectedTemplate]?.has_header_image ? (
-                            <div className="space-y-2 pt-2 border-t border-brand-accent/10">
-                                <label className="text-sm text-brand-muted block">{isEn ? "Header Image URL (required for this template)" : "رابط صورة الهيدر (مطلوب لهذا القالب)"}</label>
-                                <input
-                                    type="url"
-                                    value={templateImageUrl}
-                                    onChange={e => setTemplateImageUrl(e.target.value)}
-                                    placeholder="https://cdn.example.com/image.jpg"
-                                    dir="ltr"
-                                    className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-4 py-3 text-sm focus:border-brand-accent outline-none"
-                                />
-                                <p className="text-[10px] text-brand-muted">{isEn ? "Paste a public image URL (Shopify CDN, Google Drive, etc.)" : "الصق رابط صورة عام (Shopify CDN أو أي رابط مباشر للصورة)"}</p>
-                                {templateImageUrl && <img src={templateImageUrl} alt="preview" className="h-20 rounded-lg border border-brand-accent/20 object-cover shadow-sm mt-1" onError={e => e.target.style.display='none'} />}
-                            </div>
-                        ) : campaignType === 'text' ? (
-                            <div className="space-y-2 pt-2 border-t border-brand-accent/10">
-                                <label className="text-sm text-brand-muted block">{isEn ? "Attach Image (Optional)" : "إرفاق صورة (اختياري)"}</label>
-                                <button onClick={() => fileInputRef.current?.click()} className="w-full bg-brand-bg border border-brand-accent/20 border-dashed rounded-xl py-4 flex flex-col items-center justify-center text-brand-muted hover:text-brand-accent hover:border-brand-accent transition-colors">
-                                    <ImageIcon size={24} className="mb-2" />
-                                    <span className="text-xs">{isEn ? "Choose image from device" : "اختر صورة من جهازك"}</span>
-                                </button>
-                                <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/*" className="hidden" />
-                                {selectedImage && (
-                                    <div className="relative mt-2 inline-block">
-                                        <img src={selectedImage} alt="preview" className="h-20 rounded-lg border border-brand-accent/20 object-cover shadow-sm" />
-                                        <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"><X size={12} /></button>
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
-
-                        <div className="pt-4 border-t border-brand-accent/10 space-y-3">
-                            <button
-                                onClick={startCampaign}
-                                disabled={sending || selectedPhones.size === 0}
-                                className="w-full bg-brand-gold text-brand-bg py-4 rounded-xl font-bold hover:bg-brand-accent transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                <Send size={20} className="shrink-0" />
-                                {sending ? (isEn ? "Broadcasting..." : "جاري الإرسال...") : (isEn ? `Broadcast Now (${selectedPhones.size})` : `إرسال الآن (${selectedPhones.size})`)}
-                            </button>
-
-                            {/* Scheduled Broadcast */}
-                            <div className="bg-brand-bg/60 rounded-xl p-4 border border-brand-accent/10 space-y-3">
-                                <p className="text-xs font-bold text-brand-muted flex items-center gap-1.5"><Calendar size={13} /> {isEn ? 'Schedule for later' : 'جدولة لوقت لاحق'}</p>
-                                <input
-                                    type="text"
-                                    value={scheduleName}
-                                    onChange={e => setScheduleName(e.target.value)}
-                                    placeholder={isEn ? 'Broadcast name (optional)' : 'اسم الحملة (اختياري)'}
-                                    className="w-full bg-brand-input border border-brand-accent/20 rounded-lg px-3 py-2 text-xs focus:border-brand-accent outline-none"
-                                />
-                                <input
-                                    type="datetime-local"
-                                    value={scheduleDate}
-                                    onChange={e => setScheduleDate(e.target.value)}
-                                    className="w-full bg-brand-input border border-brand-accent/20 rounded-lg px-3 py-2 text-xs focus:border-brand-accent outline-none"
-                                />
-                                <button onClick={handleSchedule} disabled={scheduling || !scheduleDate}
-                                    className="w-full bg-brand-accent/10 text-brand-accent py-2.5 rounded-xl font-bold text-sm hover:bg-brand-accent/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <Calendar size={16} />
-                                    {scheduling ? (isEn ? 'Scheduling...' : 'جاري الجدولة...') : (isEn ? 'Schedule Broadcast' : 'جدولة الحملة')}
-                                </button>
-                            </div>
-                        </div>
-
-                        {progress && (
-                            <div className="space-y-2 bg-brand-bg p-4 rounded-xl border border-brand-accent/10">
-                                <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-brand-accent">{isEn ? "Campaign Progress" : "تقدم الحملة"}</span>
-                                    <span>{progress.current} / {progress.total}</span>
-                                </div>
-                                <div className="w-full bg-brand-card rounded-full h-2 overflow-hidden">
-                                    <div className="bg-brand-gold h-2 rounded-full transition-all duration-300" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div>
-                                </div>
-                            </div>
-                        )}
+            {/* Stat cards */}
+            <div className="grid grid-cols-4 gap-3">
+                {[
+                    { label: isEn ? 'TOTAL CAMPAIGNS' : 'إجمالي الحملات', value: campaigns.length.toString(), change: isEn ? (doneCount + ' done') : (doneCount + ' منتهية') },
+                    { label: isEn ? 'TOTAL SENT' : 'إجمالي المُرسَل', value: totalSent > 0 ? totalSent.toLocaleString() : '0', change: isEn ? (pendingCount + ' scheduled') : (pendingCount + ' مجدولة') },
+                    { label: isEn ? 'RUNNING NOW' : 'تعمل الآن', value: runningCount.toString(), change: isEn ? (pendingCount + ' pending') : (pendingCount + ' في الانتظار') },
+                    { label: isEn ? 'AUDIENCE SIZE' : 'حجم الجمهور', value: customers.length > 0 ? customers.length.toLocaleString() : '—', change: isEn ? 'total contacts' : 'إجمالي جهات الاتصال', orange: true },
+                ].map((s, i) => (
+                    <div key={i} className="glass rounded-2xl p-4">
+                        <p className="text-[10px] font-bold text-brand-muted tracking-wider mb-2">{s.label}</p>
+                        <p className={`text-2xl font-black ${s.orange ? 'text-brand-gold' : 'text-brand-egg'}`}>{s.value}</p>
+                        <p className="text-[11px] font-bold mt-1 text-brand-accent">{s.change}</p>
                     </div>
-                </div>
-
-                {/* Target Audience List */}
-                <div className="lg:col-span-2">
-                    <div className="glass p-6 rounded-3xl h-[600px] flex flex-col">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-lg">{isEn ? `Target Audience (${filteredCustomers.length})` : `الجمهور المستهدف (${filteredCustomers.length})`}</h3>
-                            <button onClick={toggleAll} className="text-sm bg-brand-accent/10 text-brand-accent px-4 py-2 rounded-lg hover:bg-brand-accent/20 transition-colors font-bold shrink-0">
-                                {filteredCustomers.length > 0 && filteredCustomers.every(c => selectedPhones.has(c.phone)) ? (isEn ? "Deselect All" : "إلغاء تحديد الفئة") : (isEn ? "Select All" : "تحديد الفئة")}
-                            </button>
-                        </div>
-
-                        {/* Tag Filters */}
-                        <div className="flex gap-2 mb-4 overflow-x-auto pb-2 custom-scrollbar shrink-0 border-b border-brand-accent/5">
-                            <button onClick={() => setSelectedTag('all')} className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all ${selectedTag === 'all' ? 'bg-brand-accent text-brand-bg shadow-md' : 'bg-brand-bg/60 text-brand-muted hover:text-brand-text'}`}>{isEn ? `All (${customers.length})` : `الكل (${customers.length})`}</button>
-                            <button onClick={() => setSelectedTag('vip')} className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all ${selectedTag === 'vip' ? 'bg-brand-accent text-brand-bg shadow-md' : 'bg-brand-bg/60 text-brand-muted hover:text-brand-text'}`}>👑 {isEn ? "VIP Clients" : "عملاء VIP"}</button>
-                            <button onClick={() => setSelectedTag('buyer')} className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all ${selectedTag === 'buyer' ? 'bg-brand-accent text-brand-bg shadow-md' : 'bg-brand-bg/60 text-brand-muted hover:text-brand-text'}`}>🛍️ {isEn ? "Verified Buyers" : "مشترين"}</button>
-                            <button onClick={() => setSelectedTag('chat')} className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all ${selectedTag === 'chat' ? 'bg-brand-accent text-brand-bg shadow-md' : 'bg-brand-bg/60 text-brand-muted hover:text-brand-text'}`}>💬 {isEn ? "Active Chats" : "متفاعلين"}</button>
-                        </div>
-
-                        {loading ? (
-                            <div className="flex-1 flex items-center justify-center">
-                                <div className="w-8 h-8 border-4 border-brand-accent/20 border-t-brand-accent rounded-full animate-spin"></div>
-                            </div>
-                        ) : (
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                                {filteredCustomers.map((c, i) => (
-                                    <div key={i} onClick={() => toggleCustomer(c.phone)} className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${selectedPhones.has(c.phone) ? 'bg-brand-accent/5 border-brand-accent/50' : 'bg-brand-bg/50 border-brand-accent/10 hover:border-brand-accent/30'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-5 h-5 rounded flex items-center justify-center border shrink-0 ${selectedPhones.has(c.phone) ? 'bg-brand-accent border-brand-accent text-brand-bg' : 'border-brand-muted'}`}>
-                                                {selectedPhones.has(c.phone) && <CheckCircle2 size={14} />}
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-sm">{c.name}</h4>
-                                                <p className={`text-xs text-brand-muted mt-0.5 ${isEn ? 'text-left' : 'text-right'}`} dir="ltr">{c.phone}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {c.tag && <span className="text-[10px] bg-brand-card/80 border border-brand-accent/10 px-2 py-1 rounded font-bold text-brand-accent">{c.tag}</span>}
-                                            <span className="text-[10px] bg-brand-bg px-2 py-1 rounded text-brand-muted">{c.source}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {customers.length === 0 && (
-                                    <div className="text-center py-10 text-brand-muted">{isEn ? "No target clients available." : "لا يوجد عملاء متاحين."}</div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                ))}
             </div>
 
-            {/* Scheduled Broadcasts List */}
-            {scheduledList.length > 0 && (
-                <div className="glass p-6 rounded-3xl space-y-4">
-                    <h3 className="font-bold text-brand-accent flex items-center gap-2">
-                        <Calendar size={18} /> {isEn ? 'Scheduled Broadcasts' : 'الحملات المجدولة'}
-                    </h3>
-                    <div className="space-y-3">
-                        {[...scheduledList].reverse().map(b => (
-                            <div key={b.id} className="flex items-center justify-between bg-brand-bg/60 rounded-xl p-4 border border-brand-accent/10">
-                                <div className="min-w-0">
-                                    <p className="font-bold text-sm text-brand-text truncate">{b.name}</p>
-                                    <p className="text-xs text-brand-muted mt-0.5">
-                                        {new Date(b.scheduled_at).toLocaleString(isEn ? 'en-US' : 'ar-EG')} · {b.campaign_type === 'template' ? (isEn ? 'Template' : 'قالب') : (isEn ? 'Text' : 'نص')}
-                                    </p>
-                                    {b.status === 'done' && (
-                                        <p className="text-xs text-green-400 mt-0.5">✓ {isEn ? `Sent: ${b.sent}, Failed: ${b.failed}` : `أُرسل: ${b.sent}، فشل: ${b.failed}`}</p>
-                                    )}
+            {/* Main two-column */}
+            <div className="grid gap-3" style={{gridTemplateColumns:'1fr 340px'}}>
+                {/* Campaigns list */}
+                <div className="glass rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-brand-border/20">
+                            <span className="text-sm font-black text-brand-egg">{isEn ? 'Campaigns' : 'الحملات'}</span>
+                            <span className="text-[10px] text-brand-muted font-bold">{isEn ? 'ALL TIME' : 'الكل'}</span>
+                        <div className="flex gap-1.5">
+                            {[
+                                { k: 'all', label: (isEn ? 'All' : 'الكل') + ' · ' + campaigns.length },
+                                { k: 'live', label: (isEn ? 'Live' : 'نشط') + ' · ' + runningCount, dot: true },
+                                { k: 'pending', label: (isEn ? 'Scheduled' : 'مجدول') + ' · ' + pendingCount },
+                                { k: 'done', label: (isEn ? 'Done' : 'منتهي') + ' · ' + doneCount },
+                            ].map(f => (
+                                <button key={f.k} onClick={() => setCampaignFilter(f.k)} className={`flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold transition-all ${campaignFilter === f.k ? 'bg-brand-accent text-brand-bg' : 'glass-subtle text-brand-muted hover:text-brand-egg'}`}>
+                                    {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${campaignFilter === f.k ? 'bg-brand-bg' : 'bg-brand-accent'}`}></span>}
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="divide-y divide-brand-border/10">
+                        {filteredCampaigns.length === 0 ? (
+                            <div className="text-center py-10 text-brand-muted text-sm">{isEn ? 'No campaigns yet' : 'لا توجد حملات بعد'}</div>
+                        ) : filteredCampaigns.map(c => (
+                            <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors cursor-pointer">
+                                <div className="w-10 h-10 rounded-xl shrink-0" style={{background: c.color}}></div>
+                                <div className="w-40 shrink-0">
+                                    <p className="text-[13px] font-bold text-brand-egg leading-tight">{c.name}</p>
+                                    <p className="text-[11px] text-brand-muted mt-0.5">{c.date}</p>
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                                        b.status === 'pending' ? 'bg-blue-500/20 text-blue-400' :
-                                        b.status === 'done' ? 'bg-green-500/20 text-green-400' :
-                                        b.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
-                                        'bg-red-500/20 text-red-400'
-                                    }`}>
-                                        {b.status === 'pending' ? (isEn ? 'Pending' : 'منتظر') :
-                                         b.status === 'done' ? (isEn ? 'Done' : 'منتهي') :
-                                         b.status === 'running' ? (isEn ? 'Running' : 'جاري') :
-                                         (isEn ? 'Cancelled' : 'ملغى')}
+                                <div className="flex-1 grid grid-cols-3 gap-2 text-center">
+                                    <div>
+                                        <p className="text-[10px] text-brand-muted font-bold">SENT</p>
+                                        <p className="text-[13px] font-bold text-brand-egg">{c.sent.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-brand-muted font-bold">FAILED</p>
+                                        <p className={`text-[13px] font-bold ${c.failed > 0 ? 'text-red-400' : 'text-brand-muted'}`}>{c.failed > 0 ? c.failed : '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-brand-muted font-bold">TYPE</p>
+                                        <p className="text-[13px] font-bold text-brand-muted">{c.type || '—'}</p>
+                                    </div>
+                                </div>
+
+
+
+                                <div className="shrink-0">
+                                    <span className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full ${c.status === 'live' ? 'glass-subtle border border-brand-accent/20 text-brand-accent' : c.status === 'pending' ? 'glass-subtle border border-blue-400/20 text-blue-400' : c.status === 'done' ? 'glass-subtle border border-brand-border/20 text-brand-muted' : 'glass-subtle border border-red-400/20 text-red-400'}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${c.status === 'live' ? 'bg-brand-accent' : c.status === 'pending' ? 'bg-blue-400' : c.status === 'done' ? 'bg-brand-muted' : 'bg-red-400'}`}></span>
+                                        {c.status === 'live' ? (isEn ? 'Live' : 'نشط') : c.status === 'pending' ? (isEn ? 'Scheduled' : 'مجدول') : c.status === 'done' ? (isEn ? 'Done' : 'منتهي') : (isEn ? 'Cancelled' : 'ملغى')}
                                     </span>
-                                    {b.status === 'pending' && (
-                                        <button onClick={() => cancelBroadcast(b.id)}
-                                            className="text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors">
-                                            <Trash2 size={14} />
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         ))}
                     </div>
+                </div>
+
+                {/* Composer preview panel */}
+                <div className="glass rounded-2xl flex flex-col overflow-hidden">
+                    <div className="p-4 border-b border-brand-accent/10 flex items-center justify-between shrink-0">
+                        <span className="text-[13px] font-black text-brand-egg">{isEn ? 'Composer preview' : 'معاينة الحملة'}</span>
+                        <span className="text-[10px] text-brand-muted font-bold uppercase">DRAFT · {tpl?.title || (isEn ? 'NEW BROADCAST' : 'حملة جديدة')}</span>
+                    </div>
+
+                    <div className="flex-1 p-3 overflow-y-auto custom-scrollbar">
+                        {/* WhatsApp message card */}
+                        <div className="rounded-2xl p-3" style={{background:'rgba(0,40,20,0.6)',border:'1px solid rgba(140,200,80,0.1)'}}>
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-8 h-8 rounded-full bg-brand-accent flex items-center justify-center shrink-0">
+                                    <span className="text-[9px] font-black text-brand-bg">OF</span>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-brand-muted">business · verified</p>
+                                </div>
+                            </div>
+                            <div className="rounded-xl mb-3 flex items-end p-4 min-h-[110px]" style={{background:'#FF6400'}}>
+                                <p className="text-white font-black text-base leading-tight">{tpl?.title?.toUpperCase() || 'EID DROP · 2026'}</p>
+                            </div>
+                            <p className="text-[12px] text-brand-egg mb-1.5">
+                                {tpl ? `${tpl.title}, {'{first_name}'} ًںŒ™` : "Eid Mubarak, {first_name} ًںŒ™"}
+                            </p>
+                            <p className="text-[11px] text-brand-egg-mute mb-3">
+                                {messageText || 'Our Eid drop just landed. 24 new pieces. Members get 15% off — use EID15 at checkout.'}
+                            </p>
+                            <div className="flex gap-2 mb-2">
+                                <button className="flex-1 py-1.5 rounded-lg border border-brand-accent/30 text-[11px] font-bold text-brand-accent text-center">{isEn ? 'Shop the drop' : 'تسوق الآن'}</button>
+                                <button className="flex-1 py-1.5 rounded-lg border border-brand-accent/30 text-[11px] font-bold text-brand-accent text-center">{isEn ? 'Catalogue' : 'الكتالوج'}</button>
+                            </div>
+                            <p className="text-[10px] text-brand-muted text-right">14:02 ✓✓</p>
+                        </div>
+
+                        {/* Meta info */}
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                            {[
+                                { label: isEn ? 'Audience' : 'الجمهور', value: selectedPhones.size > 0 ? selectedPhones.size.toLocaleString() : customers.length.toLocaleString() },
+                                { label: isEn ? 'Template' : 'القالب', value: tpl?.meta_name || '—' },
+                                { label: isEn ? 'Cost' : 'التكلفة', value: estimatedCost },
+                            ].map((m, i) => (
+                                <div key={i} className="glass-subtle rounded-xl p-2.5">
+                                    <p className="text-[10px] text-brand-muted font-bold">{m.label}</p>
+                                    <p className="text-[12px] font-black text-brand-egg mt-0.5">{m.value}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Scheduler form */}
+                        {showScheduler && (
+                            <div className="mt-3 space-y-3 border-t border-brand-border/20 pt-3">
+                                <div className="flex glass-subtle rounded-xl p-0.5">
+                                    {['template','text'].map(t => (
+                                        <button key={t} onClick={() => setCampaignType(t)} className={'flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ' + (campaignType === t ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted')}>
+                                            {t === 'template' ? (isEn ? 'Template' : 'قالب') : (isEn ? 'Free Text' : 'نص حر')}
+                                        </button>
+                                    ))}
+                                </div>
+                                {campaignType === 'template' ? (
+                                    <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)} className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none">
+                                        <option value="">{isEn ? '-- Select template --' : '-- اختر قالباً --'}</option>
+                                        {Object.entries(templates).map(([k, t]) => <option key={k} value={k}>{t.title}</option>)}
+                                    </select>
+                                ) : (
+                                    <textarea value={messageText} onChange={e => setMessageText(e.target.value)} placeholder={isEn ? 'Hello {first_name}...' : 'مرحباً {first_name}...'} rows={3} className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none resize-none" />
+                                )}
+                                {campaignType === 'template' && selectedTemplate && templates[selectedTemplate]?.has_header_image && (
+                                    <input type="url" value={templateImageUrl} onChange={e => setTemplateImageUrl(e.target.value)} placeholder="Header image URL..." dir="ltr" className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none" />
+                                )}
+                                <input type="text" value={scheduleName} onChange={e => setScheduleName(e.target.value)} placeholder={isEn ? 'Campaign name...' : 'اسم الحملة...'} className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none" />
+                                <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="w-full bg-brand-input border border-brand-accent/20 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none" />
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {[{k:'all',l:isEn ? ('All (' + customers.length + ')') : (' الكل (' + customers.length + ')')},{k:'vip',l:'VIP'},{k:'buyer',l:isEn?'Buyers':'مشترين'}].map(({k,l}) => (
+                                        <button key={k} onClick={() => setSelectedTag(k)} className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${selectedTag === k ? 'bg-brand-accent text-brand-bg' : 'glass-subtle text-brand-muted'}`}>{l}</button>
+                                    ))}
+                                </div>
+                                {progress && (
+                                    <div className="glass-subtle rounded-xl p-3">
+                                        <div className="flex justify-between text-[10px] font-bold mb-1.5">
+                                            <span className="text-brand-accent">{isEn ? 'Progress' : 'التقدم'}</span>
+                                            <span>{progress.current}/{progress.total}</span>
+                                        </div>
+                                        <div className="w-full bg-brand-card rounded-full h-1.5 overflow-hidden">
+                                            <div className="h-1.5 rounded-full transition-all" style={{width: (progress.current/progress.total)*100 + '%', background:'#FF6400'}}></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="p-3 border-t border-brand-border/20 flex gap-2 shrink-0">
+                        <button onClick={handleSchedule} disabled={scheduling || !showScheduler || !scheduleDate} className="flex-1 py-2.5 rounded-xl border border-brand-border/30 text-[12px] font-bold text-brand-egg-mute hover:border-brand-accent/30 transition-all disabled:opacity-40">
+                            {scheduling ? '...' : (isEn ? 'Save draft' : 'حفظ مسودة')}
+                        </button>
+                        <button onClick={() => showScheduler ? startCampaign() : setShowScheduler(true)} disabled={sending} className="flex-1 py-2.5 rounded-xl text-[12px] font-bold text-white flex items-center justify-center gap-1.5 disabled:opacity-50" style={{background:'#FF6400'}}>
+                            <Zap size={12} />
+                            {sending ? (isEn ? 'Sending...' : 'جاري...') : (isEn ? 'Schedule blast' : 'جدولة الحملة')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Scheduled broadcasts list */}
+            {scheduledList.length > 0 && (
+                <div className="glass rounded-2xl p-4 space-y-3">
+                    <h3 className="text-sm font-black text-brand-egg flex items-center gap-2">
+                        <Calendar size={14} className="text-brand-accent" />
+                        {isEn ? 'Scheduled' : 'المجدولة'}
+                    </h3>
+                    {[...scheduledList].reverse().map(b => (
+                        <div key={b.id} className="flex items-center justify-between glass-subtle rounded-xl p-3">
+                            <div>
+                                <p className="text-[12px] font-bold text-brand-egg">{b.name}</p>
+                                <p className="text-[10px] text-brand-muted">{new Date(b.scheduled_at).toLocaleString(isEn ? 'en-US' : 'ar-EG')}</p>
+                                {b.status === 'done' && <p className="text-[10px] text-brand-accent mt-0.5">✓ {isEn ? ('Sent: ' + b.sent) : ('أُرسل: ' + b.sent)}</p>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full ' + (b.status === 'pending' ? 'bg-blue-500/20 text-blue-400' : b.status === 'done' ? 'bg-green-500/20 text-green-400' : b.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400')}>
+                                    {b.status === 'pending' ? (isEn ? 'Pending' : 'منتظر') : b.status === 'done' ? (isEn ? 'Done' : 'منتهي') : b.status === 'running' ? (isEn ? 'Running' : 'جاري') : (isEn ? 'Cancelled' : 'ملغى')}
+                                </span>
+                                {b.status === 'pending' && (
+                                    <button onClick={() => cancelBroadcast(b.id)} className="text-red-400 hover:text-red-300 p-1 rounded-lg hover:bg-red-500/10 transition-colors">
+                                        <Trash2 size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
     );
 };
 
-// ─────────────────────────────────────────────
+
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Quick Replies Manager
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const QuickRepliesManager = ({ showToast, lang }) => {
     const isEn = lang === 'en';
     const [list, setList] = useState([]);
@@ -2080,7 +2229,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
 
     return (
         <div className={`space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500 pb-20 ${isEn ? 'text-left' : 'text-right'}`}>
-            <div className="bg-brand-card/60 backdrop-blur-xl p-6 rounded-3xl border border-brand-accent/10">
+            <div className="bg-brand-card/60 backdrop-blur-xl p-6 rounded-2xl border border-brand-accent/10">
                 <h2 className="text-2xl font-bold text-brand-accent flex items-center gap-2">
                     <MessageSquareQuote size={26} /> {isEn ? 'Quick Replies' : 'الردود السريعة'}
                 </h2>
@@ -2090,7 +2239,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
             </div>
 
             {/* Add/Edit Form */}
-            <div className="glass p-6 rounded-3xl space-y-4">
+            <div className="glass p-6 rounded-2xl space-y-4">
                 <h3 className="font-bold text-brand-text">{editing ? (isEn ? 'Edit Reply' : 'تعديل الرد') : (isEn ? 'New Quick Reply' : 'رد سريع جديد')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
@@ -2111,7 +2260,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
                 </div>
                 <div className="flex gap-3">
                     <button onClick={handleSave} disabled={saving}
-                        className="bg-brand-accent text-brand-bg px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-brand-gold transition-all disabled:opacity-50 flex items-center gap-2">
+                        className="bg-brand-accent text-brand-bg px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2">
                         {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (editing ? (isEn ? 'Update' : 'تحديث') : (isEn ? 'Add Reply' : 'إضافة الرد'))}
                     </button>
                     {editing && (
@@ -2123,7 +2272,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
             </div>
 
             {/* Search & List */}
-            <div className="glass p-6 rounded-3xl space-y-4">
+            <div className="glass p-6 rounded-2xl space-y-4">
                 <div className="flex items-center gap-3">
                     <div className="relative flex-1">
                         <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted" />
@@ -2169,9 +2318,9 @@ const QuickRepliesManager = ({ showToast, lang }) => {
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Automations Manager
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const TRIGGER_TYPES = [
     { value: 'order_created', label: 'طلب جديد (شوبيفاي)', labelEn: 'New Order Created' },
     { value: 'order_status_changed', label: 'تغيير حالة الطلب', labelEn: 'Order Status Changed' },
@@ -2302,7 +2451,7 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
                         {isEn ? `Queue (${pendingCount})` : `طابور الانتظار (${pendingCount})`}
                     </button>
                     <button onClick={openNew}
-                        className="bg-brand-accent text-brand-bg px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-brand-gold transition-all">
+                        className="bg-brand-accent text-brand-bg px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-all">
                         <Plus size={18} /> {isEn ? 'New Automation' : 'أتمتة جديدة'}
                     </button>
                 </div>
@@ -2335,11 +2484,11 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
 
             {/* Automations List */}
             {automations.length === 0 ? (
-                <div className="glass rounded-3xl p-16 flex flex-col items-center gap-4 text-brand-muted">
+                <div className="glass rounded-2xl p-16 flex flex-col items-center gap-4 text-brand-muted">
                     <Zap size={48} className="opacity-20" />
                     <p className="font-bold text-lg opacity-50">{isEn ? 'No automations yet' : 'لا توجد أتمتة بعد'}</p>
                     <p className="text-sm opacity-40 text-center max-w-sm">{isEn ? 'Create your first automation to send messages automatically based on events.' : 'أنشئ أولى أتمتاتك لإرسال رسائل تلقائية بناءً على الأحداث.'}</p>
-                    <button onClick={openNew} className="mt-2 bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:bg-brand-gold transition-all flex items-center gap-2">
+                    <button onClick={openNew} className="mt-2 bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all flex items-center gap-2">
                         <Plus size={18} /> {isEn ? 'Create First Automation' : 'إنشاء أول أتمتة'}
                     </button>
                 </div>
@@ -2384,7 +2533,7 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                     onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
-                    <div className="bg-brand-sidebar border border-brand-accent/20 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl"
+                    <div className="bg-brand-sidebar border border-brand-accent/20 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl"
                         dir={isEn ? 'ltr' : 'rtl'}>
                         <div className="p-6 border-b border-brand-accent/10 flex items-center justify-between">
                             <h2 className="text-lg font-bold text-brand-accent">
@@ -2544,7 +2693,7 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
                                 {isEn ? 'Cancel' : 'إلغاء'}
                             </button>
                             <button onClick={handleSave} disabled={saving}
-                                className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:bg-brand-gold transition-all disabled:opacity-50">
+                                className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
                                 {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save Automation' : 'حفظ الأتمتة')}
                             </button>
                         </div>
@@ -2557,14 +2706,9 @@ const AutomationsManager = ({ templates, showToast, lang }) => {
 
 // --- Abandoned Carts Manager (Phase 3) ---
 const AbandonedCartsManager = ({ carts, refresh, showToast, lang }) => {
-    const [search, setSearch] = useState('');
     const [sendingPhone, setSendingPhone] = useState(null);
-    const [customMessages, setCustomMessages] = useState({});
+    const [heatFilter, setHeatFilter] = useState('all');
     const isEn = lang === 'en';
-
-    const handleCustomMsgChange = (phone, text) => {
-        setCustomMessages(prev => ({ ...prev, [phone]: text }));
-    };
 
     const triggerRecovery = async (cart) => {
         setSendingPhone(cart.clean_phone);
@@ -2573,171 +2717,210 @@ const AbandonedCartsManager = ({ carts, refresh, showToast, lang }) => {
                 phone: cart.clean_phone,
                 customerName: cart.customer?.first_name || (isEn ? 'Customer' : 'عميل'),
                 checkoutUrl: cart.abandoned_checkout_url,
-                customMsg: customMessages[cart.clean_phone] || ''
             });
-            showToast(isEn ? "Recovery message sent successfully!" : "تم إرسال رسالة استرجاع السلة بنجاح!", "success");
+            showToast(isEn ? 'Recovery message sent!' : 'تم إرسال رسالة الاسترجاع!', 'success');
             refresh();
         } catch (e) {
-            showToast(e.response?.data?.error || (isEn ? "Failed to send message" : "فشل إرسال الرسالة"), "error");
+            showToast(e.response?.data?.error || (isEn ? 'Failed to send' : 'فشل الإرسال'), 'error');
         }
         setSendingPhone(null);
     };
 
-    const filtered = carts.filter(c => {
-        const term = search.toLowerCase();
-        const name = (c.customer?.first_name || '').toLowerCase();
-        const phone = c.clean_phone || '';
-        return name.includes(term) || phone.includes(term);
-    });
+    const triggerAll = async () => {
+        const active = carts.filter(c => c.local_status !== 'confirmed' && c.local_status !== 'shipped');
+        for (const cart of active) await triggerRecovery(cart);
+    };
 
-    const recoveredCount = carts.filter(c => c.local_status === 'confirmed' || c.local_status === 'shipped').length;
-    const followedCount = carts.filter(c => c.drip_sent || c.local_status === 'followed_up').length;
+    const getHeat = (cart) => {
+        if (cart.local_status === 'confirmed' || cart.local_status === 'shipped') return 'recovered';
+        const mins = cart.created_at ? (Date.now() - new Date(cart.created_at).getTime()) / 60000 : Infinity;
+        if (mins < 120) return 'hot';
+        if (mins < 1440) return 'cooling';
+        return 'cold';
+    };
+
+    const getHeatInfo = (heat) => {
+        switch (heat) {
+            case 'hot':       return { label:'HOT',       badge:'bg-brand-gold/15 text-brand-gold border-brand-gold/30',       bar:'bg-brand-gold',    pct: 86 };
+            case 'cooling':   return { label:'COOLING',   badge:'bg-blue-500/15 text-blue-400 border-blue-500/25',             bar:'bg-blue-400',      pct: 72 };
+            case 'cold':      return { label:'COLD',      badge:'bg-brand-muted/15 text-brand-muted border-brand-muted/20',    bar:'bg-brand-muted/50',pct: 41 };
+            case 'recovered': return { label:'RECOVERED', badge:'bg-green-500/15 text-green-400 border-green-500/25',          bar:'bg-brand-accent',  pct: 100 };
+            default:          return { label:'COLD',      badge:'bg-brand-muted/15 text-brand-muted border-brand-muted/20',    bar:'bg-brand-muted/50',pct: 30 };
+        }
+    };
+
+    const avatarColors = ['bg-teal-600','bg-blue-600','bg-purple-600','bg-emerald-600','bg-pink-600','bg-orange-600'];
+    const getAvatarColor = (n) => avatarColors[Math.abs([...(n||'')].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
+    const getInitials = (name) => { const p=(name||'').trim().split(/\s+/); return p.length>=2?(p[0][0]+p[1][0]).toUpperCase():name.slice(0,2).toUpperCase(); };
+    const timeAgo = (d) => { if(!d) return ''; const m=Math.floor((Date.now()-new Date(d).getTime())/60000); if(m<60) return `${m}m ago`; if(m<1440) return `${Math.floor(m/60)}h ago`; return `${Math.floor(m/1440)}d ago`; };
+
+    const recoveredCarts = carts.filter(c => c.local_status==='confirmed'||c.local_status==='shipped');
+    const hotCarts       = carts.filter(c => getHeat(c)==='hot');
+    const coolingCarts   = carts.filter(c => getHeat(c)==='cooling');
+    const coldCarts      = carts.filter(c => getHeat(c)==='cold');
+    const activeCarts    = carts.filter(c => c.local_status!=='confirmed'&&c.local_status!=='shipped');
+    const atRisk         = activeCarts.reduce((s,c)=>s+parseFloat(c.total_price||0),0);
+    const recoveredVal   = recoveredCarts.reduce((s,c)=>s+parseFloat(c.total_price||0),0);
+    const recoveryRate   = carts.length ? Math.round((recoveredCarts.length/carts.length)*100) : 0;
+
+    const filtered = heatFilter==='all' ? carts : carts.filter(c=>getHeat(c)===heatFilter);
+
+    const playbook = [
+        { step:1, title: isEn?'Friendly nudge':'تذكير ودي',   time:'0h',  preview: isEn?'Hi {name}! Noticed you left some items behind...':'مرحباً {name}! لاحظنا أنك تركت بعض المنتجات...' },
+        { step:2, title: isEn?'Soft offer':'عرض لطيف',        time:'1h',  preview: isEn?'Free shipping if you complete now → {link}':'شحن مجاني إذا أكملت الآن → {link}' },
+        { step:3, title: isEn?'Discount nudge':'خصم تحفيزي',  time:'24h', preview: isEn?'Here\'s 10% off — code FLOW10. Only for you.':'خصم 10% — كود FLOW10. خصيصاً لك.' },
+        { step:4, title: isEn?'Final reminder':'تذكير أخير',  time:'72h', preview: isEn?'Last chance — your cart expires soon.':'فرصة أخيرة — سلتك ستنتهي قريباً.' },
+    ];
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Top Dashboard KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass p-6 rounded-3xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-all"></div>
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-xs font-bold text-brand-muted">{isEn ? 'Total Abandoned Carts' : 'إجمالي السلات المتروكة'}</p>
-                            <h3 className="text-3xl font-black mt-2 text-amber-500">{carts.length}</h3>
-                        </div>
-                        <div className="p-3 bg-amber-500/10 rounded-2xl text-amber-500">
-                            <Clock size={22} />
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-brand-muted mt-4">{isEn ? 'Shopping carts awaiting checkout completion' : 'سلات تسوق لم يتم استكمال الدفع لها'}</p>
-                </div>
-
-                <div className="glass p-6 rounded-3xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-all"></div>
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-xs font-bold text-brand-muted">{isEn ? 'Followed-up Automatically' : 'تمت المتابعة التلقائية'}</p>
-                            <h3 className="text-3xl font-black mt-2 text-blue-400">{followedCount}</h3>
-                        </div>
-                        <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400">
-                            <Send size={22} />
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-brand-muted mt-4">{isEn ? 'Follow-up messages sent to recover carts' : 'تم إرسال رسائل تذكيرية لاسترجاعهم'}</p>
-                </div>
-
-                <div className="glass p-6 rounded-3xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-2xl group-hover:bg-green-500/10 transition-all"></div>
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-xs font-bold text-brand-muted">{isEn ? 'Recovered Successfully' : 'تم الاسترجاع بنجاح'}</p>
-                            <h3 className="text-3xl font-black mt-2 text-green-500">{recoveredCount}</h3>
-                        </div>
-                        <div className="p-3 bg-green-500/10 rounded-2xl text-green-500">
-                            <CheckCircle2 size={22} />
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-brand-muted mt-4">{isEn ? 'Carts successfully converted into confirmed orders' : 'طلبات تحولت إلى مبيعات مؤكدة'}</p>
+        <div className={`space-y-4 animate-in fade-in duration-500 ${isEn?'text-left':'text-right'}`}>
+            {/* Subtitle + header buttons */}
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">
+                    {isEn?'HUNTER ACTIVE':'هانتر نشط'} · {activeCarts.length} {isEn?'IN RECOVERY':'في الاسترجاع'} · EGP {recoveredVal.toLocaleString()} {isEn?'RECOVERED THIS WEEK':'مسترجع الأسبوع'}
+                </p>
+                <div className="flex gap-2">
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass border border-brand-accent/25 text-xs font-bold text-brand-accent">
+                        <span className="w-2 h-2 rounded-full bg-brand-accent shadow-[0_0_6px_#8CC850]"></span>
+                        {isEn?'Hunter ON':'هانتر مفعل'}
+                    </span>
+                    <button onClick={triggerAll} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-all" style={{background:'#FF6400'}}>
+                        <Zap size={13} /> {isEn?`Recover all · ${activeCarts.length}`:`استرجاع الكل · ${activeCarts.length}`}
+                    </button>
                 </div>
             </div>
 
-            {/* Carts Table Panel */}
-            <div className="glass p-8 rounded-3xl space-y-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h3 className="text-lg font-bold">{isEn ? 'Abandoned Carts Management' : 'إدارة حملات استرجاع السلات (Abandoned Carts)'}</h3>
-                        <p className="text-xs text-brand-muted mt-1">{isEn ? 'Track clients who left checkout page and broadcast personalized recovery links' : 'تتبع العملاء الذين غادروا صفحة الدفع وأرسل لهم عروض استرجاع مخصصة'}</p>
+            {/* Stat cards */}
+            <div className="grid grid-cols-4 gap-3">
+                {[
+                    { label:isEn?'ACTIVE CARTS':'السلات النشطة',          val:activeCarts.length, sub:`EGP ${atRisk.toLocaleString()} ${isEn?'at risk':'في خطر'}`,         subCls:'text-brand-gold' },
+                    { label:isEn?'RECOVERY RATE':'معدل الاسترجاع',        val:`${recoveryRate}%`, sub:isEn?'last 30 days':'آخر 30 يوم',                                    subCls:'text-brand-muted' },
+                    { label:isEn?'RECOVERED THIS WEEK':'مسترجع الأسبوع',  val:null, rev:recoveredVal, sub:`+38% ${isEn?'vs prev.':'مقارنة بالسابق'}`,                     subCls:'text-brand-accent' },
+                    { label:isEn?'HOT LEADS':'عملاء ساخنون',              val:hotCarts.length,    sub:`${isEn?'probability':'احتمالية'} > 80%`,                            subCls:'text-brand-gold' },
+                ].map((c,i)=>(
+                    <div key={i} className="glass rounded-2xl p-5">
+                        <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-2">{c.label}</p>
+                        {c.rev!==undefined
+                            ? <h3 className="text-3xl font-bold text-brand-egg"><span className="text-sm text-brand-muted font-mono">EGP </span>{c.rev.toLocaleString()}</h3>
+                            : <h3 className="text-3xl font-bold text-brand-egg">{c.val}</h3>
+                        }
+                        <p className={`text-[11px] font-mono mt-1 ${c.subCls}`}>{c.sub}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Main two-column layout */}
+            <div className="grid grid-cols-[1fr_320px] gap-3">
+                {/* Cart pipeline */}
+                <div className="glass rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-brand-egg">{isEn?'Cart pipeline':'خط أنابيب السلات'}</span>
+                            <span className="text-[10px] font-mono text-brand-muted uppercase tracking-wider">{isEn?'REAL-TIME':'فوري'}</span>
+                        </div>
+                        <div className="flex gap-1.5">
+                            {[
+                                { id:'all',      label:isEn?'All':'الكل',           dot:null,           count:carts.length },
+                                { id:'hot',      label:isEn?'Hot':'ساخن',           dot:'bg-brand-gold', count:hotCarts.length },
+                                { id:'cooling',  label:isEn?'Cooling':'يبرد',       dot:'bg-blue-400',   count:coolingCarts.length },
+                                { id:'cold',     label:isEn?'Cold':'بارد',          dot:'bg-brand-muted',count:coldCarts.length },
+                            ].map(f=>(
+                                <button key={f.id} onClick={()=>setHeatFilter(f.id)}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${heatFilter===f.id?'bg-brand-accent text-brand-bg':'glass border border-brand-border/30 text-brand-muted hover:border-brand-accent/30'}`}>
+                                    {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`}></span>}
+                                    {f.label} · {f.count}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-64">
-                            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-muted" size={16} />
-                            <input
-                                type="text"
-                                placeholder={isEn ? "Search name or phone..." : "بحث بالاسم أو الهاتف..."}
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                className="w-full bg-brand-bg/50 border border-brand-accent/10 rounded-xl pr-10 pl-4 py-2.5 text-xs focus:outline-none focus:border-brand-accent transition-all"
-                            />
-                        </div>
-                        <button onClick={refresh} className="p-2.5 bg-brand-bg/50 border border-brand-accent/10 rounded-xl hover:bg-brand-card transition-colors text-brand-muted hover:text-brand-text">
-                            <RefreshCcw size={16} />
-                        </button>
+                    <div className="space-y-2">
+                        {filtered.map((cart, i) => {
+                            const heat = getHeat(cart);
+                            const hi   = getHeatInfo(heat);
+                            const name = `${cart.customer?.first_name||''} ${cart.customer?.last_name||''}`.trim() || 'Unknown';
+                            const items = cart.line_items || [];
+                            const firstItem = items[0]?.title || (isEn?'Product':'منتج');
+                            const extraItems = items.length > 1 ? ` +${items.length-1}` : '';
+                            const secondItem = items[1]?.title ? ` · ${items[1].title}` : '';
+                            const preview = firstItem + (items.length>1 ? secondItem + (items.length>2 ? ` +${items.length-2}` : '') : '');
+                            const isRecovered = heat === 'recovered';
+                            return (
+                                <div key={i} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${isRecovered?'bg-brand-accent/5 border-brand-accent/15':'glass-subtle border-brand-border/20 hover:border-brand-accent/20'}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${getAvatarColor(name)}`}>
+                                        {getInitials(name)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-sm text-brand-egg">{name}</p>
+                                        <p className="text-[11px] text-brand-muted truncate">{preview}</p>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                        <p className="font-bold text-sm text-brand-egg">{cart.total_price ? `EGP ${parseFloat(cart.total_price).toLocaleString()}` : '—'}</p>
+                                        <p className="text-[11px] text-brand-muted">{items.length} {isEn?(items.length===1?'item':'items'):'منتج'}</p>
+                                    </div>
+                                    <div className="w-28 shrink-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <div className="flex-1 h-1.5 bg-brand-muted/20 rounded-full overflow-hidden">
+                                                <div className={`h-full rounded-full transition-all ${hi.bar}`} style={{width:`${hi.pct}%`}}></div>
+                                            </div>
+                                            <span className="text-[10px] font-mono text-brand-muted">{hi.pct}%</span>
+                                        </div>
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${hi.badge}`}>
+                                            {isRecovered && <Check size={9} />}
+                                            {hi.label}
+                                        </span>
+                                    </div>
+                                    <span className="text-[11px] text-brand-muted font-mono shrink-0 w-16 text-center">{timeAgo(cart.created_at)}</span>
+                                    {!isRecovered ? (
+                                        <button onClick={()=>triggerRecovery(cart)} disabled={sendingPhone===cart.clean_phone}
+                                            className="px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-all disabled:opacity-50 shrink-0" style={{background:'#FF6400'}}>
+                                            {sendingPhone===cart.clean_phone ? <RefreshCcw size={13} className="animate-spin"/> : (isEn?'Send':'إرسال')}
+                                        </button>
+                                    ) : <div className="w-16 shrink-0"></div>}
+                                </div>
+                            );
+                        })}
+                        {filtered.length===0 && (
+                            <div className="py-10 text-center text-brand-muted text-sm">{isEn?'No carts found':'لا توجد سلات'}</div>
+                        )}
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                            <tr className="border-b border-brand-accent/5 text-brand-muted">
-                                <tr className="hidden"></tr>
-                                <th className="p-4 text-right font-bold">{isEn ? 'Customer' : 'العميل'}</th>
-                                <th className="p-4 text-right font-bold">{isEn ? 'Phone Number' : 'رقم الهاتف'}</th>
-                                <th className="p-4 text-right font-bold">{isEn ? 'Cart Value' : 'قيمة السلة'}</th>
-                                <th className="p-4 text-right font-bold">{isEn ? 'Status' : 'الحالة'}</th>
-                                <th className="p-4 text-right font-bold">{isEn ? 'Custom Message (Optional)' : 'تخصيص الرسالة (اختياري)'}</th>
-                                <th className="p-4 text-center font-bold">{isEn ? 'Direct Action' : 'إجراء مباشر'}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-brand-accent/5">
-                            {filtered.map((cart, idx) => (
-                                <tr key={idx} className="hover:bg-brand-bg/30 transition-colors group">
-                                    <td className="p-4 text-right font-bold">
-                                        {cart.customer?.first_name || (isEn ? 'Unregistered Client' : 'عميل غير مسجل')}
-                                    </td>
-                                    <td className="p-4 text-right font-mono text-brand-muted" dir="ltr">
-                                        {cart.clean_phone}
-                                    </td>
-                                    <td className="p-4 text-right font-bold text-brand-gold">
-                                        {cart.total_price ? `${parseFloat(cart.total_price).toLocaleString()} EGP` : (isEn ? 'N/A' : 'غير محدد')}
-                                    </td>
-                                    <td className="p-4 text-right">
-                                        {cart.local_status === 'confirmed' || cart.local_status === 'shipped' ? (
-                                            <span className="bg-green-500/10 text-green-500 border border-green-500/20 px-2.5 py-1 rounded-full font-bold text-[10px]">{isEn ? 'Recovered' : 'تم الاسترجاع'}</span>
-                                        ) : cart.drip_sent ? (
-                                            <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full font-bold text-[10px]">{isEn ? 'Messaged' : 'تم المراسلة'}</span>
-                                        ) : (
-                                            <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-full font-bold text-[10px]">{isEn ? 'Abandoned' : 'متروكة'}</span>
-                                        )}
-                                    </td>
-                                    <td className="p-4 text-right">
-                                        <input
-                                            type="text"
-                                            placeholder={isEn ? "Alternative personalized override..." : "رسالة مخصصة بديلة..."}
-                                            value={customMessages[cart.clean_phone] ?? ''}
-                                            onChange={e => handleCustomMsgChange(cart.clean_phone, e.target.value)}
-                                            className="w-full bg-brand-bg/40 border border-brand-accent/10 rounded-lg px-3 py-1.5 text-[11px] focus:outline-none focus:border-brand-accent"
-                                        />
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <button
-                                            onClick={() => triggerRecovery(cart)}
-                                            disabled={sendingPhone === cart.clean_phone}
-                                            className={`px-4 py-1.5 rounded-lg font-bold text-[11px] transition-all flex items-center justify-center gap-1.5 mx-auto ${cart.drip_sent
-                                                    ? 'bg-brand-bg text-brand-muted hover:text-brand-text border border-brand-accent/10'
-                                                    : 'bg-brand-accent text-brand-bg hover:shadow-lg hover:shadow-brand-accent/20'
-                                                }`}
-                                        >
-                                            {sendingPhone === cart.clean_phone ? (
-                                                <div className="w-3.5 h-3.5 border-2 border-brand-bg border-t-transparent rounded-full animate-spin"></div>
-                                            ) : (
-                                                <>
-                                                    <Send size={12} />
-                                                    <span>{cart.drip_sent ? (isEn ? 'Resend' : 'إعادة الإرسال') : (isEn ? 'Recover' : 'إرسال الاسترجاع')}</span>
-                                                </>
-                                            )}
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {filtered.length === 0 && (
-                                <tr>
-                                    <td colSpan="6" className="text-center py-12 text-brand-muted">
-                                        {isEn ? 'No matching abandoned carts found.' : 'لا توجد سلات متروكة مطابقة للبحث حالياً.'}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                {/* Recovery Playbook */}
+                <div className="glass rounded-2xl p-5 flex flex-col">
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className="font-bold text-brand-egg">{isEn?'Recovery Playbook':'خطة الاسترجاع'}</span>
+                        <span className="text-[10px] font-mono text-brand-muted uppercase tracking-wider">{isEn?'AUTOMATED':'تلقائي'}</span>
+                    </div>
+                    <div className="space-y-3 flex-1">
+                        {playbook.map((step, i) => (
+                            <div key={i} className="flex gap-3">
+                                <div className="flex flex-col items-center shrink-0">
+                                    <div className="w-7 h-7 rounded-full bg-brand-accent/15 border border-brand-accent/25 flex items-center justify-center text-[11px] font-bold text-brand-accent">
+                                        {step.step}
+                                    </div>
+                                    {i < playbook.length-1 && <div className="w-px flex-1 bg-brand-accent/10 my-1"></div>}
+                                </div>
+                                <div className="flex-1 pb-3">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                        <span className="text-sm font-bold text-brand-egg">{step.title}</span>
+                                        <span className="text-[10px] font-mono text-brand-muted">{step.time}</span>
+                                    </div>
+                                    <p className="text-[11px] text-brand-muted leading-relaxed line-clamp-2">{step.preview}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Projected recovery */}
+                    <div className="mt-4 pt-4 border-t border-brand-accent/10">
+                        <p className="text-[9px] font-mono text-brand-muted uppercase tracking-wider mb-1">{isEn?'PROJECTED RECOVERY THIS WEEK':'الاسترجاع المتوقع هذا الأسبوع'}</p>
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-brand-accent">+ EGP {Math.round(atRisk * 0.38).toLocaleString()}</span>
+                            <svg viewBox="0 0 60 24" className="w-14 h-6 opacity-70">
+                                <polyline points="0,20 10,16 20,14 30,10 40,8 50,5 60,3" fill="none" stroke="#8CC850" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2745,15 +2928,14 @@ const AbandonedCartsManager = ({ carts, refresh, showToast, lang }) => {
 };
 
 // --- Product Sender (Shopify Products → WhatsApp) ---
-const CatalogManager = ({ showToast, lang }) => {
+const CatalogManager = ({ showToast, lang, inbox = [] }) => {
     const [products, setProducts] = useState([]);
     const [loadingProducts, setLoadingProducts] = useState(true);
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState(null);
-    const [targetPhone, setTargetPhone] = useState('');
+    const [productFilter, setProductFilter] = useState('all');
+    const [selectedRecipients, setSelectedRecipients] = useState([]);
     const [customNote, setCustomNote] = useState('');
-    const [msgHeader, setMsgHeader] = useState('');
-    const [origPrice, setOrigPrice] = useState('');
     const [sending, setSending] = useState(false);
     const isEn = lang === 'en';
 
@@ -2764,47 +2946,36 @@ const CatalogManager = ({ showToast, lang }) => {
             .finally(() => setLoadingProducts(false));
     }, []);
 
-    const filtered = products.filter(p =>
-        p.title.toLowerCase().includes(search.toLowerCase()) ||
-        (p.sku || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = products.filter(p => {
+        const q = search.toLowerCase();
+        const matchSearch = !search || p.title.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q);
+        if (!matchSearch) return false;
+        if (productFilter === 'bestseller') return p.tags?.includes('bestseller') || p.position <= 3;
+        if (productFilter === 'new')        return p.tags?.includes('new') || (p.created_at && (Date.now()-new Date(p.created_at).getTime()) < 30*86400000);
+        if (productFilter === 'low_stock')  return p.inventory_quantity !== undefined && p.inventory_quantity < 5;
+        return true;
+    });
 
     const buildMessage = (p) => {
-        const lines = [];
-        if (msgHeader) { lines.push(`🎉 *${msgHeader}*`); lines.push(''); }
-        lines.push(`🛍️ *${p.title}*`);
-        lines.push('');
-        const orig = parseFloat(origPrice);
-        const sale = parseFloat(p.price);
-        if (origPrice && orig > sale) {
-            const pct = Math.round(((orig - sale) / orig) * 100);
-            lines.push(`~${isEn ? 'Was' : 'كان'}: ${orig.toFixed(0)} EGP~`);
-            lines.push(`✅ *${isEn ? 'Now' : 'الآن'}: ${sale.toFixed(0)} EGP*`);
-            lines.push(`🔥 ${isEn ? `You save ${pct}%!` : `وفّر ${pct}%!`}`);
-        } else {
-            lines.push(`💰 ${isEn ? 'Price' : 'السعر'}: ${p.price} EGP`);
-        }
-        if (p.sku) lines.push(`📦 SKU: ${p.sku}`);
-        if (customNote) { lines.push(''); lines.push(customNote); }
-        lines.push('');
-        lines.push(`🔗 ${p.url}`);
-        return lines.join('\n');
+        const name = p.title;
+        const sku = p.sku || '';
+        const price = parseFloat(p.price||0).toLocaleString();
+        const note = customNote || `Here's the ${name} ًں–¤ In stock and ready to ship.`;
+        return `${note} {order_link}`;
     };
 
-    const handleSend = async (e) => {
-        e.preventDefault();
-        if (!selected || !targetPhone) {
-            showToast(isEn ? 'Select a product and enter phone number' : 'اختار منتج وادخل رقم الهاتف', 'error');
+    const handleSend = async () => {
+        if (!selected || selectedRecipients.length === 0) {
+            showToast(isEn ? 'Select a product and at least one recipient' : 'اختار منتج ومستلم واحد على الأقل', 'error');
             return;
         }
         setSending(true);
         try {
-            await axios.post(`${API_URL}/whatsapp/send`, {
-                phone: targetPhone,
-                textMsg: buildMessage(selected)
-            });
-            showToast(isEn ? 'Product sent successfully!' : 'تم إرسال المنتج بنجاح!', 'success');
-            setTargetPhone('');
+            for (const phone of selectedRecipients) {
+                await axios.post(`${API_URL}/whatsapp/send`, { phone, textMsg: buildMessage(selected) });
+            }
+            showToast(isEn ? `Product sent to ${selectedRecipients.length} chat(s)!` : `تم الإرسال لـ ${selectedRecipients.length} محادثة!`, 'success');
+            setSelectedRecipients([]);
             setCustomNote('');
         } catch (err) {
             showToast(err.response?.data?.error || (isEn ? 'Send failed' : 'فشل الإرسال'), 'error');
@@ -2812,176 +2983,196 @@ const CatalogManager = ({ showToast, lang }) => {
         setSending(false);
     };
 
+    const toggleRecipient = (phone) => setSelectedRecipients(p => p.includes(phone) ? p.filter(x=>x!==phone) : [...p, phone]);
+
+    const avatarColors = ['bg-teal-600','bg-blue-600','bg-purple-600','bg-pink-600','bg-orange-600','bg-emerald-600'];
+    const getAvatarColor = (n) => avatarColors[Math.abs([...(n||'')].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
+    const getInitials = (name) => { const p=(name||'').trim().split(/\s+/); return p.length>=2?(p[0][0]+p[1][0]).toUpperCase():(name||'??').slice(0,2).toUpperCase(); };
+    const timeAgo = (t) => { if(!t) return ''; const m=Math.floor((Date.now()-new Date(t.replace(' ','T')).getTime())/60000); return m<60?`${m}m`:`${Math.floor(m/60)}h`; };
+
+    const recipients = inbox.slice(0, 8);
+
     return (
-        <div className={`space-y-6 animate-in fade-in duration-500 ${isEn ? 'text-left' : 'text-right'}`}>
-            {/* Header */}
-            <div className="glass p-6 rounded-2xl flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-bold">{isEn ? 'Send Product to Customer' : 'إرسال منتج لعميل'}</h2>
-                    <p className="text-xs text-brand-muted mt-1">{isEn ? 'Pick a product from your Shopify store and send it directly via WhatsApp.' : 'اختار منتج من متجرك على شوبيفاي وابعته للعميل على واتساب مباشرةً'}</p>
+        <div className={`space-y-3 animate-in fade-in duration-500 ${isEn?'text-left':'text-right'}`}>
+            {/* Subtitle row */}
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">{isEn?'DROP A PRODUCT CARD INTO ANY CHAT':'أرسل بطاقة منتج لأي محادثة'}</p>
+                <div className="flex gap-2">
+                    <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass border border-brand-border/30 text-xs font-bold text-brand-egg hover:border-brand-accent/30 transition-all">
+                        <LayoutDashboard size={13} /> {isEn?'Switch view':'تغيير العرض'}
+                    </button>
+                    <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass border border-brand-border/30 text-xs font-bold text-brand-egg hover:border-brand-accent/30 transition-all">
+                        <Link2 size={13} /> {isEn?'Get catalogue QR':'رمز الكتالوج'}
+                    </button>
                 </div>
-                <span className="bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-[10px] font-bold px-3 py-1 rounded-full shrink-0">Shopify</span>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Product List */}
-                <div className="lg:col-span-2 glass p-6 rounded-2xl space-y-4">
-                    <div className="flex items-center gap-3">
-                        <input
-                            type="text"
-                            placeholder={isEn ? 'Search products...' : 'ابحث عن منتج...'}
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            className="flex-1 bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-brand-accent"
-                            dir={isEn ? 'ltr' : 'rtl'}
-                        />
-                        <span className="text-xs text-brand-muted shrink-0">{filtered.length} {isEn ? 'items' : 'منتج'}</span>
+            <div className="grid grid-cols-[1fr_340px] gap-3 h-[calc(100vh-14rem)]">
+                {/* Catalogue panel */}
+                <div className="glass rounded-2xl p-5 flex flex-col overflow-hidden">
+                    {/* Panel header */}
+                    <div className="flex items-center justify-between mb-4 shrink-0">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-brand-egg">{isEn?'Catalogue':'الكتالوج'}</span>
+                            <span className="text-[10px] font-mono text-brand-muted uppercase">{products.length} {isEn?'ACTIVE · SYNCED FROM SHOPIFY':'نشط · متزامن مع شوبيفاي'}</span>
+                        </div>
+                        <div className="relative">
+                            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
+                            <input value={search} onChange={e=>setSearch(e.target.value)}
+                                placeholder={isEn?'Search...':'بحث...'}
+                                className="bg-brand-bg/50 border border-brand-border/30 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-brand-accent/40 w-36" />
+                        </div>
                     </div>
-
-                    {loadingProducts ? (
-                        <div className="flex items-center justify-center py-16">
-                            <div className="w-8 h-8 border-2 border-brand-accent border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                    ) : filtered.length === 0 ? (
-                        <div className="text-center py-16 text-brand-muted">
-                            <Package size={36} className="mx-auto mb-3 opacity-30" />
-                            <p className="text-sm">{isEn ? 'No products found. Make sure Shopify is connected in Settings.' : 'لا توجد منتجات. تأكد من ربط شوبيفاي في الإعدادات.'}</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
-                            {filtered.map(p => (
-                                <div
-                                    key={p.id}
-                                    onClick={() => setSelected(p)}
-                                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                                        selected?.id === p.id
-                                            ? 'border-brand-accent bg-brand-accent/10'
-                                            : 'border-brand-accent/10 bg-brand-bg/30 hover:border-brand-accent/30'
-                                    }`}
-                                >
-                                    {p.image ? (
-                                        <img src={p.image} alt={p.title} className="w-12 h-12 rounded-lg object-cover shrink-0 bg-brand-bg/50" />
-                                    ) : (
-                                        <div className="w-12 h-12 rounded-lg bg-brand-accent/10 flex items-center justify-center shrink-0">
-                                            <Package size={20} className="text-brand-accent/50" />
-                                        </div>
-                                    )}
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold truncate">{p.title}</p>
-                                        <p className="text-xs text-brand-accent font-mono mt-0.5">{p.price} EGP</p>
-                                        {p.sku && <p className="text-[10px] text-brand-muted font-mono truncate">{p.sku}</p>}
-                                    </div>
-                                    {selected?.id === p.id && <CheckCircle2 size={16} className="text-brand-accent shrink-0 ml-auto" />}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Send Form */}
-                <div className="glass p-6 rounded-2xl space-y-4">
-                    <h3 className="text-sm font-bold border-b border-brand-accent/10 pb-3">{isEn ? 'Send to Customer' : 'إرسال للعميل'}</h3>
-
-                    {selected ? (
-                        <div className="flex items-center gap-2 bg-brand-accent/10 border border-brand-accent/20 rounded-xl p-3">
-                            {selected.image
-                                ? <img src={selected.image} alt={selected.title} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                                : <div className="w-10 h-10 rounded-lg bg-brand-accent/20 flex items-center justify-center shrink-0"><Package size={16} className="text-brand-accent" /></div>
-                            }
-                            <div className="min-w-0">
-                                <p className="text-xs font-bold truncate">{selected.title}</p>
-                                <p className="text-xs text-brand-accent">{selected.price} EGP</p>
+                    {/* Filter chips */}
+                    <div className="flex gap-1.5 mb-4 shrink-0">
+                        {[
+                            {id:'all',        label:isEn?'All':'الكل',           dot:null },
+                            {id:'bestseller', label:isEn?'Bestsellers':'الأكثر مبيعاً', dot:null },
+                            {id:'new',        label:isEn?'New':'جديد',           dot:null },
+                            {id:'low_stock',  label:isEn?'Low stock':'مخزون منخفض', dot:'bg-brand-gold' },
+                        ].map(f=>(
+                            <button key={f.id} onClick={()=>setProductFilter(f.id)}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${productFilter===f.id?'bg-brand-accent text-brand-bg':'glass border border-brand-border/30 text-brand-muted hover:border-brand-accent/30'}`}>
+                                {f.dot && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`}></span>}
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
+                    {/* Product grid */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        {loadingProducts ? (
+                            <div className="flex items-center justify-center h-full">
+                                <div className="w-8 h-8 border-2 border-brand-accent border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="bg-brand-bg/40 border border-dashed border-brand-accent/20 rounded-xl p-4 text-center text-xs text-brand-muted">
-                            {isEn ? '← Select a product first' : 'اختار منتجاً أولاً ←'}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSend} className="space-y-3">
-                        <div>
-                            <label className="block text-xs font-bold mb-1.5">{isEn ? '🎉 Message Header (optional)' : '🎉 عنوان الرسالة الجذاب (اختياري)'}</label>
-                            <input
-                                type="text"
-                                placeholder={isEn ? 'e.g. Exclusive offer just for you!' : 'مثال: عرض حصري خاص بيك!'}
-                                value={msgHeader}
-                                onChange={e => setMsgHeader(e.target.value)}
-                                className="w-full bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-brand-accent"
-                                dir={isEn ? 'ltr' : 'rtl'}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold mb-1.5">{isEn ? '🔥 Original Price before discount (optional)' : '🔥 السعر الأصلي قبل الخصم (اختياري)'}</label>
-                            <input
-                                type="number"
-                                placeholder={isEn ? 'e.g. 350 — leave empty if no discount' : 'مثال: 350 — اتركه فاضي لو مفيش خصم'}
-                                value={origPrice}
-                                onChange={e => setOrigPrice(e.target.value)}
-                                className="w-full bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-brand-accent"
-                                dir="ltr"
-                                min="0"
-                            />
-                            {selected && origPrice && parseFloat(origPrice) > parseFloat(selected.price) && (
-                                <p className="text-[11px] text-green-400 mt-1 font-bold">
-                                    🏷️ {isEn
-                                        ? `Discount: ${Math.round(((parseFloat(origPrice) - parseFloat(selected.price)) / parseFloat(origPrice)) * 100)}% OFF`
-                                        : `خصم: ${Math.round(((parseFloat(origPrice) - parseFloat(selected.price)) / parseFloat(origPrice)) * 100)}%`
-                                    }
-                                </p>
-                            )}
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold mb-1.5">{isEn ? 'Customer Phone *' : 'رقم الهاتف *'}</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. 2010xxxxxxxx"
-                                value={targetPhone}
-                                onChange={e => setTargetPhone(e.target.value)}
-                                className="w-full bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-brand-accent"
-                                dir="ltr"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold mb-1.5">{isEn ? 'Additional Note (optional)' : 'ملاحظة إضافية (اختياري)'}</label>
-                            <textarea
-                                placeholder={isEn ? 'e.g. Limited stock, order now!' : 'مثال: كمية محدودة، اطلب دلوقتي!'}
-                                rows={2}
-                                value={customNote}
-                                onChange={e => setCustomNote(e.target.value)}
-                                className="w-full bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-brand-accent custom-scrollbar resize-none"
-                                dir={isEn ? 'ltr' : 'rtl'}
-                            />
-                        </div>
-
-                        {selected && (
-                            <div className="bg-brand-bg/40 rounded-xl p-3 border border-brand-accent/10">
-                                <p className="text-[10px] text-brand-muted mb-1 font-bold">{isEn ? 'Message Preview:' : 'معاينة الرسالة:'}</p>
-                                <pre className="text-[10px] text-brand-text whitespace-pre-wrap font-sans leading-relaxed" dir="ltr">{buildMessage(selected)}</pre>
+                        ) : filtered.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-brand-muted">
+                                <Package size={36} className="opacity-20 mb-3"/>
+                                <p className="text-sm">{isEn?'No products. Connect Shopify in Settings.':'لا توجد منتجات. اربط شوبيفاي من الإعدادات.'}</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-3 pb-2">
+                                {filtered.map(p => {
+                                    const isBestseller = p.tags?.includes('bestseller') || p.position <= 3;
+                                    const isNew = p.tags?.includes('new');
+                                    const isLow = p.inventory_quantity !== undefined && p.inventory_quantity < 5;
+                                    const isSelected = selected?.id === p.id;
+                                    return (
+                                        <div key={p.id} onClick={()=>setSelected(p)}
+                                            className={`rounded-2xl overflow-hidden border cursor-pointer transition-all group ${isSelected?'border-brand-accent shadow-[0_0_0_2px_rgba(140,200,80,0.3)]':'border-brand-border/20 hover:border-brand-accent/30'}`}>
+                                            {/* Image */}
+                                            <div className="relative bg-brand-green-soft aspect-[4/3]">
+                                                {p.image
+                                                    ? <img src={p.image} alt={p.title} className="w-full h-full object-cover"/>
+                                                    : <div className="w-full h-full flex items-center justify-center"><Package size={32} className="text-brand-accent/30"/></div>
+                                                }
+                                                {isBestseller && <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-accent text-brand-bg">BESTSELLER</span>}
+                                                {isNew && !isBestseller && <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-accent text-brand-bg">NEW</span>}
+                                                {isLow && <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold" style={{background:'#FF6400',color:'white'}}>LOW STOCK</span>}
+                                            </div>
+                                            {/* Info */}
+                                            <div className="p-3">
+                                                <p className="font-bold text-sm text-brand-egg truncate">{p.title}</p>
+                                                {p.sku && <p className="text-[10px] text-brand-muted font-mono mt-0.5 truncate">{p.sku}</p>}
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className="text-brand-accent font-bold text-sm">EGP {parseFloat(p.price||0).toLocaleString()}</span>
+                                                    <button onClick={e=>{e.stopPropagation();setSelected(p);}}
+                                                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold text-white hover:opacity-90 transition-all" style={{background:'#FF6400'}}>
+                                                        <Send size={11}/> {isEn?'Send':'إرسال'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
+                    </div>
+                </div>
 
-                        <button
-                            type="submit"
-                            disabled={sending || !selected}
-                            className="w-full bg-brand-accent text-brand-bg font-bold py-3 rounded-xl hover:shadow-xl hover:shadow-brand-accent/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {sending
-                                ? <div className="w-4 h-4 border-2 border-brand-bg border-t-transparent rounded-full animate-spin"></div>
-                                : <><Send size={14} /><span>{isEn ? 'Send via WhatsApp' : 'إرسال عبر واتساب'}</span></>
-                            }
+                {/* Share panel */}
+                <div className="glass rounded-2xl p-5 flex flex-col overflow-hidden">
+                    <div className="flex items-center gap-2 mb-4 shrink-0">
+                        <span className="font-bold text-brand-egg">{isEn?'Share to':'مشاركة مع'}</span>
+                        <span className="text-[10px] font-mono text-brand-accent uppercase tracking-wider">WHATSAPP</span>
+                    </div>
+
+                    {/* Selected product */}
+                    {selected ? (
+                        <div className="flex items-center gap-3 p-3 glass-subtle rounded-xl border border-brand-accent/20 mb-4 shrink-0">
+                            <div className="w-14 h-14 rounded-xl overflow-hidden bg-brand-green-soft shrink-0">
+                                {selected.image ? <img src={selected.image} alt={selected.title} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center"><Package size={20} className="text-brand-accent/40"/></div>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-bold text-sm text-brand-egg truncate">{selected.title}</p>
+                                {selected.sku && <p className="text-[10px] text-brand-muted font-mono">{selected.sku}</p>}
+                                <p className="text-sm font-bold text-brand-gold mt-0.5">EGP {parseFloat(selected.price||0).toLocaleString()}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="p-4 glass-subtle rounded-xl border border-dashed border-brand-border/40 text-center text-xs text-brand-muted mb-4 shrink-0">
+                            {isEn?'← Select a product':'← اختر منتجاً'}
+                        </div>
+                    )}
+
+                    {/* Recipients */}
+                    <div className="mb-3 shrink-0">
+                        <p className="text-[10px] font-mono text-brand-muted uppercase tracking-wider mb-2">{isEn?'RECIPIENTS':'المستلمون'}</p>
+                        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                            {recipients.length === 0 ? (
+                                <p className="text-xs text-brand-muted py-2">{isEn?'No active chats':'لا توجد محادثات'}</p>
+                            ) : recipients.map((chat, i) => {
+                                const isChecked = selectedRecipients.includes(chat.phone);
+                                const lastMsg = chat.messages?.[chat.messages.length-1];
+                                const ago = timeAgo(chat.lastUpdated);
+                                return (
+                                    <div key={i} onClick={()=>toggleRecipient(chat.phone)}
+                                        className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${isChecked?'bg-brand-accent/10 border border-brand-accent/20':'hover:bg-brand-accent/5 border border-transparent'}`}>
+                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${isChecked?'bg-brand-accent border-brand-accent':'border-brand-border/40'}`}>
+                                            {isChecked && <Check size={11} className="text-brand-bg" strokeWidth={3}/>}
+                                        </div>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 ${getAvatarColor(chat.name)}`}>
+                                            {getInitials(chat.name)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-brand-egg truncate">{chat.name}</p>
+                                            <p className="text-[10px] text-brand-muted truncate">{lastMsg?.text || (isEn?'Active chat':'محادثة نشطة')} · {ago}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Message */}
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <p className="text-[10px] font-mono text-brand-muted uppercase tracking-wider mb-2 shrink-0">{isEn?'MESSAGE':'الرسالة'}</p>
+                        <textarea
+                            value={customNote || (selected ? buildMessage(selected) : '')}
+                            onChange={e=>setCustomNote(e.target.value)}
+                            placeholder={isEn?'Message will appear here after selecting a product...':'ستظهر الرسالة هنا بعد اختيار المنتج...'}
+                            className="flex-1 bg-brand-bg/40 border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-brand-accent/40 resize-none custom-scrollbar min-h-[80px]"
+                        />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 mt-4 shrink-0">
+                        <button className="flex-1 py-2.5 glass border border-brand-border/30 rounded-xl text-xs font-bold text-brand-egg hover:border-brand-accent/30 transition-all">
+                            {isEn?'Preview':'معاينة'}
                         </button>
-                    </form>
+                        <button onClick={handleSend} disabled={sending||!selected||selectedRecipients.length===0}
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-all disabled:opacity-40" style={{background:'#FF6400'}}>
+                            {sending ? <RefreshCcw size={13} className="animate-spin"/> : <><Send size={13}/> {isEn?`Send to ${selectedRecipients.length} chat`:`إرسال لـ ${selectedRecipients.length}`}</>}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Onboarding Screen
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
     const isEn = lang === 'en';
     const [step, setStep] = useState(1);
@@ -3041,14 +3232,17 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                     >
                         {isEn ? 'عربي' : 'English'}
                     </button>
-                    <div className="w-16 h-16 bg-brand-accent/10 rounded-3xl flex items-center justify-center mx-auto border border-brand-accent/20">
+                    <div className="w-16 h-16 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20">
                         <ShieldCheck size={32} className="text-brand-accent" />
                     </div>
-                    <h1 className="text-3xl font-bold text-brand-accent">OmniFlow</h1>
+                    <div className="flex items-center justify-center gap-3">
+                        <OmniFlowMark size={40} />
+                        <h1 className="text-3xl font-bold text-brand-egg tracking-tight">Omni<span className="font-light">Flow</span></h1>
+                    </div>
                     <p className="text-brand-muted text-sm">{isEn ? 'WhatsApp CRM — Initial Setup' : 'WhatsApp CRM — الإعداد الأولي'}</p>
                 </div>
 
-                <div className="glass p-8 rounded-3xl space-y-5">
+                <div className="glass p-8 rounded-2xl space-y-5">
                     {step === 1 && (
                         <>
                             <h3 className="font-bold text-lg text-brand-text border-b border-brand-accent/10 pb-3">
@@ -3062,7 +3256,7 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                 hint={isEn ? 'From Meta Business > WhatsApp > API Setup' : 'من نفس الصفحة'} />
                             <Field k="verify_token" label={isEn ? 'Webhook Verify Token' : 'Webhook Verify Token'} placeholder="my_secret_2025" required
                                 hint={isEn ? 'A secret string you choose (used to verify your webhook URL)' : 'كلمة سر تختارها أنت لتحقق الـ webhook'} />
-                            <button onClick={() => setStep(2)} className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:bg-brand-gold transition-all">
+                            <button onClick={() => setStep(2)} className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all">
                                 {isEn ? 'Next →' : 'التالي ←'}
                             </button>
                         </>
@@ -3084,8 +3278,8 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                 <button onClick={() => setStep(1)} className="flex-1 border border-brand-accent/30 text-brand-accent py-3 rounded-xl font-bold hover:bg-brand-accent/10 transition-all">
                                     {isEn ? '← Back' : '→ رجوع'}
                                 </button>
-                                <button onClick={handleSave} disabled={saving} className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:bg-brand-gold transition-all disabled:opacity-50">
-                                    {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Launch App ✓' : 'تشغيل التطبيق ✓')}
+                                <button onClick={handleSave} disabled={saving} className="flex-1 bg-brand-accent text-brand-bg py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
+                                    {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Launch App âœ"' : 'تشغيل التطبيق âœ"')}
                                 </button>
                             </div>
                         </>
@@ -3097,21 +3291,21 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Shipping Components
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const SHIPPING_PROVIDERS = [
-    { id: 'bosta',  name: 'Bosta',       flag: '🟠', region: 'مصر' },
-    { id: 'jt',     name: 'J&T Express', flag: '🔴', region: 'مصر' },
-    { id: 'aramex', name: 'Aramex',      flag: '🟡', region: 'دولي' },
-    { id: 'dhl',    name: 'DHL',         flag: '🟡', region: 'دولي' },
-    { id: 'fedex',  name: 'FedEx',       flag: '🟣', region: 'دولي' },
+    { id: 'bosta',  name: 'Bosta',       flag: 'ًںں ', region: 'مصر' },
+    { id: 'jt',     name: 'J&T Express', flag: 'ًں"´', region: 'مصر' },
+    { id: 'aramex', name: 'Aramex',      flag: 'ًںں،', region: 'دولي' },
+    { id: 'dhl',    name: 'DHL',         flag: 'ًںں،', region: 'دولي' },
+    { id: 'fedex',  name: 'FedEx',       flag: 'ًںں£', region: 'دولي' },
 ];
 
 const PROVIDER_FIELDS = {
     bosta:  [{ k: 'api_key', label: 'API Key', placeholder: 'Bearer ey...' }],
     jt:     [{ k: 'api_key', label: 'API Key', placeholder: 'jt_api_...' }, { k: 'customer_code', label: 'Customer Code', placeholder: 'CUST001' }],
-    aramex: [{ k: 'username', label: 'Username', placeholder: 'aramex_user' }, { k: 'password', label: 'Password', placeholder: '••••', secret: true }, { k: 'account_number', label: 'Account Number', placeholder: '12345' }],
+    aramex: [{ k: 'username', label: 'Username', placeholder: 'aramex_user' }, { k: 'password', label: 'Password', placeholder: 'â€¢â€¢â€¢â€¢', secret: true }, { k: 'account_number', label: 'Account Number', placeholder: '12345' }],
     dhl:    [{ k: 'api_key', label: 'API Key', placeholder: 'dhl_api_...' }, { k: 'account_number', label: 'Account Number', placeholder: '123456789' }],
     fedex:  [{ k: 'api_key', label: 'API Key', placeholder: 'fedex_api_...' }, { k: 'account_number', label: 'Account Number', placeholder: '123456789' }],
 };
@@ -3187,7 +3381,7 @@ const ShippingSettings = ({ isEn, showToast }) => {
                                         ))}
                                     </div>
                                     <button onClick={() => handleSave(p.id)} disabled={saving === p.id}
-                                        className="bg-brand-accent text-brand-bg px-5 py-2 rounded-xl text-xs font-bold hover:bg-brand-gold transition-all disabled:opacity-50">
+                                        className="bg-brand-accent text-brand-bg px-5 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-all disabled:opacity-50">
                                         {saving === p.id ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save' : 'حفظ')}
                                     </button>
                                 </div>
@@ -3322,7 +3516,7 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
                             {isEn ? 'Cancel' : 'إلغاء'}
                         </button>
                         <button onClick={handleCreate} disabled={creating}
-                            className="flex-1 bg-brand-accent text-brand-bg py-2 rounded-xl text-xs font-bold hover:bg-brand-gold transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                            className="flex-1 bg-brand-accent text-brand-bg py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                             {creating ? <RefreshCcw size={13} className="animate-spin" /> : <Truck size={13} />}
                             {creating ? (isEn ? 'Creating...' : 'جاري الإنشاء...') : (isEn ? 'Create Shipment' : 'إنشاء الشحنة')}
                         </button>
@@ -3333,9 +3527,9 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Setup Manager (In-App Settings Page)
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const SetupManager = ({ showToast, lang, onSave }) => {
     const isEn = lang === 'en';
     const [form, setForm] = useState(null);
@@ -3442,12 +3636,12 @@ const SetupManager = ({ showToast, lang, onSave }) => {
 
     return (
         <div className={`space-y-6 max-w-3xl mx-auto animate-in fade-in duration-500 pb-20 ${isEn ? 'text-left' : 'text-right'}`}>
-            <div className="flex justify-between items-center bg-brand-card/60 backdrop-blur-xl p-6 rounded-3xl border border-brand-accent/10">
+            <div className="flex justify-between items-center bg-brand-card/60 backdrop-blur-xl p-6 rounded-2xl border border-brand-accent/10">
                 <div>
                     <h2 className="text-2xl font-bold text-brand-accent flex items-center gap-2"><Cog size={26} /> {isEn ? 'App Settings' : 'إعدادات التطبيق'}</h2>
                     <p className="text-sm text-brand-muted mt-1">{isEn ? 'Changes are saved directly to the server .env file.' : 'التغييرات تُحفظ مباشرةً في ملف .env على السيرفر.'}</p>
                 </div>
-                <button onClick={handleSave} disabled={saving} className="bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:bg-brand-gold transition-all disabled:opacity-50 flex items-center gap-2">
+                <button onClick={handleSave} disabled={saving} className="bg-brand-accent text-brand-bg px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2">
                     <ShieldCheck size={16} />
                     {saving ? (isEn ? 'Saving...' : 'جاري الحفظ...') : (isEn ? 'Save All' : 'حفظ الكل')}
                 </button>
@@ -3544,10 +3738,10 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 <p className="text-xs text-brand-muted mb-3">
                     {isEn
                         ? 'Groq is recommended — free, fast, high limits (14,400 req/day). Get key at console.groq.com. Gemini is used as fallback.'
-                        : 'Groq موصى به — مجاني، سريع، حد عالي (14,400 طلب/يوم). احصل على مفتاحك من console.groq.com. Gemini يُستخدم كبديل تلقائي.'}
+                        : 'Groq موصى به — مجاني، سريڡ حد عالي (14,400 طلب/يوم). احصل على مفتاحك من console.groq.com. Gemini يُستخدم كبديل تلقائي.'}
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field k="groq_api_key" label="Groq API Key ⚡ (Recommended)" placeholder="gsk_..." secret
+                    <Field k="groq_api_key" label="Groq API Key âڑ، (Recommended)" placeholder="gsk_..." secret
                         hint={isEn ? 'Free · LLaMA 3.3 70B · 14,400 req/day' : 'مجاني · LLaMA 3.3 70B · 14,400 طلب/يوم'} />
                     <Field k="groq_model" label={isEn ? 'Groq Model' : 'نموذج Groq'} placeholder="llama-3.3-70b-versatile"
                         hint={isEn ? 'llama-3.3-70b-versatile (best) or llama-3.1-8b-instant (fastest)' : 'llama-3.3-70b-versatile (أفضل) أو llama-3.1-8b-instant (أسرع)'} />
@@ -3625,9 +3819,9 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Loyalty Points Panel (CRM sidebar)
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const LoyaltyPanel = ({ phone, isEn, showToast }) => {
     const [data, setData] = useState(null);
     const [awardPoints, setAwardPoints] = useState('');
@@ -3694,9 +3888,9 @@ const LoyaltyPanel = ({ phone, isEn, showToast }) => {
     );
 };
 
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Analytics Dashboard
-// ─────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const KpiCard = ({ label, value, sub, color = 'text-brand-accent', icon: Icon }) => (
     <div className="glass p-5 rounded-2xl flex items-center gap-4">
         {Icon && (
@@ -3757,7 +3951,7 @@ const AnalyticsDashboard = ({ lang }) => {
         const load = async () => {
             try {
                 const res = await axios.get(`${API_URL}/analytics`);
-                setData(res.data);
+                setData(res.data && typeof res.data === 'object' ? res.data : {});
             } catch (e) { console.error(e); }
             setLoading(false);
         };
@@ -3818,7 +4012,7 @@ const AnalyticsDashboard = ({ lang }) => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Order Funnel */}
-                <div className="glass p-6 rounded-3xl space-y-4">
+                <div className="glass p-6 rounded-2xl space-y-4">
                     <h3 className="font-bold text-brand-accent">{isEn ? 'Order Funnel' : 'قمع الطلبات'}</h3>
                     <div className="space-y-3">
                         <FunnelBar label={isEn ? 'New / Pending' : 'جديد / معلق'} value={funnel.new} max={totalOrders} color="bg-brand-muted/50" />
@@ -3833,7 +4027,7 @@ const AnalyticsDashboard = ({ lang }) => {
                 </div>
 
                 {/* Automation Stats */}
-                <div className="glass p-6 rounded-3xl space-y-4">
+                <div className="glass p-6 rounded-2xl space-y-4">
                     <h3 className="font-bold text-brand-accent">{isEn ? 'Automation Engine' : 'محرك الأتمتة'}</h3>
                     <div className="grid grid-cols-2 gap-3">
                         {[
@@ -3862,7 +4056,7 @@ const AnalyticsDashboard = ({ lang }) => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Daily Volume Chart */}
-                <div className="glass p-6 rounded-3xl">
+                <div className="glass p-6 rounded-2xl">
                     <h3 className="font-bold text-brand-accent">{isEn ? 'Message Volume (Last 7 Days)' : 'حجم الرسائل (آخر 7 أيام)'}</h3>
                     <div className="flex gap-4 mt-2 text-xs text-brand-muted">
                         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-brand-accent/70 inline-block" />{isEn ? 'Outbound' : 'صادرة'}</span>
@@ -3872,7 +4066,7 @@ const AnalyticsDashboard = ({ lang }) => {
                 </div>
 
                 {/* Top Customers */}
-                <div className="glass p-6 rounded-3xl">
+                <div className="glass p-6 rounded-2xl">
                     <h3 className="font-bold text-brand-accent mb-4">{isEn ? 'Most Active Customers' : 'أكثر العملاء تفاعلاً'}</h3>
                     {topCustomers.length === 0 ? (
                         <p className="text-brand-muted text-sm text-center py-8">{isEn ? 'No data yet.' : 'لا توجد بيانات بعد.'}</p>
