@@ -317,20 +317,6 @@ const App = () => {
         return () => { axios.interceptors.request.eject(id); axios.interceptors.response.eject(rid); };
     }, []);
 
-    // If opened from Shopify admin with ?shop=, break out of iframe and start OAuth
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const shop = params.get('shop');
-        if (shop && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
-            const target = `/auth?shop=${encodeURIComponent(shop)}`;
-            // Break out of Shopify iframe — OAuth must run at top level
-            if (window.top !== window.self) {
-                window.top.location.href = target;
-            } else {
-                window.location.href = target;
-            }
-        }
-    }, []);
 
     // Handle Shopify OAuth redirect — pick up JWT from URL hash
     useEffect(() => {
