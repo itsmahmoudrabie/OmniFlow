@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const Tenant = require('../models/Tenant');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, DEV_MODE } = require('../middleware/auth');
 
 const PAYMOB_API_KEY   = process.env.PAYMOB_API_KEY   || '';
 const PAYMOB_IFRAME_ID = process.env.PAYMOB_IFRAME_ID || '';

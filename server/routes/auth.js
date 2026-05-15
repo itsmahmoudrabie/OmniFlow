@@ -1,7 +1,31 @@
 const express = require('express');
 const router = express.Router();
+const { signToken, authMiddleware, DEV_TENANT, DEV_MODE } = require('../middleware/auth');
+
+// Dev-mode: login with admin@omniflow.app / any password → works without MongoDB
+if (DEV_MODE) {
+    router.post('/register', async (req, res) => {
+        const token = signToken('dev-admin-001');
+        res.status(201).json({ token, tenant: { ...DEV_TENANT, id: DEV_TENANT._id } });
+    });
+
+    router.post('/login', async (req, res) => {
+        const token = signToken('dev-admin-001');
+        res.json({ token, tenant: { ...DEV_TENANT, id: DEV_TENANT._id } });
+    });
+
+    router.get('/me', authMiddleware, (req, res) => {
+        res.json({ ...req.tenant, id: req.tenant._id });
+    });
+
+    router.post('/change-password', authMiddleware, (req, res) => {
+        res.json({ success: true });
+    });
+
+    return module.exports = router;
+}
+
 const Tenant = require('../models/Tenant');
-const { signToken, authMiddleware } = require('../middleware/auth');
 
 const PLANS = {
     starter:    { price: 29,  nameAr: 'المبتدئ',  nameEn: 'Starter'    },
