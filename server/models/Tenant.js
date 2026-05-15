@@ -9,8 +9,13 @@ const tenantSchema = new mongoose.Schema({
 
     // Plan
     plan:         { type: String, enum: ['trial', 'starter', 'growth', 'pro', 'enterprise'], default: 'trial' },
-    trialEnds:    { type: Date, default: () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
+    trialEnds:    { type: Date, default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
     status:       { type: String, enum: ['trial', 'active', 'past_due', 'cancelled'], default: 'trial' },
+
+    // Shopify Billing
+    shopifyChargeId:     { type: String },
+    shopifyChargeStatus: { type: String }, // pending/active/declined/expired/cancelled
+    shopifyShop:         { type: String }, // store domain e.g. my-store.myshopify.com
 
     // PayMob
     paymobSubId:      { type: String },

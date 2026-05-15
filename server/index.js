@@ -90,6 +90,7 @@ mountShopifyOAuth(app, CONFIG);
 
 // Auth & subscription routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/billing', require('./routes/billing'));
 app.use('/api/paymob', require('./routes/paymob'));
 
 const DB_FILE = path.join(__dirname, 'orders.json');

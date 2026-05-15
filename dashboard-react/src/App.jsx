@@ -58,7 +58,8 @@ import {
     ExternalLink,
     LogOut,
 } from 'lucide-react';
-import { PricingPage, RegisterPage, LoginPage } from './Auth';
+import { PricingPage as AuthPricingPage, RegisterPage, LoginPage } from './Auth';
+import { PricingPage } from './PricingPage';
 
 const API_URL = import.meta.env.VITE_API_URL
     ? `${import.meta.env.VITE_API_URL}/api`
@@ -274,6 +275,28 @@ const GlobalSearch = ({ inbox, orders, quickReplies, navItems, onNavigate, onOpe
     );
 };
 
+function UpgradePrompt({ feature, minPlan, onUpgrade, isEn }) {
+    return (
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-6 p-8 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-brand-accent/10 border border-brand-accent/20 flex items-center justify-center">
+                <Zap size={32} className="text-brand-accent" />
+            </div>
+            <div className="space-y-2">
+                <h3 className="text-xl font-black text-brand-egg">
+                    {isEn ? `${feature} requires ${minPlan}` : `${feature} متاح من خطة ${minPlan}`}
+                </h3>
+                <p className="text-sm text-brand-muted">
+                    {isEn ? 'Upgrade your plan to unlock this feature' : 'رقِّ خطتك للوصول لهذه الميزة'}
+                </p>
+            </div>
+            <button onClick={onUpgrade}
+                className="px-8 py-3 bg-brand-accent text-brand-bg rounded-xl font-black text-sm hover:opacity-90 transition-all">
+                {isEn ? 'View Plans →' : 'عرض الخطط ←'}
+            </button>
+        </div>
+    );
+}
+
 const App = () => {
     // ── Auth state ───────────────────────────────────────────────────────────
     const [authScreen, setAuthScreen] = useState(() => {
@@ -286,6 +309,7 @@ const App = () => {
     const [authTenant, setAuthTenant] = useState(() => {
         try { return JSON.parse(localStorage.getItem('omni_tenant') || 'null'); } catch { return null; }
     });
+    const [showPricing, setShowPricing] = useState(false);
 
     const handleLogin = (token, tenant) => {
         localStorage.setItem('omni_token', token);
@@ -325,9 +349,16 @@ const App = () => {
         const params = new URLSearchParams(hash.slice(1));
         const token = params.get('shopify_token');
         if (!token) return;
+        const planActivated = params.get('plan_activated');
         window.history.replaceState(null, '', window.location.pathname);
         axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => handleLogin(token, r.data))
+            .then(r => {
+                handleLogin(token, r.data);
+                if (planActivated) {
+                    // Plan was just activated — close pricing overlay if open
+                    setShowPricing(false);
+                }
+            })
             .catch(() => {});
     }, []);
 
@@ -540,13 +571,21 @@ const App = () => {
     useEffect(() => { localStorage.setItem('omni_lang', lang); }, [lang]);
     useEffect(() => { localStorage.setItem('omni_theme', theme); }, [theme]);
 
+    // Feature gate helpers
+    const planLevel = { trial: 0, starter: 1, growth: 2, pro: 3, enterprise: 4 };
+    const myPlan = authTenant?.plan || 'trial';
+    const hasFeature = (minPlan) => (planLevel[myPlan] || 0) >= (planLevel[minPlan] || 0);
+    const isEn = lang === 'en';
+
     // Auth gate
-    if (authScreen === 'pricing') return <PricingPage onSelectPlan={(plan) => setAuthScreen('register:' + plan)} onLogin={() => setAuthScreen('login')} />;
+    if (authScreen === 'pricing') return <AuthPricingPage onSelectPlan={(plan) => setAuthScreen('register:' + plan)} onLogin={() => setAuthScreen('login')} />;
     if (authScreen === 'login') return <LoginPage onLogin={handleLogin} onRegister={() => setAuthScreen('pricing')} />;
     if (authScreen && authScreen.startsWith('register')) {
         const plan = authScreen.split(':')[1] || 'starter';
         return <RegisterPage plan={plan} onSuccess={handleLogin} onBack={() => setAuthScreen('pricing')} />;
     }
+
+    if (showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={() => setShowPricing(false)} />;
 
     if (!isConfigured) {
         return <OnboardingScreen lang={lang} onLangChange={setLang} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
@@ -716,11 +755,29 @@ const App = () => {
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                     {activeTab === 'dash' && <Dashboard inbox={inbox} orders={orders} abandonedCarts={abandonedCarts} onOpenChat={handleOpenChat} setActiveTab={setActiveTab} lang={lang} aiEnabled={aiEnabled} />}
                     {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} />}
-                    {activeTab === 'campaigns' && <CampaignsManager templates={templates} showToast={showToast} lang={lang} />}
-                    {activeTab === 'automations' && <AutomationsManager templates={templates} showToast={showToast} lang={lang} />}
+                    {activeTab === 'campaigns' && (
+                        !hasFeature('growth') ? (
+                            <UpgradePrompt feature="Broadcasts" minPlan="Growth" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
+                        ) : (
+                            <CampaignsManager templates={templates} showToast={showToast} lang={lang} />
+                        )
+                    )}
+                    {activeTab === 'automations' && (
+                        !hasFeature('growth') ? (
+                            <UpgradePrompt feature="Automations" minPlan="Growth" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
+                        ) : (
+                            <AutomationsManager templates={templates} showToast={showToast} lang={lang} />
+                        )
+                    )}
                     {activeTab === 'quick-replies' && <QuickRepliesManager showToast={showToast} lang={lang} />}
                     {activeTab === 'settings' && <TemplatesManager templates={templates} fetchTemplates={fetchTemplates} showToast={showToast} lang={lang} />}
-                    {activeTab === 'config' && <SetupManager showToast={showToast} lang={lang} onSave={(name) => setBusinessName(name)} />}
+                    {activeTab === 'config' && (
+                        !hasFeature('pro') ? (
+                            <UpgradePrompt feature="AI Settings" minPlan="Pro" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
+                        ) : (
+                            <SetupManager showToast={showToast} lang={lang} onSave={(name) => setBusinessName(name)} />
+                        )
+                    )}
                     {activeTab === 'abandoned' && <AbandonedCartsManager carts={abandonedCarts} refresh={fetchAbandonedCarts} showToast={showToast} lang={lang} />}
                     {activeTab === 'catalog' && <CatalogManager showToast={showToast} lang={lang} inbox={inbox} />}
                     {activeTab === 'logs' && <AnalyticsDashboard lang={lang} />}
