@@ -1867,7 +1867,7 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
             setLoading(false);
         };
         fetchCustomers();
-        axios.get(`${API_URL}/broadcasts`).then(r => setScheduledList(r.data)).catch(() => {});
+        axios.get(`${API_URL}/broadcasts`).then(r => setScheduledList(Array.isArray(r.data) ? r.data : [])).catch(() => {});
     }, []);
 
     const handleSchedule = async () => {
@@ -2211,7 +2211,7 @@ const QuickRepliesManager = ({ showToast, lang }) => {
     const [search, setSearch] = useState('');
 
     useEffect(() => {
-        axios.get(`${API_URL}/quick-replies`).then(r => setList(r.data)).catch(() => {});
+        axios.get(`${API_URL}/quick-replies`).then(r => setList(Array.isArray(r.data) ? r.data : [])).catch(() => {});
     }, []);
 
     const handleSave = async () => {
@@ -3999,9 +3999,9 @@ const AnalyticsDashboard = ({ lang }) => {
         </div>
     );
 
-    const { messages, funnel, autoStats, topCustomers, daily } = data;
+    const { messages = {}, funnel = {}, autoStats = {}, topCustomers = [], daily = [] } = data || {};
     const totalOrders = Object.values(funnel).reduce((s, v) => s + v, 0);
-    const conversionRate = totalOrders > 0 ? Math.round((funnel.confirmed / totalOrders) * 100) : 0;
+    const conversionRate = totalOrders > 0 ? Math.round(((funnel.confirmed || 0) / totalOrders) * 100) : 0;
 
     return (
         <div className="space-y-4 max-w-6xl mx-auto animate-in fade-in duration-500">
