@@ -180,9 +180,9 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
                 jwtToken = sign('dev-admin-001');
             }
 
-            // Redirect to frontend with JWT in URL hash (frontend reads it and stores in localStorage)
-            const tokenParam = jwtToken ? `#shopify_token=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}` : '';
-            res.redirect(`/${tokenParam}`);
+            // Redirect back into Shopify admin — when merchant clicks the app again,
+            // server will detect shop is installed and auto-login (no OAuth needed again)
+            res.redirect(`https://${shop}/admin/apps`);
         } catch (err) {
             console.error('[Shopify OAuth] Token exchange failed:', err.response?.data || err.message);
             res.status(500).send('OAuth token exchange failed');
