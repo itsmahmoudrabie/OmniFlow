@@ -2304,11 +2304,31 @@ app.get('/api/export/orders', (_req, res) => {
 });
 
 // Catch-all: serve React app for non-API routes (Express 5 syntax: /{*splat})
-// If Shopify opens the app with ?shop=, auto-start OAuth instead of showing login page
+// If Shopify opens the app with ?shop=:
+//   - shop already installed → issue JWT and go straight to dashboard
+//   - new shop → start OAuth flow
 if (fs.existsSync(FRONTEND_DIST)) {
-    app.get('/{*splat}', (req, res) => {
+    app.get('/{*splat}', async (req, res) => {
         const shop = req.query.shop;
         if (shop && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
+            const { getShopToken } = require('./shopify-oauth');
+            const { signToken } = require('./middleware/auth');
+            const accessToken = getShopToken(shop);
+            if (accessToken) {
+                // Already installed — find or create tenant and issue JWT
+                try {
+                    let tenantId = 'dev-admin-001';
+                    let Tenant;
+                    try { Tenant = require('./models/Tenant'); } catch (_) {}
+                    if (Tenant) {
+                        const tenant = await Tenant.findOne({ 'config.shopify_url': `https://${shop}` });
+                        if (tenant) tenantId = tenant._id;
+                    }
+                    const jwt = signToken(tenantId);
+                    return res.redirect(`/#shopify_token=${encodeURIComponent(jwt)}&shop=${encodeURIComponent(shop)}`);
+                } catch (_) {}
+            }
+            // New shop — start OAuth
             return res.redirect(`/auth?shop=${encodeURIComponent(shop)}`);
         }
         res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
