@@ -1140,115 +1140,39 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
 };
 
 const ShopifyConnectPrompt = ({ isEn, onConnected }) => {
-    const [step, setStep] = React.useState(1); // 1=intro, 2=enter token
     const [shop, setShop] = React.useState('');
-    const [token, setToken] = React.useState('');
-    const [testing, setTesting] = React.useState(false);
-    const [testResult, setTestResult] = React.useState(null); // null | 'ok' | 'error'
-    const [testMsg, setTestMsg] = React.useState('');
-    const [saving, setSaving] = React.useState(false);
 
-    const handleTest = async () => {
+    const doConnect = () => {
         const domain = shop.trim().replace(/https?:\/\//, '').replace(/\/$/, '');
-        const tok = token.trim();
-        if (!domain || !tok) return;
-        setTesting(true); setTestResult(null);
-        try {
-            const r = await axios.post(`${API_URL}/config/test-shopify`, { shopify_url: domain, shopify_access_token: tok });
-            if (r.data?.ok) { setTestResult('ok'); setTestMsg(r.data.shop || domain); }
-            else { setTestResult('error'); setTestMsg(r.data?.error || 'Connection failed'); }
-        } catch(e) { setTestResult('error'); setTestMsg(e.response?.data?.error || 'Connection failed'); }
-        setTesting(false);
+        if (!domain) return;
+        const d = domain.includes('.myshopify.com') ? domain : `${domain}.myshopify.com`;
+        window.location.href = `/auth?shop=${d}`;
     };
-
-    const handleSave = async () => {
-        const domain = shop.trim().replace(/https?:\/\//, '').replace(/\/$/, '');
-        const tok = token.trim();
-        setSaving(true);
-        try {
-            await axios.post(`${API_URL}/config/setup`, { shopify_url: domain, shopify_access_token: tok });
-            onConnected?.();
-        } catch(e) { console.error(e); }
-        setSaving(false);
-    };
-
-    const steps = isEn ? [
-        { n:1, title:'Open Shopify Admin', desc:'Go to your store admin → Settings → Apps and sales channels' },
-        { n:2, title:'Create a custom app', desc:'Click "Develop apps" → "Create an app" → give it any name (e.g. OmniFlow)' },
-        { n:3, title:'Set API scopes', desc:'Click "Configure Admin API scopes" → enable: read_orders, write_orders, read_customers, read_products → Save' },
-        { n:4, title:'Install & copy token', desc:'Click "Install app" → under "Admin API access token" click "Reveal token once" → copy it (starts with shpat_)' },
-    ] : [
-        { n:1, title:'افتح Shopify Admin', desc:'روح لمتجرك ← Settings ← Apps and sales channels' },
-        { n:2, title:'اعمل Custom App', desc:'اضغط "Develop apps" ← "Create an app" ← سمّيه أي اسم (مثلاً OmniFlow)' },
-        { n:3, title:'حدد الصلاحيات', desc:'اضغط "Configure Admin API scopes" ← فعّل: read_orders, write_orders, read_customers, read_products ← Save' },
-        { n:4, title:'ثبّت واحصل على التوكن', desc:'اضغط "Install app" ← تحت "Admin API access token" اضغط "Reveal token once" ← انسخه (بيبدأ بـ shpat_)' },
-    ];
 
     return (
-        <div className="max-w-2xl mx-auto py-8 space-y-6">
-            {/* Header */}
-            <div className="text-center space-y-2">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto" style={{background:'#96BF48'}}>
-                    <ShoppingCart size={24} color="#fff" />
-                </div>
-                <h3 className="text-xl font-black text-brand-egg">{isEn ? 'Connect Shopify Store' : 'ربط متجر Shopify'}</h3>
-                <p className="text-xs text-brand-muted">{isEn ? 'Follow these 4 steps — takes about 2 minutes' : 'اتبع الـ 4 خطوات دول — بتاخد دقيقتين بس'}</p>
+        <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:'#96BF48'}}>
+                <ShoppingCart size={28} color="#fff" />
             </div>
-
-            {/* Steps */}
-            <div className="space-y-3">
-                {steps.map((s, i) => (
-                    <div key={s.n} className="flex gap-4 glass rounded-xl p-4 border border-brand-border/20">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-black" style={{background:'#96BF48',color:'#fff'}}>{s.n}</div>
-                        <div>
-                            <p className="text-sm font-bold text-brand-egg">{s.title}</p>
-                            <p className="text-xs text-brand-muted mt-0.5" dir="ltr">{s.desc}</p>
-                        </div>
-                    </div>
-                ))}
+            <div>
+                <h3 className="text-xl font-black text-brand-egg">{isEn ? 'Connect your Shopify store' : 'اربط متجر Shopify'}</h3>
+                <p className="text-sm text-brand-muted mt-1">{isEn ? 'Enter your store name and click connect' : 'اكتب اسم المتجر واضغط ربط'}</p>
             </div>
-
-            {/* Input area */}
-            <div className="glass rounded-2xl p-5 space-y-4 border border-brand-border/20">
-                <p className="text-sm font-bold text-brand-egg">{isEn ? 'After copying the token, enter it here:' : 'بعد ما تنسخ التوكن، حطه هنا:'}</p>
-                <div className="space-y-3">
-                    <div>
-                        <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{isEn ? 'Store Domain' : 'رابط المتجر'}</label>
-                        <input value={shop} onChange={e=>setShop(e.target.value)} placeholder="yourstore.myshopify.com" dir="ltr"
-                            className="w-full mt-1 px-4 py-2.5 rounded-xl glass border border-brand-border/40 text-brand-egg text-sm font-mono focus:outline-none focus:border-green-500/50" />
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-brand-muted uppercase tracking-wider">{isEn ? 'Admin API Token (shpat_...)' : 'Admin API Token (shpat_...)'}</label>
-                        <input value={token} onChange={e=>{setToken(e.target.value);setTestResult(null);}} placeholder="shpat_xxxxxxxxxxxxxxxx" dir="ltr" type="password"
-                            className="w-full mt-1 px-4 py-2.5 rounded-xl glass border border-brand-border/40 text-brand-egg text-sm font-mono focus:outline-none focus:border-green-500/50" />
-                    </div>
-                </div>
-
-                {/* Test result */}
-                {testResult === 'ok' && (
-                    <div className="flex items-center gap-2 text-green-400 text-sm">
-                        <CheckCircle2 size={16}/> {isEn ? `Connected to: ${testMsg}` : `تم الربط بـ: ${testMsg}`}
-                    </div>
-                )}
-                {testResult === 'error' && (
-                    <div className="flex items-center gap-2 text-red-400 text-sm">
-                        <AlertTriangle size={16}/> {testMsg}
-                    </div>
-                )}
-
-                <div className="flex gap-3">
-                    <button onClick={handleTest} disabled={testing || !shop || !token}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-brand-border/40 text-brand-egg hover:border-green-500/40 transition-all disabled:opacity-40">
-                        {testing ? '...' : (isEn ? 'Test connection' : 'اختبر الاتصال')}
-                    </button>
-                    <button onClick={handleSave} disabled={saving || testResult !== 'ok'}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-40 hover:opacity-90"
-                        style={{background: testResult==='ok' ? '#96BF48' : '#555'}}>
-                        {saving ? '...' : (isEn ? 'Save & Connect' : 'حفظ وربط')}
-                    </button>
-                </div>
-                <p className="text-[10px] text-brand-muted text-center">{isEn ? 'Token is saved securely — you only need to do this once.' : 'التوكن بيتحفظ بأمان — هتعملها مرة واحدة بس.'}</p>
+            <div className="flex gap-2 w-full max-w-sm">
+                <input
+                    value={shop} onChange={e => setShop(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && doConnect()}
+                    placeholder="mystore" dir="ltr"
+                    className="flex-1 px-4 py-3 rounded-xl glass border border-brand-border/40 text-brand-egg text-sm font-mono focus:outline-none focus:border-green-500/50"
+                />
+                <span className="flex items-center text-brand-muted text-sm font-mono">.myshopify.com</span>
             </div>
+            <button onClick={doConnect} disabled={!shop.trim()}
+                className="px-10 py-3 rounded-xl text-sm font-bold text-white disabled:opacity-40 hover:opacity-90 transition-all"
+                style={{background:'#96BF48'}}>
+                {isEn ? 'Connect →' : 'ربط →'}
+            </button>
+            <p className="text-[11px] text-brand-muted">{isEn ? 'You\'ll be redirected to Shopify to approve — takes 10 seconds' : 'هتتوجه لـ Shopify توافق — بتاخد 10 ثواني'}</p>
         </div>
     );
 };

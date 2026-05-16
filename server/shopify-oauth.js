@@ -118,10 +118,23 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
             const { access_token, scope } = tokenRes.data;
             setShopToken(shop, access_token, scope);
 
-            // Backwards-compat: update single-store CONFIG so existing endpoints work
+            // Update CONFIG so existing endpoints work immediately
             if (CONFIG && typeof CONFIG === 'object') {
-                CONFIG.shopify_url = `https://${shop}`;
+                CONFIG.shopify_url = shop; // no https:// prefix
                 CONFIG.shopify_access_token = access_token;
+            }
+
+            // Always persist to MongoDB so token survives Railway redeploys
+            try {
+                const Tenant = require('./models/Tenant');
+                await Tenant.findOneAndUpdate(
+                    {},
+                    { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': access_token } },
+                    { sort: { createdAt: -1 }, upsert: false }
+                );
+                console.log(`[Shopify OAuth] Token saved to MongoDB for ${shop}`);
+            } catch (e) {
+                console.warn('[Shopify OAuth] MongoDB save failed:', e.message);
             }
 
             // Register mandatory webhooks (best-effort)
