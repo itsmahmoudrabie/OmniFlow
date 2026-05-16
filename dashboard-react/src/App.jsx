@@ -1245,8 +1245,18 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
 
     return (
         <div className={`space-y-4 ${isEn ? 'text-left' : 'text-right'}`}>
-            {/* Shopify not connected — full connect flow */}
-            {shopifyNotConnected && <ShopifyConnectPrompt isEn={isEn} onConnected={refresh} />}
+            {/* Shopify not connected — small banner only, doesn't block the page */}
+            {shopifyNotConnected && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-orange-500/20 bg-orange-500/8 text-sm">
+                    <AlertTriangle size={15} className="text-orange-400 shrink-0" />
+                    <span className="text-orange-300">{isEn ? 'Shopify not connected — go to' : 'Shopify غير متصل — روح'}</span>
+                    <button onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'config' }))}
+                        className="underline text-orange-300 font-bold">
+                        {isEn ? 'App Settings → Shopify' : 'إعدادات التطبيق ← Shopify'}
+                    </button>
+                    <span className="text-orange-300">{isEn ? 'to add your token' : 'وأضف التوكن'}.</span>
+                </div>
+            )}
             {/* Subtitle + action buttons */}
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">
