@@ -46,15 +46,9 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 const { mountShopifyOAuth, loadShops, getShopToken } = require('./shopify-oauth');
 
 // Helper: get active Shopify shop credentials
-// Priority: shops.json (in-memory after OAuth) → MongoDB Tenant → env vars
+// Priority: MongoDB Tenant (permanent) → shops.json (OAuth cache) → env vars
 const getActiveShopify = async () => {
-    // 1. shops.json (valid after fresh OAuth, wiped on redeploy)
-    const shops = loadShops();
-    const shopDomain = Object.keys(shops)[0];
-    if (shopDomain && shops[shopDomain]?.access_token) {
-        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
-    }
-    // 2. MongoDB Tenant (persists across redeploys)
+    // 1. MongoDB Tenant — primary source of truth (survives redeploys)
     try {
         const Tenant = require('./models/Tenant');
         const tenant = await Tenant.findOne({
@@ -63,11 +57,17 @@ const getActiveShopify = async () => {
         }).lean();
         if (tenant?.config?.shopify_access_token) {
             return {
-                shopify_url: tenant.config.shopify_url.replace('https://', ''),
+                shopify_url: tenant.config.shopify_url.replace('https://', '').replace(/\/$/, ''),
                 shopify_access_token: tenant.config.shopify_access_token
             };
         }
     } catch (_) {}
+    // 2. shops.json (set by OAuth callback, ephemeral but useful right after OAuth)
+    const shops = loadShops();
+    const shopDomain = Object.keys(shops)[0];
+    if (shopDomain && shops[shopDomain]?.access_token) {
+        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
+    }
     // 3. env vars fallback
     return {
         shopify_url: CONFIG.shopify_url,
