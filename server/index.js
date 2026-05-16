@@ -95,6 +95,15 @@ app.get('/api/shopify/debug', async (_req, res) => {
 // Serve React frontend (production build)
 const FRONTEND_DIST = path.join(__dirname, '..', 'dashboard-react', 'dist');
 if (fs.existsSync(FRONTEND_DIST)) {
+    // If ?shop= is in the URL, redirect to OAuth BEFORE serving React
+    // This avoids iframe issues (accounts.shopify.com refuses to load in iframe)
+    app.get('/', (req, res, next) => {
+        const shop = req.query.shop;
+        if (shop && /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
+            return res.redirect(`/auth?shop=${shop}`);
+        }
+        next();
+    });
     app.use(express.static(FRONTEND_DIST));
 }
 

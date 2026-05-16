@@ -1150,7 +1150,8 @@ const ShopifyConnectPrompt = ({ isEn }) => {
             return;
         }
         setConnecting(true);
-        window.location.href = `/auth?shop=${domain}`;
+        // Use window.top to break out of any Shopify iframe
+        (window.top || window).location.href = `/auth?shop=${domain}`;
     };
 
     return (
