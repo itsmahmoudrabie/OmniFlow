@@ -1139,6 +1139,52 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
     );
 };
 
+const ShopifyConnectPrompt = ({ isEn }) => {
+    const [shop, setShop] = React.useState('');
+    const [connecting, setConnecting] = React.useState(false);
+
+    const handleConnect = () => {
+        const domain = shop.trim().replace(/https?:\/\//, '').replace(/\/$/, '');
+        if (!domain || !domain.includes('.myshopify.com')) {
+            alert(isEn ? 'Enter a valid store URL, e.g. mystore.myshopify.com' : 'أدخل رابط متجر صحيح، مثال: mystore.myshopify.com');
+            return;
+        }
+        setConnecting(true);
+        window.location.href = `/auth?shop=${domain}`;
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center py-16 gap-6">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:'#96BF48'}}>
+                <ShoppingCart size={28} color="#fff" />
+            </div>
+            <div className="text-center">
+                <h3 className="text-xl font-black text-brand-egg mb-1">{isEn ? 'Connect your Shopify store' : 'اربط متجر Shopify بتاعك'}</h3>
+                <p className="text-sm text-brand-muted">{isEn ? 'Enter your store domain and click connect — we handle the rest automatically.' : 'حط اسم متجرك واضغط ربط — إحنا بنعمل الباقي تلقائياً.'}</p>
+            </div>
+            <div className="flex gap-3 w-full max-w-md">
+                <input
+                    type="text"
+                    value={shop}
+                    onChange={e => setShop(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleConnect()}
+                    placeholder="mystore.myshopify.com"
+                    dir="ltr"
+                    className="flex-1 px-4 py-3 rounded-xl glass border border-brand-border/40 text-brand-egg text-sm font-mono focus:outline-none focus:border-green-500/50"
+                />
+                <button
+                    onClick={handleConnect}
+                    disabled={connecting}
+                    className="px-6 py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-60 shrink-0"
+                    style={{background:'#96BF48'}}>
+                    {connecting ? '...' : (isEn ? 'Connect' : 'ربط')}
+                </button>
+            </div>
+            <p className="text-[11px] text-brand-muted">{isEn ? 'You will be redirected to Shopify to approve access — no token needed.' : 'هتتوجه لـ Shopify عشان توافق على الصلاحيات — مفيش توكن يدوي.'}</p>
+        </div>
+    );
+};
+
 const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang, shopifyNotConnected }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -1207,21 +1253,8 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
 
     return (
         <div className={`space-y-4 ${isEn ? 'text-left' : 'text-right'}`}>
-            {/* Shopify not connected banner */}
-            {shopifyNotConnected && (
-                <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-orange-500/30 bg-orange-500/10">
-                    <div className="flex items-center gap-3">
-                        <AlertTriangle size={18} className="text-orange-400 shrink-0" />
-                        <div>
-                            <p className="text-sm font-bold text-orange-300">{isEn ? 'Shopify store not connected' : 'متجر Shopify غير متصل'}</p>
-                            <p className="text-xs text-brand-muted mt-0.5">{isEn ? 'Connect your store to see orders here.' : 'اربط متجرك لرؤية الطلبات هنا.'}</p>
-                        </div>
-                    </div>
-                    <a href="/auth?shop=omniflow-yczzqs8t.myshopify.com" className="shrink-0 px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-400 transition-colors">
-                        {isEn ? 'Connect Shopify' : 'ربط Shopify'}
-                    </a>
-                </div>
-            )}
+            {/* Shopify not connected — full connect flow */}
+            {shopifyNotConnected && <ShopifyConnectPrompt isEn={isEn} />}
             {/* Subtitle + action buttons */}
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">
@@ -4633,16 +4666,16 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 <div className="flex items-center gap-3 pt-1">
                     <button
                         onClick={() => {
-                            const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '');
-                            if (!shop) return showToast(isEn ? 'Enter store URL first' : 'أدخل رابط المتجر أولاً', 'error');
-                            window.location.href = `/auth?shop=${shop}`;
+                            const s = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '');
+                            if (!s) return showToast(isEn ? 'Enter store URL first' : 'أدخل رابط المتجر أولاً', 'error');
+                            window.location.href = `/auth?shop=${s}`;
                         }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
                         style={{background:'#96BF48'}}>
                         <ShoppingCart size={14} />
-                        {isEn ? 'Connect via Shopify OAuth (Recommended)' : 'ربط عبر Shopify OAuth (موصى به)'}
+                        {isEn ? '🔗 Connect Shopify (Auto)' : '🔗 ربط Shopify تلقائياً'}
                     </button>
-                    <p className="text-[10px] text-brand-muted">{isEn ? 'Gets a permanent token automatically' : 'يحصل على توكن دائم تلقائياً'}</p>
+                    <p className="text-[10px] text-brand-muted">{isEn ? 'Redirects to Shopify → approves → done automatically' : 'بيوجهك لـ Shopify → توافق → يتربط تلقائي'}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     {renderField({label:(isEn ? 'API Secret' : 'API Secret'), field:"shopify_secret", placeholder:"shpss_xxxxxxxx", dir:"ltr", secret:true})}
