@@ -8,6 +8,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 const FormData = require('form-data');
 const mongoose = require('mongoose');
+const { authMiddleware } = require('./middleware/auth');
 
 // Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/omniflow';
@@ -268,8 +269,19 @@ app.post('/api/config/branding', (req, res) => {
 });
 
 // جلب كل الإعدادات (بدون إظهار التوكنات كاملة)
-app.get('/api/config/setup', (req, res) => {
+app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const mask = (val) => val ? val.slice(0, 6) + '••••••••' + val.slice(-4) : '';
+    // Populate CONFIG from MongoDB if env is empty (after Railway redeploy)
+    if (!CONFIG.shopify_url || !CONFIG.shopify_access_token) {
+        try {
+            const Tenant = require('./models/Tenant');
+            const t = await Tenant.findById(req.tenant._id).lean();
+            if (t?.config?.shopify_url && !CONFIG.shopify_url)
+                CONFIG.shopify_url = t.config.shopify_url.replace('https://', '').replace(/\/$/, '');
+            if (t?.config?.shopify_access_token && !CONFIG.shopify_access_token)
+                CONFIG.shopify_access_token = t.config.shopify_access_token;
+        } catch (_) {}
+    }
     res.json({
         business_name: CONFIG.business_name,
         phone_number_id: CONFIG.phone_number_id,
@@ -293,7 +305,7 @@ app.get('/api/config/setup', (req, res) => {
 });
 
 // حفظ الإعدادات في .env وتحديث CONFIG
-app.post('/api/config/setup', (req, res) => {
+app.post('/api/config/setup', authMiddleware, async (req, res) => {
     const fields = {
         BUSINESS_NAME: 'business_name',
         META_ACCESS_TOKEN: 'access_token',
@@ -330,6 +342,23 @@ app.post('/api/config/setup', (req, res) => {
     }
 
     fs.writeFileSync(envPath, envContent, 'utf8');
+
+    // Also persist Shopify credentials to MongoDB (survives Railway redeploys)
+    try {
+        if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
+            const Tenant = require('./models/Tenant');
+            const updates = {};
+            const su = req.body.shopify_url;
+            const st = req.body.shopify_access_token;
+            if (su && !String(su).includes('••••'))
+                updates['config.shopify_url'] = 'https://' + su.replace(/https?:\/\//, '').replace(/\/$/, '');
+            if (st && !String(st).includes('••••'))
+                updates['config.shopify_access_token'] = st;
+            if (Object.keys(updates).length)
+                await Tenant.findByIdAndUpdate(req.tenant._id, { $set: updates });
+        }
+    } catch (_) {}
+
     res.json({ success: true, business_name: CONFIG.business_name });
 });
 

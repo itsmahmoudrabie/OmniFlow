@@ -4324,7 +4324,14 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     // ── Load ────────────────────────────────────────────────────────────────
     React.useEffect(() => {
         axios.get(`${API_URL}/config/setup`).then(r => {
-            if (r.data && typeof r.data === 'object') setWs(p => ({ ...p, ...r.data }));
+            if (r.data && typeof r.data === 'object') {
+                setWs(p => ({
+                    ...p,
+                    ...r.data,
+                    shopify_store: r.data.shopify_url || p.shopify_store || '',
+                    shopify_key: r.data.shopify_access_token || p.shopify_key || '',
+                }));
+            }
         }).catch(() => {});
         axios.get(`${API_URL}/config/branding`).then(r => {
             if (r.data) setBranding(r.data);
@@ -4353,7 +4360,13 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await axios.post(`${API_URL}/config/setup`, ws);
+            // Map frontend field names → backend field names before saving
+            const payload = {
+                ...ws,
+                shopify_url: ws.shopify_store || ws.shopify_url || '',
+                shopify_access_token: ws.shopify_key || ws.shopify_access_token || '',
+            };
+            await axios.post(`${API_URL}/config/setup`, payload);
             await axios.post(`${API_URL}/settings`, {
                 ai_instruction: ws.ai_instruction,
                 ai_enabled: ws.ai_enabled,
@@ -4615,6 +4628,23 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 <div className="grid grid-cols-2 gap-4">
                     {renderField({label:(isEn ? 'Store URL' : 'رابط المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
                     {renderField({label:(isEn ? 'Admin API Key' : 'مفتاح Admin API'), field:"shopify_key", placeholder:"shpat_xxxxxxxx", dir:"ltr", secret:true})}
+                </div>
+                {/* OAuth connect button */}
+                <div className="flex items-center gap-3 pt-1">
+                    <button
+                        onClick={() => {
+                            const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '');
+                            if (!shop) return showToast(isEn ? 'Enter store URL first' : 'أدخل رابط المتجر أولاً', 'error');
+                            window.location.href = `/auth?shop=${shop}`;
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
+                        style={{background:'#96BF48'}}>
+                        <ShoppingCart size={14} />
+                        {isEn ? 'Connect via Shopify OAuth (Recommended)' : 'ربط عبر Shopify OAuth (موصى به)'}
+                    </button>
+                    <p className="text-[10px] text-brand-muted">{isEn ? 'Gets a permanent token automatically' : 'يحصل على توكن دائم تلقائياً'}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                     {renderField({label:(isEn ? 'API Secret' : 'API Secret'), field:"shopify_secret", placeholder:"shpss_xxxxxxxx", dir:"ltr", secret:true})}
                     {renderField({label:(isEn ? 'Webhook Secret' : 'Webhook Secret'), field:"shopify_webhook", placeholder:"whsec_xxxxxxxx", dir:"ltr", secret:true})}
                 </div>
