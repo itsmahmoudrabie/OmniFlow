@@ -42,7 +42,24 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
-const { mountShopifyOAuth } = require('./shopify-oauth');
+const { mountShopifyOAuth, loadShops, getShopToken } = require('./shopify-oauth');
+
+// Helper: get active Shopify shop credentials (OAuth > env fallback)
+const getActiveShopify = () => {
+    const shops = loadShops();
+    const shopDomain = Object.keys(shops)[0];
+    if (shopDomain && shops[shopDomain]?.access_token) {
+        return {
+            shopify_url: shopDomain,
+            shopify_access_token: shops[shopDomain].access_token
+        };
+    }
+    // fallback to env vars
+    return {
+        shopify_url: CONFIG.shopify_url,
+        shopify_access_token: CONFIG.shopify_access_token
+    };
+};
 
 // Serve Media
 app.use('/media', express.static(path.join(__dirname, 'media')));
@@ -375,9 +392,11 @@ app.get('/api/shopify/products', async (_req, res) => {
 // جلب الطلبات من شوبيفاي
 app.get('/api/orders', async (req, res) => {
     try {
-        const url = `https://${CONFIG.shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=50`;
+        const { shopify_url, shopify_access_token } = getActiveShopify();
+        if (!shopify_url || !shopify_access_token) return res.json([]);
+        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=50`;
         const response = await axios.get(url, {
-            headers: { 'X-Shopify-Access-Token': CONFIG.shopify_access_token }
+            headers: { 'X-Shopify-Access-Token': shopify_access_token }
         });
         
         const orders = response.data.orders;
@@ -431,11 +450,12 @@ app.get('/api/orders', async (req, res) => {
 
 // إلغاء الطلب في شوبيفاي
 const cancelShopifyOrder = async (shopifyOrderId) => {
-    if (!shopifyOrderId || !CONFIG.shopify_url || !CONFIG.shopify_access_token) return;
+    const { shopify_url, shopify_access_token } = getActiveShopify();
+    if (!shopifyOrderId || !shopify_url || !shopify_access_token) return;
     try {
-        const url = `https://${CONFIG.shopify_url}/admin/api/2024-04/orders/${shopifyOrderId}/cancel.json`;
+        const url = `https://${shopify_url}/admin/api/2024-04/orders/${shopifyOrderId}/cancel.json`;
         await axios.post(url, { reason: 'customer' }, {
-            headers: { 'X-Shopify-Access-Token': CONFIG.shopify_access_token }
+            headers: { 'X-Shopify-Access-Token': shopify_access_token }
         });
         console.log(`[Shopify] Order ${shopifyOrderId} cancelled successfully`);
     } catch (e) {
@@ -634,9 +654,10 @@ app.get('/api/customers', async (req, res) => {
 
         // 3. من شوبيفاي (تاريخ الطلبات)
         try {
-            const url = `https://${CONFIG.shopify_url}/admin/api/2024-04/orders.json?status=any&limit=250`;
+            const { shopify_url: _sUrl, shopify_access_token: _sToken } = getActiveShopify();
+            const url = `https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`;
             const response = await axios.get(url, {
-                headers: { 'X-Shopify-Access-Token': CONFIG.shopify_access_token }
+                headers: { 'X-Shopify-Access-Token': _sToken }
             });
             response.data.orders.forEach(o => {
                 const phone = o.shipping_address?.phone || o.customer?.phone || "";
