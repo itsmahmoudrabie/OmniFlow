@@ -44,17 +44,30 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
 const { mountShopifyOAuth, loadShops, getShopToken } = require('./shopify-oauth');
 
-// Helper: get active Shopify shop credentials (OAuth > env fallback)
-const getActiveShopify = () => {
+// Helper: get active Shopify shop credentials
+// Priority: shops.json (in-memory after OAuth) → MongoDB Tenant → env vars
+const getActiveShopify = async () => {
+    // 1. shops.json (valid after fresh OAuth, wiped on redeploy)
     const shops = loadShops();
     const shopDomain = Object.keys(shops)[0];
     if (shopDomain && shops[shopDomain]?.access_token) {
-        return {
-            shopify_url: shopDomain,
-            shopify_access_token: shops[shopDomain].access_token
-        };
+        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
     }
-    // fallback to env vars
+    // 2. MongoDB Tenant (persists across redeploys)
+    try {
+        const Tenant = require('./models/Tenant');
+        const tenant = await Tenant.findOne({
+            'config.shopify_url': { $exists: true, $ne: '' },
+            'config.shopify_access_token': { $exists: true, $ne: '' }
+        }).lean();
+        if (tenant?.config?.shopify_access_token) {
+            return {
+                shopify_url: tenant.config.shopify_url.replace('https://', ''),
+                shopify_access_token: tenant.config.shopify_access_token
+            };
+        }
+    } catch (_) {}
+    // 3. env vars fallback
     return {
         shopify_url: CONFIG.shopify_url,
         shopify_access_token: CONFIG.shopify_access_token
@@ -392,9 +405,9 @@ app.get('/api/shopify/products', async (_req, res) => {
 // جلب الطلبات من شوبيفاي
 app.get('/api/orders', async (req, res) => {
     try {
-        const { shopify_url, shopify_access_token } = getActiveShopify();
+        const { shopify_url, shopify_access_token } = await getActiveShopify();
         if (!shopify_url || !shopify_access_token) return res.json([]);
-        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=50`;
+        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
         const response = await axios.get(url, {
             headers: { 'X-Shopify-Access-Token': shopify_access_token }
         });
@@ -450,7 +463,7 @@ app.get('/api/orders', async (req, res) => {
 
 // إلغاء الطلب في شوبيفاي
 const cancelShopifyOrder = async (shopifyOrderId) => {
-    const { shopify_url, shopify_access_token } = getActiveShopify();
+    const { shopify_url, shopify_access_token } = await getActiveShopify();
     if (!shopifyOrderId || !shopify_url || !shopify_access_token) return;
     try {
         const url = `https://${shopify_url}/admin/api/2024-04/orders/${shopifyOrderId}/cancel.json`;
@@ -654,7 +667,7 @@ app.get('/api/customers', async (req, res) => {
 
         // 3. من شوبيفاي (تاريخ الطلبات)
         try {
-            const { shopify_url: _sUrl, shopify_access_token: _sToken } = getActiveShopify();
+            const { shopify_url: _sUrl, shopify_access_token: _sToken } = await getActiveShopify();
             const url = `https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`;
             const response = await axios.get(url, {
                 headers: { 'X-Shopify-Access-Token': _sToken }
