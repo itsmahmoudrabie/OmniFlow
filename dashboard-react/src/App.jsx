@@ -4650,25 +4650,16 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                         ● {shopConnected ? 'SYNCED' : 'NOT SET'}
                     </span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                    {renderField({label:(isEn ? 'Store URL' : 'رابط المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
-                    {renderField({label:(isEn ? 'Admin API Key' : 'مفتاح Admin API'), field:"shopify_key", placeholder:"shpat_xxxxxxxx", dir:"ltr", secret:true})}
+                <div className="space-y-3">
+                    {renderField({label:(isEn ? 'Store Domain' : 'دومين المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
+                    {renderField({label:(isEn ? 'Admin API Access Token' : 'Admin API Token'), field:"shopify_key", placeholder:"shpat_xxxxxxxxxxxxxxxxxxxxxxxx", dir:"ltr", secret:true})}
                 </div>
-                {/* OAuth connect button */}
-                <div className="flex items-center gap-3 pt-1">
-                    <button
-                        onClick={() => {
-                            const s = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '');
-                            if (!s) return showToast(isEn ? 'Enter store URL first' : 'أدخل رابط المتجر أولاً', 'error');
-                            window.location.href = `/auth?shop=${s}`;
-                        }}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                        style={{background:'#96BF48'}}>
-                        <ShoppingCart size={14} />
-                        {isEn ? '🔗 Connect Shopify (Auto)' : '🔗 ربط Shopify تلقائياً'}
-                    </button>
-                    <p className="text-[10px] text-brand-muted">{isEn ? 'Redirects to Shopify → approves → done automatically' : 'بيوجهك لـ Shopify → توافق → يتربط تلقائي'}</p>
-                </div>
+                <p className="text-[11px] text-brand-muted pt-1">
+                    {isEn
+                        ? '💡 Get the token from: Shopify Admin → Settings → Apps → Develop apps → Create app → Configure scopes → Install → copy token'
+                        : '💡 اجيب التوكن من: Shopify Admin ← Settings ← Apps ← Develop apps ← Create app ← Configure scopes ← Install ← انسخ التوكن'
+                    }
+                </p>
                 <div className="grid grid-cols-2 gap-4">
                     {renderField({label:(isEn ? 'API Secret' : 'API Secret'), field:"shopify_secret", placeholder:"shpss_xxxxxxxx", dir:"ltr", secret:true})}
                     {renderField({label:(isEn ? 'Webhook Secret' : 'Webhook Secret'), field:"shopify_webhook", placeholder:"whsec_xxxxxxxx", dir:"ltr", secret:true})}

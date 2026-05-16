@@ -459,7 +459,7 @@ app.get('/api/orders', async (req, res) => {
             console.warn('[orders] No Shopify credentials found. Re-run OAuth at /auth?shop=YOUR-STORE.myshopify.com');
             return res.json({ error: 'shopify_not_connected', orders: [] });
         }
-        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
+        const url = `https://${shopify_url}/admin/api/2023-10/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
         const response = await axios.get(url, {
             headers: { 'X-Shopify-Access-Token': shopify_access_token }
         });
