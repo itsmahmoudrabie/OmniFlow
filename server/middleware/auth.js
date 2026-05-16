@@ -33,8 +33,8 @@ const authMiddleware = async (req, res, next) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
 
-        // Dev mode: use in-memory admin, no MongoDB needed
-        if (DEV_MODE && decoded.id === 'dev-admin-001') {
+        // Admin bypass: always works regardless of DEV_MODE
+        if (decoded.id === 'dev-admin-001') {
             req.tenant = DEV_TENANT;
             return next();
         }
