@@ -80,6 +80,17 @@ app.use('/media', express.static(path.join(__dirname, 'media')));
 // Railway/health probe — never authenticated, must return 200 quickly
 app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'omniflow', ts: Date.now() }));
 
+// Debug: check what Shopify credentials are resolved
+app.get('/api/shopify/debug', async (_req, res) => {
+    const { shopify_url, shopify_access_token } = await getActiveShopify();
+    res.json({
+        connected: !!(shopify_url && shopify_access_token),
+        shop: shopify_url || null,
+        token_prefix: shopify_access_token ? shopify_access_token.slice(0, 6) + '...' : null,
+        shops_json_exists: require('fs').existsSync(require('path').join(__dirname, 'shops.json')),
+    });
+});
+
 // Serve React frontend (production build)
 const FRONTEND_DIST = path.join(__dirname, '..', 'dashboard-react', 'dist');
 if (fs.existsSync(FRONTEND_DIST)) {
@@ -406,7 +417,10 @@ app.get('/api/shopify/products', async (_req, res) => {
 app.get('/api/orders', async (req, res) => {
     try {
         const { shopify_url, shopify_access_token } = await getActiveShopify();
-        if (!shopify_url || !shopify_access_token) return res.json([]);
+        if (!shopify_url || !shopify_access_token) {
+            console.warn('[orders] No Shopify credentials found. Re-run OAuth at /auth?shop=YOUR-STORE.myshopify.com');
+            return res.json({ error: 'shopify_not_connected', orders: [] });
+        }
         const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
         const response = await axios.get(url, {
             headers: { 'X-Shopify-Access-Token': shopify_access_token }

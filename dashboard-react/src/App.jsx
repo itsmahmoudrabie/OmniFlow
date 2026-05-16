@@ -455,11 +455,18 @@ const App = () => {
         { id: 'config', label: lang === 'en' ? 'App Settings' : 'إعدادات التطبيق', icon: Cog },
     ];
 
+    const [shopifyNotConnected, setShopifyNotConnected] = useState(false);
     const fetchOrders = async () => {
         setLoading(true);
         try {
             const res = await axios.get(`${API_URL}/orders`);
-            setOrders(Array.isArray(res.data) ? res.data : []);
+            if (res.data?.error === 'shopify_not_connected') {
+                setShopifyNotConnected(true);
+                setOrders([]);
+            } else {
+                setShopifyNotConnected(false);
+                setOrders(Array.isArray(res.data) ? res.data : (res.data?.orders || []));
+            }
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -758,7 +765,7 @@ const App = () => {
                 ) : (
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                     {activeTab === 'dash' && <Dashboard inbox={inbox} orders={orders} abandonedCarts={abandonedCarts} onOpenChat={handleOpenChat} setActiveTab={setActiveTab} lang={lang} aiEnabled={aiEnabled} />}
-                    {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} />}
+                    {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} shopifyNotConnected={shopifyNotConnected} />}
                     {activeTab === 'campaigns' && (
                         !hasFeature('growth') ? (
                             <UpgradePrompt feature="Broadcasts" minPlan="Growth" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
@@ -1132,7 +1139,7 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
     );
 };
 
-const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang }) => {
+const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang, shopifyNotConnected }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [statusFilter, setStatusFilter] = useState('all');
     const [lastUpdated, setLastUpdated] = useState(Date.now());
@@ -1200,6 +1207,21 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
 
     return (
         <div className={`space-y-4 ${isEn ? 'text-left' : 'text-right'}`}>
+            {/* Shopify not connected banner */}
+            {shopifyNotConnected && (
+                <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-orange-500/30 bg-orange-500/10">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle size={18} className="text-orange-400 shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-orange-300">{isEn ? 'Shopify store not connected' : 'متجر Shopify غير متصل'}</p>
+                            <p className="text-xs text-brand-muted mt-0.5">{isEn ? 'Connect your store to see orders here.' : 'اربط متجرك لرؤية الطلبات هنا.'}</p>
+                        </div>
+                    </div>
+                    <a href="/auth?shop=omniflow-yczzqs8t.myshopify.com" className="shrink-0 px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-400 transition-colors">
+                        {isEn ? 'Connect Shopify' : 'ربط Shopify'}
+                    </a>
+                </div>
+            )}
             {/* Subtitle + action buttons */}
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">
