@@ -95,8 +95,7 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
             `?client_id=${encodeURIComponent(API_KEY)}` +
             `&scope=${encodeURIComponent(SCOPES)}` +
             `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-            `&state=${encodeURIComponent(state)}` +
-            `&grant_options[]=per-user`.replace('per-user', ''); // offline access token
+            `&state=${encodeURIComponent(state)}`; // offline access token (no grant_options)
 
         res.redirect(installUrl);
     });
