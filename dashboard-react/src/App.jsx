@@ -4733,7 +4733,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                                 const r = await axios.post(`${API_URL}/shopify/fetch-token`, { shop });
                                 const expiryStr = r.data.expiry ? new Date(r.data.expiry).toLocaleString() : '24h';
                                 setShopifyTokenMsg(`✅ ${isEn ? 'Connected! Token auto-refreshes every 24h' : 'تم الربط! التوكن يتجدد تلقائياً كل 24 ساعة'}`);
-                                setWs(p => ({...p, shopify_key: r.data.access_token}));
+                                setWs(p => ({...p, shopify_store: shop, shopify_key: r.data.access_token}));
                                 showToast(isEn ? 'Shopify connected ✅' : 'تم ربط Shopify ✅', 'success');
                             } catch (e) {
                                 const err = e.response?.data?.error || e.message;

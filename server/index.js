@@ -396,11 +396,14 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         }
     } catch (_) {}
 
+    // SHOPIFY_STORE env var = the store domain (set once in Railway, never changes)
+    const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
+
     res.json({
         business_name: CONFIG.business_name,
         phone_number_id: CONFIG.phone_number_id,
         api_version: CONFIG.api_version,
-        shopify_url: CONFIG.shopify_url || shopifyCfg.shopify_url || '',
+        shopify_url: CONFIG.shopify_url || shopifyCfg.shopify_url || envStore || '',
         catalog_id: CONFIG.catalog_id,
         server_url: CONFIG.server_url,
         gemini_api_key: CONFIG.gemini_api_key ? mask(CONFIG.gemini_api_key) : '',
