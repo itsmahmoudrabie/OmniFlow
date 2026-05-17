@@ -212,6 +212,28 @@ app.use('/media', express.static(path.join(__dirname, 'media')));
 // Railway/health probe — never authenticated, must return 200 quickly
 app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'omniflow', ts: Date.now() }));
 
+// Debug: check webhook config state
+app.get('/api/webhook/debug', async (_req, res) => {
+    let dbVerifyToken = null;
+    let dbPhoneId = null;
+    let dbAccessToken = null;
+    try {
+        const Tenant = require('./models/Tenant');
+        const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
+        dbVerifyToken = t?.config?.verify_token || null;
+        dbPhoneId     = t?.config?.phone_number_id || null;
+        dbAccessToken = t?.config?.access_token ? t.config.access_token.slice(0,8) + '...' : null;
+    } catch (e) { dbVerifyToken = 'DB_ERROR: ' + e.message; }
+    res.json({
+        config_verify_token:  CONFIG.verify_token  || '(empty)',
+        config_phone_id:      CONFIG.phone_number_id || '(empty)',
+        config_access_token:  CONFIG.access_token ? CONFIG.access_token.slice(0,8) + '...' : '(empty)',
+        db_verify_token:      dbVerifyToken || '(empty)',
+        db_phone_id:          dbPhoneId || '(empty)',
+        db_access_token:      dbAccessToken || '(empty)',
+    });
+});
+
 // Debug: check what Shopify credentials are resolved + test orders fetch
 app.get('/api/shopify/debug', async (_req, res) => {
     const { shopify_url, shopify_access_token } = await getActiveShopify();
