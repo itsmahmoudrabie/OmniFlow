@@ -4327,6 +4327,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
         brand_name: '', region: '', language: 'ar+en', currency: 'EGP',
         wa_phone: '', wa_token: '', wa_phone_id: '', wa_business_id: '',
         shopify_store: '', shopify_key: '', shopify_secret: '', shopify_webhook: '',
+        shopify_client_id: '', shopify_client_secret: '',
         ai_enabled: false, ai_instruction: '',
         ai_auto_reply: true, ai_draft_mode: false, ai_auto_tag_vip: false,
         ai_send_recovery: false, ai_escalate_negative: false,
@@ -4350,8 +4351,10 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 setWs(p => ({
                     ...p,
                     ...r.data,
-                    shopify_store: r.data.shopify_url || p.shopify_store || '',
-                    shopify_key: r.data.shopify_access_token || p.shopify_key || '',
+                    shopify_store:         r.data.shopify_url             || p.shopify_store         || '',
+                    shopify_key:           r.data.shopify_access_token    || p.shopify_key           || '',
+                    shopify_client_id:     r.data.shopify_client_id       || p.shopify_client_id     || '',
+                    shopify_client_secret: r.data.shopify_client_secret   || p.shopify_client_secret || '',
                 }));
             }
         }).catch(() => {});
@@ -4385,8 +4388,10 @@ const SetupManager = ({ showToast, lang, onSave }) => {
             // Map frontend field names → backend field names before saving
             const payload = {
                 ...ws,
-                shopify_url: ws.shopify_store || ws.shopify_url || '',
-                shopify_access_token: ws.shopify_key || ws.shopify_access_token || '',
+                shopify_url:           ws.shopify_store         || ws.shopify_url           || '',
+                shopify_access_token:  ws.shopify_key           || ws.shopify_access_token  || '',
+                shopify_client_id:     ws.shopify_client_id     || '',
+                shopify_client_secret: ws.shopify_client_secret || '',
             };
             await axios.post(`${API_URL}/config/setup`, payload);
             await axios.post(`${API_URL}/settings`, {
@@ -4654,32 +4659,67 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                     {renderField({label:(isEn ? 'Admin API Access Token' : 'Admin API Token'), field:"shopify_key", placeholder:"shpat_xxxxxxxxxxxxxxxxxxxxxxxx", dir:"ltr", secret:true})}
                 </div>
 
-                {/* ── One-click OAuth connect ── */}
+                {/* ── Client Credentials Grant ── */}
                 <div className="rounded-xl p-4 space-y-3" style={{background:'rgba(150,191,72,0.07)', border:'1px solid rgba(150,191,72,0.2)'}}>
                     <p className="text-[11px] font-black text-brand-egg uppercase tracking-wider">
-                        {isEn ? '🔗 Connect via Shopify OAuth' : '🔗 ربط عبر Shopify OAuth'}
+                        {isEn ? '🔑 Get Token via Client Credentials' : '🔑 احصل على التوكن تلقائياً'}
                     </p>
                     <p className="text-[10px] text-brand-muted leading-relaxed">
                         {isEn
-                            ? 'Enter your store domain above, then click the button. A new tab will open — approve permissions in Shopify. The token will be saved automatically and you\'ll be redirected back.'
-                            : 'اكتب دومين المتجر فوق ثم اضغط الزرار. هيفتح تبويب جديد — وافق على الصلاحيات في Shopify. التوكن هيتحفظ تلقائياً وترجع للداشبورد.'
+                            ? 'Enter your Shopify App Client ID & Secret. The server will fetch a shpat_ token and auto-refresh it every 24h.'
+                            : 'أدخل Client ID و Client Secret من Shopify Partners. السيرفر هيجيب التوكن تلقائياً ويجدده كل 24 ساعة.'
                         }
                     </p>
+                    <div className="space-y-2">
+                        <div>
+                            <label className="text-[10px] text-brand-muted block mb-1">{isEn ? 'Client ID' : 'Client ID'}</label>
+                            <input
+                                value={ws.shopify_client_id || ''}
+                                onChange={e => setWs(p => ({...p, shopify_client_id: e.target.value}))}
+                                placeholder="b7bd668fca474f9c..."
+                                dir="ltr"
+                                className="w-full px-3 py-2 rounded-lg text-[11px] font-mono bg-brand-surface border border-brand-border text-brand-egg outline-none focus:border-brand-accent"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-brand-muted block mb-1">{isEn ? 'Client Secret' : 'Client Secret'}</label>
+                            <input
+                                value={ws.shopify_client_secret || ''}
+                                onChange={e => setWs(p => ({...p, shopify_client_secret: e.target.value}))}
+                                placeholder="shpss_xxxxxxxxxxxxxxxx"
+                                dir="ltr"
+                                type="password"
+                                className="w-full px-3 py-2 rounded-lg text-[11px] font-mono bg-brand-surface border border-brand-border text-brand-egg outline-none focus:border-brand-accent"
+                            />
+                        </div>
+                    </div>
                     <button
                         onClick={async () => {
                             const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
-                            if (!shop) return showToast(isEn ? 'Enter store domain first' : 'اكتب دومين المتجر أولاً', 'error');
+                            const clientId  = (ws.shopify_client_id || '').trim();
+                            const clientSec = (ws.shopify_client_secret || '').trim();
+                            if (!shop)      return showToast(isEn ? 'Enter store domain first' : 'اكتب دومين المتجر أولاً', 'error');
+                            if (!clientId)  return showToast(isEn ? 'Enter Client ID' : 'أدخل Client ID', 'error');
+                            if (!clientSec || clientSec.includes('••••')) return showToast(isEn ? 'Enter Client Secret' : 'أدخل Client Secret', 'error');
+                            setShopifyTokenMsg(isEn ? '⏳ Fetching token...' : '⏳ جاري الحصول على التوكن...');
                             try {
-                                const r = await axios.get(`${API_URL}/shopify/auth-url?shop=${encodeURIComponent(shop)}`);
-                                window.open(r.data.auth_url, '_blank');
-                                setShopifyTokenMsg(isEn ? '⏳ Waiting for approval in new tab...' : '⏳ في انتظار الموافقة في التبويب الجديد...');
+                                const r = await axios.post(`${API_URL}/shopify/fetch-token`, {
+                                    shop, client_id: clientId, client_secret: clientSec
+                                });
+                                const preview = r.data.access_token?.slice(0,10) + '...';
+                                const expiryStr = r.data.expiry ? new Date(r.data.expiry).toLocaleString() : '24h';
+                                setShopifyTokenMsg(`✅ ${isEn?'Token saved! Expires':'تم! ينتهي'} ${expiryStr}`);
+                                setWs(p => ({...p, shopify_key: r.data.access_token}));
+                                showToast(isEn ? 'Shopify connected ✅' : 'تم ربط Shopify ✅', 'success');
                             } catch (e) {
-                                showToast(e.response?.data?.error || 'Failed to generate auth URL', 'error');
+                                const err = e.response?.data?.error || e.message;
+                                setShopifyTokenMsg(`❌ ${err}`);
+                                showToast(err, 'error');
                             }
                         }}
                         className="w-full py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wider transition-all hover:opacity-90"
                         style={{background:'#96BF48', color:'#fff'}}>
-                        {isEn ? '→ Connect Shopify Store' : '→ ربط المتجر بـ Shopify'}
+                        {isEn ? '→ Get Shopify Token' : '→ احصل على التوكن'}
                     </button>
                     {shopifyTokenMsg && (
                         <p className={`text-[11px] font-bold ${shopifyTokenMsg.startsWith('✅') ? 'text-brand-accent' : shopifyTokenMsg.startsWith('❌') ? 'text-red-400' : 'text-yellow-400'}`}>
@@ -4688,8 +4728,8 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                     )}
                     <p className="text-[10px] text-brand-muted">
                         {isEn
-                            ? '💡 Or paste a token (shpat_...) from Shopify Admin → Settings → Apps → Develop apps → your app → API credentials'
-                            : '💡 أو الصق التوكن (shpat_...) من: Shopify Admin ← Settings ← Apps ← Develop apps ← تطبيقك ← API credentials'
+                            ? '💡 Find credentials: partners.shopify.com → Apps → your app → API credentials'
+                            : '💡 partners.shopify.com ← Apps ← تطبيقك ← API credentials'
                         }
                     </p>
                 </div>

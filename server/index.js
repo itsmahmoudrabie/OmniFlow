@@ -45,44 +45,67 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
 const { mountShopifyOAuth, loadShops, getShopToken, setShopToken, isValidShopDomain } = require('./shopify-oauth');
 
-// Helper: get active Shopify shop credentials
-// Priority: MongoDB Tenant (permanent) → shops.json (OAuth cache) → env vars
+// Helper: get active Shopify shop credentials with auto-refresh via Client Credentials Grant
+// Priority: MongoDB (auto-refresh if expired) → shops.json (shpat_ only) → env vars
 const getActiveShopify = async () => {
-    // 1. MongoDB — prefer shpat_ (permanent offline) tokens only
+    // 1. MongoDB — check expiry, auto-refresh with client_credentials if needed
     try {
         const Tenant = require('./models/Tenant');
-        // First try: find any tenant with a shpat_ token
         const tenants = await Tenant.find({
             'config.shopify_url': { $exists: true, $ne: '' },
-            'config.shopify_access_token': { $exists: true, $ne: '' }
         }).sort({ updatedAt: -1 }).lean();
 
-        // Prefer shpat_ (permanent) — skip shpua_ (user/expiring)
-        const best = tenants.find(t => t.config?.shopify_access_token?.startsWith('shpat_'))
-                  || tenants.find(t => t.config?.shopify_access_token);
+        for (const t of tenants) {
+            const cfg = t.config;
+            if (!cfg?.shopify_url) continue;
 
-        if (best?.config?.shopify_access_token) {
-            const token = best.config.shopify_access_token;
-            if (token.startsWith('shpua_')) {
-                console.warn('[getActiveShopify] Only shpua_ token found in MongoDB — will be rejected by Shopify. Re-connect via Settings.');
+            const shop        = cfg.shopify_url.replace('https://', '').replace(/\/$/, '');
+            const token       = cfg.shopify_access_token;
+            const expiry      = cfg.shopify_token_expiry;
+            const clientId    = cfg.shopify_client_id;
+            const clientSec   = cfg.shopify_client_secret;
+
+            // Token is valid if it exists and (has no expiry OR expiry > now + 5 min buffer)
+            const tokenValid = token && !token.startsWith('shpua_') &&
+                               (!expiry || new Date(expiry) > new Date(Date.now() + 5 * 60 * 1000));
+
+            if (tokenValid) {
+                return { shopify_url: shop, shopify_access_token: token };
             }
-            return {
-                shopify_url: best.config.shopify_url.replace('https://', '').replace(/\/$/, ''),
-                shopify_access_token: token
-            };
+
+            // Token missing / expired / shpua_ — try Client Credentials Grant refresh
+            if (clientId && clientSec) {
+                try {
+                    const resp = await axios.post(
+                        `https://${shop}/admin/oauth/access_token`,
+                        `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
+                        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 8000 }
+                    );
+                    const newToken   = resp.data.access_token;
+                    const expiresIn  = resp.data.expires_in || 86399;
+                    const newExpiry  = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+                    await Tenant.findByIdAndUpdate(t._id, { $set: {
+                        'config.shopify_access_token': newToken,
+                        'config.shopify_token_expiry': newExpiry,
+                    }});
+                    console.log(`[Shopify] Token auto-refreshed for ${shop}, expires ${newExpiry}`);
+                    return { shopify_url: shop, shopify_access_token: newToken };
+                } catch (e) {
+                    console.warn('[Shopify] Client credentials refresh failed:', e.response?.data || e.message);
+                }
+            }
+
+            // Last resort: return whatever token exists (might fail Shopify side)
+            if (token) return { shopify_url: shop, shopify_access_token: token };
         }
     } catch (_) {}
 
-    // 2. shops.json — only use shpat_ tokens (skip shpua_)
+    // 2. shops.json — only use shpat_ (permanent) tokens
     const shops = loadShops();
-    const shopDomain = Object.keys(shops).find(d => shops[d]?.access_token?.startsWith('shpat_'))
-                    || Object.keys(shops)[0];
+    const shopDomain = Object.keys(shops).find(d => shops[d]?.access_token?.startsWith('shpat_'));
     if (shopDomain && shops[shopDomain]?.access_token) {
-        const token = shops[shopDomain].access_token;
-        if (!token.startsWith('shpua_')) {
-            return { shopify_url: shopDomain, shopify_access_token: token };
-        }
-        console.warn('[getActiveShopify] shops.json has shpua_ token — skipping.');
+        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
     }
 
     // 3. env vars fallback
@@ -297,22 +320,23 @@ app.post('/api/config/branding', (req, res) => {
 // جلب كل الإعدادات (بدون إظهار التوكنات كاملة)
 app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const mask = (val) => val ? val.slice(0, 6) + '••••••••' + val.slice(-4) : '';
-    // Populate CONFIG from MongoDB if env is empty (after Railway redeploy)
-    if (!CONFIG.shopify_url || !CONFIG.shopify_access_token) {
-        try {
-            const Tenant = require('./models/Tenant');
-            const t = await Tenant.findById(req.tenant._id).lean();
-            if (t?.config?.shopify_url && !CONFIG.shopify_url)
-                CONFIG.shopify_url = t.config.shopify_url.replace('https://', '').replace(/\/$/, '');
-            if (t?.config?.shopify_access_token && !CONFIG.shopify_access_token)
-                CONFIG.shopify_access_token = t.config.shopify_access_token;
-        } catch (_) {}
-    }
+    // Populate CONFIG from MongoDB (survives Railway redeploys)
+    let dbCfg = {};
+    try {
+        const Tenant = require('./models/Tenant');
+        const t = await Tenant.findById(req.tenant._id).lean();
+        if (t?.config) dbCfg = t.config;
+        if (dbCfg.shopify_url && !CONFIG.shopify_url)
+            CONFIG.shopify_url = dbCfg.shopify_url.replace('https://', '').replace(/\/$/, '');
+        if (dbCfg.shopify_access_token && !CONFIG.shopify_access_token)
+            CONFIG.shopify_access_token = dbCfg.shopify_access_token;
+    } catch (_) {}
+
     res.json({
         business_name: CONFIG.business_name,
         phone_number_id: CONFIG.phone_number_id,
         api_version: CONFIG.api_version,
-        shopify_url: CONFIG.shopify_url,
+        shopify_url: CONFIG.shopify_url || dbCfg.shopify_url?.replace('https://', '').replace(/\/$/, '') || '',
         catalog_id: CONFIG.catalog_id,
         server_url: CONFIG.server_url,
         gemini_api_key: CONFIG.gemini_api_key ? mask(CONFIG.gemini_api_key) : '',
@@ -326,7 +350,11 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         woo_consumer_secret: CONFIG.woo_consumer_secret ? mask(CONFIG.woo_consumer_secret) : '',
         webhook_url: CONFIG.webhook_url || '',
         loyalty_points: CONFIG.loyalty_points || 10,
-        is_configured: !!(CONFIG.access_token && CONFIG.phone_number_id && CONFIG.verify_token)
+        is_configured: !!(CONFIG.access_token && CONFIG.phone_number_id && CONFIG.verify_token),
+        // Client Credentials fields (never mask — user needs to see/edit them)
+        shopify_client_id:     dbCfg.shopify_client_id     || '',
+        shopify_client_secret: dbCfg.shopify_client_secret ? mask(dbCfg.shopify_client_secret) : '',
+        shopify_token_expiry:  dbCfg.shopify_token_expiry  || null,
     });
 });
 
@@ -418,6 +446,51 @@ app.post('/api/config/test-shopify', async (req, res) => {
     } catch (e) {
         const msg = e.response?.data?.errors || 'Invalid store URL or token';
         res.status(400).json({ error: typeof msg === 'string' ? msg : 'Connection failed' });
+    }
+});
+
+// ── Client Credentials Grant: fetch shpat_ token directly (no redirect needed) ──
+app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
+    const { shop, client_id, client_secret } = req.body;
+    const domain = (shop || '').replace(/https?:\/\//, '').replace(/\/$/, '').toLowerCase().trim();
+    if (!isValidShopDomain(domain)) return res.status(400).json({ error: 'Invalid shop domain. Use: yourstore.myshopify.com' });
+    if (!client_id || !client_secret)  return res.status(400).json({ error: 'client_id and client_secret are required' });
+
+    try {
+        const resp = await axios.post(
+            `https://${domain}/admin/oauth/access_token`,
+            `grant_type=client_credentials&client_id=${encodeURIComponent(client_id)}&client_secret=${encodeURIComponent(client_secret)}`,
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
+        );
+        const { access_token, expires_in, scope } = resp.data;
+        const expiry = new Date(Date.now() + (expires_in || 86399) * 1000).toISOString();
+
+        // Persist to MongoDB so token survives redeploys and auto-refreshes
+        try {
+            if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
+                const Tenant = require('./models/Tenant');
+                await Tenant.findByIdAndUpdate(req.tenant._id, { $set: {
+                    'config.shopify_url':           `https://${domain}`,
+                    'config.shopify_access_token':  access_token,
+                    'config.shopify_client_id':     client_id,
+                    'config.shopify_client_secret': client_secret,
+                    'config.shopify_token_expiry':  expiry,
+                }});
+            } else {
+                // Dev mode: update in-memory CONFIG
+                CONFIG.shopify_url           = domain;
+                CONFIG.shopify_access_token  = access_token;
+            }
+        } catch (dbErr) {
+            console.warn('[fetch-token] MongoDB save failed:', dbErr.message);
+        }
+
+        console.log(`[Shopify] fetch-token OK for ${domain} — expires ${expiry}`);
+        res.json({ ok: true, access_token, expires_in, expiry, scope });
+    } catch (e) {
+        const errMsg = e.response?.data?.error_description || e.response?.data?.error || e.message;
+        console.error('[fetch-token] failed:', e.response?.data || e.message);
+        res.status(400).json({ error: errMsg });
     }
 });
 
