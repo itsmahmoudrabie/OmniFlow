@@ -280,9 +280,9 @@ const CONFIG = {
     shopify_scopes: process.env.SHOPIFY_SCOPES || "read_products,read_orders,write_orders,read_customers",
     // WhatsApp Cloud API
     access_token: process.env.META_ACCESS_TOKEN || "",
-    phone_number_id: process.env.PHONE_NUMBER_ID || "",
+    phone_number_id: process.env.PHONE_NUMBER_ID || "1108371902361717",
     api_version: "v25.0",
-    verify_token: process.env.VERIFY_TOKEN || "",
+    verify_token: process.env.VERIFY_TOKEN || "your-random-verify-token",
     shopify_url: process.env.SHOPIFY_URL || "",
     shopify_access_token: process.env.SHOPIFY_ACCESS_TOKEN || "",
     gemini_api_key: process.env.GEMINI_API_KEY || "",
