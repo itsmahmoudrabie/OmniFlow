@@ -1995,6 +1995,21 @@ app.get('/api/settings', (req, res) => {
     res.json(settings);
 });
 
+app.post('/api/settings', (req, res) => {
+    let settings = loadJSON(SETTINGS_FILE);
+    if (Array.isArray(settings)) settings = {};
+    const allowed = ['ai_enabled','ai_auto_reply','ai_instruction','ai_draft_mode',
+                     'ai_auto_tag_vip','ai_send_recovery','ai_escalate_negative'];
+    for (const key of allowed) {
+        if (req.body[key] !== undefined) settings[key] = req.body[key];
+    }
+    saveJSON(SETTINGS_FILE, settings);
+    // Sync to in-memory CONFIG
+    if (req.body.ai_instruction !== undefined) CONFIG.ai_instruction = req.body.ai_instruction;
+    if (req.body.ai_enabled     !== undefined) CONFIG.ai_enabled     = req.body.ai_enabled;
+    res.json({ success: true });
+});
+
 app.post('/api/ai/suggest', async (req, res) => {
     if (!hasAI()) return res.status(400).json({ error: 'No AI provider configured. Add GROQ_API_KEY or GEMINI_API_KEY in settings.' });
     const { messages, customerName } = req.body;
