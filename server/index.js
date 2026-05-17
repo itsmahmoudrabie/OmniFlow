@@ -59,11 +59,12 @@ const getActiveShopify = async () => {
             const cfg = t.config;
             if (!cfg?.shopify_url) continue;
 
-            const shop        = cfg.shopify_url.replace('https://', '').replace(/\/$/, '');
-            const token       = cfg.shopify_access_token;
-            const expiry      = cfg.shopify_token_expiry;
-            const clientId    = cfg.shopify_client_id;
-            const clientSec   = cfg.shopify_client_secret;
+            const shop      = cfg.shopify_url.replace('https://', '').replace(/\/$/, '');
+            const token     = cfg.shopify_access_token;
+            const expiry    = cfg.shopify_token_expiry;
+            // Use env vars (app credentials) — never stored per-tenant
+            const clientId  = process.env.SHOPIFY_API_KEY   || '';
+            const clientSec = process.env.SHOPIFY_API_SECRET || '';
 
             // Token is valid if it exists and (has no expiry OR expiry > now + 5 min buffer)
             const tokenValid = token && !token.startsWith('shpua_') &&
@@ -449,38 +450,40 @@ app.post('/api/config/test-shopify', async (req, res) => {
     }
 });
 
-// ── Client Credentials Grant: fetch shpat_ token directly (no redirect needed) ──
+// ── Client Credentials Grant: fetch shpat_ token using server-side app credentials ──
+// client_id / client_secret come from Railway env vars (SHOPIFY_API_KEY / SHOPIFY_API_SECRET)
+// Frontend only sends the store domain — no credentials exposed to browser
 app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
-    const { shop, client_id, client_secret } = req.body;
+    const { shop } = req.body;
     const domain = (shop || '').replace(/https?:\/\//, '').replace(/\/$/, '').toLowerCase().trim();
     if (!isValidShopDomain(domain)) return res.status(400).json({ error: 'Invalid shop domain. Use: yourstore.myshopify.com' });
-    if (!client_id || !client_secret)  return res.status(400).json({ error: 'client_id and client_secret are required' });
+
+    const clientId  = process.env.SHOPIFY_API_KEY    || '';
+    const clientSec = process.env.SHOPIFY_API_SECRET  || '';
+    if (!clientId || !clientSec)
+        return res.status(500).json({ error: 'SHOPIFY_API_KEY / SHOPIFY_API_SECRET not set on server' });
 
     try {
         const resp = await axios.post(
             `https://${domain}/admin/oauth/access_token`,
-            `grant_type=client_credentials&client_id=${encodeURIComponent(client_id)}&client_secret=${encodeURIComponent(client_secret)}`,
+            `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
         );
         const { access_token, expires_in, scope } = resp.data;
         const expiry = new Date(Date.now() + (expires_in || 86399) * 1000).toISOString();
 
-        // Persist to MongoDB so token survives redeploys and auto-refreshes
+        // Persist to MongoDB (survives Railway redeploys, enables auto-refresh)
         try {
             if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
                 const Tenant = require('./models/Tenant');
                 await Tenant.findByIdAndUpdate(req.tenant._id, { $set: {
-                    'config.shopify_url':           `https://${domain}`,
-                    'config.shopify_access_token':  access_token,
-                    'config.shopify_client_id':     client_id,
-                    'config.shopify_client_secret': client_secret,
-                    'config.shopify_token_expiry':  expiry,
+                    'config.shopify_url':          `https://${domain}`,
+                    'config.shopify_access_token': access_token,
+                    'config.shopify_token_expiry': expiry,
                 }});
-            } else {
-                // Dev mode: update in-memory CONFIG
-                CONFIG.shopify_url           = domain;
-                CONFIG.shopify_access_token  = access_token;
             }
+            CONFIG.shopify_url          = domain;
+            CONFIG.shopify_access_token = access_token;
         } catch (dbErr) {
             console.warn('[fetch-token] MongoDB save failed:', dbErr.message);
         }
