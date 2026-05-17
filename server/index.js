@@ -415,10 +415,6 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         webhook_url: CONFIG.webhook_url || '',
         loyalty_points: CONFIG.loyalty_points || 10,
         is_configured: !!(CONFIG.access_token && CONFIG.phone_number_id && CONFIG.verify_token),
-        // Client Credentials fields (never mask — user needs to see/edit them)
-        shopify_client_id:     dbCfg.shopify_client_id     || '',
-        shopify_client_secret: dbCfg.shopify_client_secret ? mask(dbCfg.shopify_client_secret) : '',
-        shopify_token_expiry:  dbCfg.shopify_token_expiry  || null,
     });
 });
 
