@@ -404,18 +404,21 @@ app.post('/api/config/test-shopify', async (req, res) => {
     }
 });
 
-// Generate Shopify OAuth URL (redirect_uri=http://localhost so code shows in address bar)
+// Generate Shopify OAuth URL — redirect_uri = Railway server /auth/callback
 app.get('/api/shopify/auth-url', authMiddleware, (req, res) => {
     const shop = String(req.query.shop || '').toLowerCase().trim().replace(/https?:\/\//, '').replace(/\/$/, '');
     if (!isValidShopDomain(shop)) return res.status(400).json({ error: 'Invalid shop domain. Use format: yourstore.myshopify.com' });
     const API_KEY = process.env.SHOPIFY_API_KEY || '';
+    const APP_URL = (process.env.SHOPIFY_APP_URL || process.env.HOST || '').replace(/\/$/, '');
     if (!API_KEY) return res.status(400).json({ error: 'SHOPIFY_API_KEY not set on server' });
+    if (!APP_URL) return res.status(400).json({ error: 'SHOPIFY_APP_URL not set on server' });
     const SCOPES = (process.env.SHOPIFY_SCOPES || 'read_products,read_orders,write_orders,read_customers,read_inventory,read_fulfillments,write_fulfillments').trim();
     const state = require('crypto').randomBytes(16).toString('hex');
+    const redirectUri = `${APP_URL}/auth/callback`;
     const authUrl = `https://${shop}/admin/oauth/authorize` +
         `?client_id=${encodeURIComponent(API_KEY)}` +
         `&scope=${encodeURIComponent(SCOPES)}` +
-        `&redirect_uri=${encodeURIComponent('http://localhost')}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&state=${encodeURIComponent(state)}`;
     res.json({ auth_url: authUrl, state });
 });

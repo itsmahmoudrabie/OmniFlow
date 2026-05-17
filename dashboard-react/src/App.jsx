@@ -4648,109 +4648,50 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                     </span>
                 </div>
 
-                {/* Manual token entry */}
+                {/* Store domain + manual token */}
                 <div className="space-y-3">
                     {renderField({label:(isEn ? 'Store Domain' : 'دومين المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
-                    {renderField({label:(isEn ? 'Admin API Access Token (shpat_...)' : 'Admin API Token (shpat_...)'), field:"shopify_key", placeholder:"shpat_xxxxxxxxxxxxxxxxxxxxxxxx", dir:"ltr", secret:true})}
+                    {renderField({label:(isEn ? 'Admin API Access Token' : 'Admin API Token'), field:"shopify_key", placeholder:"shpat_xxxxxxxxxxxxxxxxxxxxxxxx", dir:"ltr", secret:true})}
                 </div>
 
-                {/* ── Token Generator (OAuth code flow) ── */}
+                {/* ── One-click OAuth connect ── */}
                 <div className="rounded-xl p-4 space-y-3" style={{background:'rgba(150,191,72,0.07)', border:'1px solid rgba(150,191,72,0.2)'}}>
                     <p className="text-[11px] font-black text-brand-egg uppercase tracking-wider">
-                        {isEn ? '🔑 Auto-generate permanent token' : '🔑 توليد توكن دائم تلقائياً'}
+                        {isEn ? '🔗 Connect via Shopify OAuth' : '🔗 ربط عبر Shopify OAuth'}
                     </p>
                     <p className="text-[10px] text-brand-muted leading-relaxed">
                         {isEn
-                            ? 'Step 1: Enter your store domain above, then click "Get Auth Link" to open Shopify login. Approve permissions, then paste the full URL from your browser address bar below.'
-                            : 'خطوة 1: اكتب دومين المتجر فوق، ثم اضغط "احصل على رابط" لفتح Shopify. وافق على الصلاحيات، ثم الصق الرابط الكامل من شريط العنوان أدناه.'
+                            ? 'Enter your store domain above, then click the button. A new tab will open — approve permissions in Shopify. The token will be saved automatically and you\'ll be redirected back.'
+                            : 'اكتب دومين المتجر فوق ثم اضغط الزرار. هيفتح تبويب جديد — وافق على الصلاحيات في Shopify. التوكن هيتحفظ تلقائياً وترجع للداشبورد.'
                         }
                     </p>
-
-                    {/* Step 1 — Generate link */}
                     <button
                         onClick={async () => {
                             const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
                             if (!shop) return showToast(isEn ? 'Enter store domain first' : 'اكتب دومين المتجر أولاً', 'error');
                             try {
                                 const r = await axios.get(`${API_URL}/shopify/auth-url?shop=${encodeURIComponent(shop)}`);
-                                setShopifyAuthUrl(r.data.auth_url);
-                                setShopifyTokenMsg('');
+                                window.open(r.data.auth_url, '_blank');
+                                setShopifyTokenMsg(isEn ? '⏳ Waiting for approval in new tab...' : '⏳ في انتظار الموافقة في التبويب الجديد...');
                             } catch (e) {
-                                showToast(e.response?.data?.error || 'Failed', 'error');
+                                showToast(e.response?.data?.error || 'Failed to generate auth URL', 'error');
                             }
                         }}
-                        className="w-full py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all hover:opacity-90"
-                        style={{background:'rgba(150,191,72,0.15)', color:'#96BF48', border:'1px solid rgba(150,191,72,0.3)'}}>
-                        {isEn ? '1. Get Auth Link →' : '1. احصل على رابط المصادقة →'}
+                        className="w-full py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wider transition-all hover:opacity-90"
+                        style={{background:'#96BF48', color:'#fff'}}>
+                        {isEn ? '→ Connect Shopify Store' : '→ ربط المتجر بـ Shopify'}
                     </button>
-
-                    {shopifyAuthUrl && (
-                        <div className="space-y-2">
-                            <a href={shopifyAuthUrl} target="_blank" rel="noreferrer"
-                                className="block w-full py-2 rounded-xl text-center text-[11px] font-black uppercase tracking-wider transition-all hover:opacity-90"
-                                style={{background:'#96BF48', color:'#fff'}}>
-                                {isEn ? '→ Open Shopify Auth Page (new tab)' : '→ افتح صفحة Shopify (تبويب جديد)'}
-                            </a>
-                            <p className="text-[10px] text-brand-muted">
-                                {isEn
-                                    ? 'After approving, your browser will show "This site can\'t be reached". That\'s OK — copy the full URL from the address bar and paste it below.'
-                                    : 'بعد الموافقة، المتصفح هيقول "تعذر الوصول للموقع". عادي تماماً — انسخ الرابط الكامل من شريط العنوان والصقه أدناه.'
-                                }
-                            </p>
-                        </div>
+                    {shopifyTokenMsg && (
+                        <p className={`text-[11px] font-bold ${shopifyTokenMsg.startsWith('✅') ? 'text-brand-accent' : shopifyTokenMsg.startsWith('❌') ? 'text-red-400' : 'text-yellow-400'}`}>
+                            {shopifyTokenMsg}
+                        </p>
                     )}
-
-                    {/* Step 2 — Paste redirect URL */}
-                    {shopifyAuthUrl && (
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">
-                                {isEn ? 'Step 2: Paste redirect URL' : 'خطوة 2: الصق رابط التحويل'}
-                            </label>
-                            <input
-                                type="text"
-                                value={shopifyRedirectUrl}
-                                onChange={e => setShopifyRedirectUrl(e.target.value)}
-                                placeholder="http://localhost?code=xxxx&hmac=xxxx&shop=..."
-                                dir="ltr"
-                                className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-[11px] focus:border-brand-accent outline-none text-brand-egg"
-                            />
-                            <button
-                                disabled={shopifyExchanging || !shopifyRedirectUrl.trim()}
-                                onClick={async () => {
-                                    setShopifyExchanging(true);
-                                    setShopifyTokenMsg('');
-                                    try {
-                                        const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
-                                        const r = await axios.post(`${API_URL}/shopify/exchange-code`, {
-                                            shop,
-                                            redirect_url: shopifyRedirectUrl.trim()
-                                        });
-                                        // Auto-fill token field
-                                        set('shopify_key', r.data.token_prefix.replace('...', '') + '(retrieved)');
-                                        setShopifyTokenMsg(`✅ ${r.data.token_type} — ${r.data.shop}`);
-                                        setShopifyAuthUrl('');
-                                        setShopifyRedirectUrl('');
-                                        showToast(isEn ? 'Token saved! Orders will now load.' : 'تم حفظ التوكن! الأوردرات ستظهر الآن.', 'success');
-                                    } catch (e) {
-                                        const msg = e.response?.data?.error || e.message;
-                                        setShopifyTokenMsg(`❌ ${msg}`);
-                                        showToast(msg, 'error');
-                                    }
-                                    setShopifyExchanging(false);
-                                }}
-                                className="w-full py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
-                                style={{background:'#96BF48', color:'#fff'}}>
-                                {shopifyExchanging
-                                    ? (isEn ? 'Exchanging...' : 'جاري التبادل...')
-                                    : (isEn ? '2. Exchange Code & Save Token' : '2. استبدل الكود واحفظ التوكن')}
-                            </button>
-                            {shopifyTokenMsg && (
-                                <p className={`text-[11px] font-bold ${shopifyTokenMsg.startsWith('✅') ? 'text-brand-accent' : 'text-red-400'}`}>
-                                    {shopifyTokenMsg}
-                                </p>
-                            )}
-                        </div>
-                    )}
+                    <p className="text-[10px] text-brand-muted">
+                        {isEn
+                            ? '💡 Or paste a token (shpat_...) from Shopify Admin → Settings → Apps → Develop apps → your app → API credentials'
+                            : '💡 أو الصق التوكن (shpat_...) من: Shopify Admin ← Settings ← Apps ← Develop apps ← تطبيقك ← API credentials'
+                        }
+                    </p>
                 </div>
 
                 {shopConnected && integrations.shopify && (
