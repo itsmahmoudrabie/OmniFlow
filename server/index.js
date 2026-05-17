@@ -1081,12 +1081,29 @@ app.get('/api/customers', async (req, res) => {
 app.post('/api/whatsapp/send', async (req, res) => {
     const { phone, template, templateLanguage, templateImageUrl, templateButtons, params, headerLink, textMsg, actionType, orderName, orderId, imageBase64, catalogId, productRetailerId, fileBase64, fileType, fileName } = req.body;
     const cleanPhone = phone.replace(/[^\d]/g, "");
-    
+
+    // If CONFIG is empty (e.g. after a Railway redeploy before startup loader ran),
+    // try loading from the first tenant's MongoDB config on-demand.
+    if (!CONFIG.phone_number_id || !CONFIG.access_token) {
+        try {
+            const Tenant = require('./models/Tenant');
+            const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
+            if (t?.config) {
+                if (!CONFIG.phone_number_id && t.config.phone_number_id) CONFIG.phone_number_id = t.config.phone_number_id;
+                if (!CONFIG.access_token    && t.config.access_token)    CONFIG.access_token    = t.config.access_token;
+            }
+        } catch (_) {}
+    }
+
+    if (!CONFIG.phone_number_id || !CONFIG.access_token) {
+        return res.status(503).json({ error: 'WhatsApp غير مُهيَّأ — افتح الإعدادات وأدخل Phone Number ID و Access Token ثم احفظ.' });
+    }
+
     let payload = {
         messaging_product: "whatsapp",
         to: cleanPhone,
     };
-    
+
     const url = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
 
     
