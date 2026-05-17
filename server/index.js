@@ -78,23 +78,21 @@ mongoose.connect(MONGODB_URI)
     .then(async () => {
         console.log('MongoDB connected');
 
-        // Load the first tenant's config into CONFIG so WhatsApp/webhook/other endpoints
-        // work immediately after a Railway redeploy (before any user request arrives).
+        // Load SystemConfig into CONFIG on every cold start (survives Railway redeploys)
         try {
-            const Tenant = require('./models/Tenant');
-            const tenant = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
-            if (tenant?.config) {
-                const tc = tenant.config;
-                const apply = (key) => { if (tc[key]) CONFIG[key] = tc[key]; };
+            const SystemConfig = require('./models/SystemConfig');
+            const sc = await SystemConfig.findById('main').lean();
+            if (sc) {
+                const apply = (key) => { if (sc[key]) CONFIG[key] = sc[key]; };
                 ['access_token','phone_number_id','verify_token','business_name',
                  'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
                  'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
                  'shopify_url','shopify_access_token'].forEach(apply);
-                if (tc.loyalty_points) CONFIG.loyalty_points = tc.loyalty_points;
-                console.log('[Config] ✅ Tenant config loaded from MongoDB into CONFIG');
+                if (sc.loyalty_points) CONFIG.loyalty_points = sc.loyalty_points;
+                console.log('[Config] ✅ SystemConfig loaded from MongoDB into CONFIG');
             }
         } catch (e) {
-            console.warn('[Config] Failed to load tenant config at startup:', e.message);
+            console.warn('[Config] Failed to load SystemConfig at startup:', e.message);
         }
 
         try { await _refreshShopifyToken(); }
@@ -214,23 +212,20 @@ app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'omniflow', ts:
 
 // Debug: check webhook config state
 app.get('/api/webhook/debug', async (_req, res) => {
-    let dbVerifyToken = null;
-    let dbPhoneId = null;
-    let dbAccessToken = null;
+    let sc = {};
+    let dbErr = null;
     try {
-        const Tenant = require('./models/Tenant');
-        const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
-        dbVerifyToken = t?.config?.verify_token || null;
-        dbPhoneId     = t?.config?.phone_number_id || null;
-        dbAccessToken = t?.config?.access_token ? t.config.access_token.slice(0,8) + '...' : null;
-    } catch (e) { dbVerifyToken = 'DB_ERROR: ' + e.message; }
+        const SystemConfig = require('./models/SystemConfig');
+        sc = (await SystemConfig.findById('main').lean()) || {};
+    } catch (e) { dbErr = e.message; }
     res.json({
-        config_verify_token:  CONFIG.verify_token  || '(empty)',
-        config_phone_id:      CONFIG.phone_number_id || '(empty)',
-        config_access_token:  CONFIG.access_token ? CONFIG.access_token.slice(0,8) + '...' : '(empty)',
-        db_verify_token:      dbVerifyToken || '(empty)',
-        db_phone_id:          dbPhoneId || '(empty)',
-        db_access_token:      dbAccessToken || '(empty)',
+        config_verify_token: CONFIG.verify_token   || '(empty)',
+        config_phone_id:     CONFIG.phone_number_id || '(empty)',
+        config_access_token: CONFIG.access_token ? CONFIG.access_token.slice(0,8) + '...' : '(empty)',
+        db_verify_token:     sc.verify_token   || '(empty)',
+        db_phone_id:         sc.phone_number_id || '(empty)',
+        db_access_token:     sc.access_token ? sc.access_token.slice(0,8) + '...' : '(empty)',
+        db_error:            dbErr || null,
     });
 });
 
@@ -448,57 +443,57 @@ app.post('/api/config/branding', (req, res) => {
 app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const mask = (val) => val ? val.slice(0, 6) + '••••••••' + val.slice(-4) : '';
 
-    // Tenant config from MongoDB (fresh on every request, survives redeploys)
-    const tc = (req.tenant?._id !== 'dev-admin-001' ? req.tenant?.config : null) || {};
-
-    // Populate in-memory CONFIG from tenant config for any field that's empty
-    // (handles the window between redeploy and first GET /config/setup call)
-    const keys = ['access_token','phone_number_id','verify_token','business_name',
-                  'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
-                  'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
-                  'shopify_url','shopify_access_token'];
-    for (const k of keys) {
-        if (!CONFIG[k] && tc[k]) CONFIG[k] = tc[k];
-    }
-    if (!CONFIG.loyalty_points && tc.loyalty_points) CONFIG.loyalty_points = tc.loyalty_points;
+    // SystemConfig is the single source of truth — works for any user incl. dev-admin-001
+    let sc = {};
+    try {
+        const SystemConfig = require('./models/SystemConfig');
+        sc = (await SystemConfig.findById('main').lean()) || {};
+        // Populate CONFIG from SystemConfig for any field currently missing in memory
+        const keys = ['access_token','phone_number_id','verify_token','business_name',
+                      'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
+                      'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+                      'shopify_url','shopify_access_token'];
+        for (const k of keys) { if (!CONFIG[k] && sc[k]) CONFIG[k] = sc[k]; }
+        if (!CONFIG.loyalty_points && sc.loyalty_points) CONFIG.loyalty_points = sc.loyalty_points;
+    } catch (_) {}
 
     // ShopifyConfig collection (separate persistent store for OAuth tokens)
     let shopifyCfg = {};
     try {
         const ShopifyConfig = require('./models/ShopifyConfig');
-        const sc = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
-        if (sc?.shop) {
-            shopifyCfg = { shopify_url: sc.shop, shopify_access_token: sc.access_token };
-            if (!CONFIG.shopify_url) CONFIG.shopify_url = sc.shop;
-            if (!CONFIG.shopify_access_token) CONFIG.shopify_access_token = sc.access_token;
+        const shCfg = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
+        if (shCfg?.shop) {
+            shopifyCfg = { shopify_url: shCfg.shop, shopify_access_token: shCfg.access_token };
+            if (!CONFIG.shopify_url) CONFIG.shopify_url = shCfg.shop;
+            if (!CONFIG.shopify_access_token) CONFIG.shopify_access_token = shCfg.access_token;
         }
     } catch (_) {}
 
     const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
-    const shopifyToken = CONFIG.shopify_access_token || shopifyCfg.shopify_access_token || '';
+    const shopifyToken = CONFIG.shopify_access_token || shopifyCfg.shopify_access_token || sc.shopify_access_token || '';
 
     res.json({
-        business_name: CONFIG.business_name || tc.business_name || '',
-        phone_number_id: CONFIG.phone_number_id || tc.phone_number_id || '',
-        api_version: CONFIG.api_version,
-        shopify_url: CONFIG.shopify_url || shopifyCfg.shopify_url || envStore || '',
-        catalog_id: CONFIG.catalog_id || tc.catalog_id || '',
-        server_url: CONFIG.server_url || tc.server_url || '',
-        gemini_api_key: (CONFIG.gemini_api_key || tc.gemini_api_key) ? mask(CONFIG.gemini_api_key || tc.gemini_api_key) : '',
-        groq_api_key: (CONFIG.groq_api_key || tc.groq_api_key) ? mask(CONFIG.groq_api_key || tc.groq_api_key) : '',
-        groq_model: CONFIG.groq_model || tc.groq_model || 'llama-3.3-70b-versatile',
-        access_token: (CONFIG.access_token || tc.access_token) ? mask(CONFIG.access_token || tc.access_token) : '',
+        business_name:   CONFIG.business_name   || sc.business_name   || '',
+        phone_number_id: CONFIG.phone_number_id || sc.phone_number_id || '',
+        api_version:     CONFIG.api_version,
+        shopify_url:     CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
+        catalog_id:      CONFIG.catalog_id  || sc.catalog_id  || '',
+        server_url:      CONFIG.server_url  || sc.server_url  || '',
+        gemini_api_key:  (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
+        groq_api_key:    (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
+        groq_model:      CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
+        access_token:    (CONFIG.access_token    || sc.access_token)    ? mask(CONFIG.access_token    || sc.access_token)    : '',
         shopify_access_token: shopifyToken ? mask(shopifyToken) : '',
-        verify_token: (CONFIG.verify_token || tc.verify_token) ? mask(CONFIG.verify_token || tc.verify_token) : '',
-        woo_url: CONFIG.woo_url || tc.woo_url || '',
-        woo_consumer_key: (CONFIG.woo_consumer_key || tc.woo_consumer_key) ? mask(CONFIG.woo_consumer_key || tc.woo_consumer_key) : '',
-        woo_consumer_secret: (CONFIG.woo_consumer_secret || tc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || tc.woo_consumer_secret) : '',
-        webhook_url: CONFIG.webhook_url || tc.webhook_url || '',
-        loyalty_points: CONFIG.loyalty_points || tc.loyalty_points || 10,
+        verify_token:    (CONFIG.verify_token    || sc.verify_token)    ? mask(CONFIG.verify_token    || sc.verify_token)    : '',
+        woo_url:         CONFIG.woo_url      || sc.woo_url      || '',
+        woo_consumer_key:    (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
+        woo_consumer_secret: (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
+        webhook_url:     CONFIG.webhook_url  || sc.webhook_url  || '',
+        loyalty_points:  CONFIG.loyalty_points || sc.loyalty_points || 10,
         is_configured: !!(
-            (CONFIG.access_token || tc.access_token) &&
-            (CONFIG.phone_number_id || tc.phone_number_id) &&
-            (CONFIG.verify_token || tc.verify_token)
+            (CONFIG.access_token    || sc.access_token)    &&
+            (CONFIG.phone_number_id || sc.phone_number_id) &&
+            (CONFIG.verify_token    || sc.verify_token)
         ),
     });
 });
@@ -542,34 +537,32 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
 
     fs.writeFileSync(envPath, envContent, 'utf8');
 
-    // Persist ALL settings to MongoDB Tenant.config (survives Railway redeploys)
+    // Persist ALL settings to SystemConfig in MongoDB (works for any user incl. dev-admin-001)
     try {
-        if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
-            const Tenant = require('./models/Tenant');
-            const updates = {};
-            const mongoFields = [
-                'business_name','access_token','phone_number_id','verify_token',
-                'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
-                'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url','loyalty_points',
-            ];
-            for (const key of mongoFields) {
-                const v = req.body[key];
-                if (v === undefined) continue;
-                if (typeof v === 'string' && v.includes('••••')) continue;
-                updates[`config.${key}`] = v;
-            }
-            // Shopify URL: store domain only (no https://)
-            const su = req.body.shopify_url;
-            if (su && !String(su).includes('••••'))
-                updates['config.shopify_url'] = su.replace(/https?:\/\//, '').replace(/\/$/, '');
-            const st = req.body.shopify_access_token;
-            if (st && !String(st).includes('••••'))
-                updates['config.shopify_access_token'] = st;
-            if (Object.keys(updates).length)
-                await Tenant.findByIdAndUpdate(req.tenant._id, { $set: updates });
+        const SystemConfig = require('./models/SystemConfig');
+        const updates = {};
+        const scFields = [
+            'business_name','access_token','phone_number_id','verify_token',
+            'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
+            'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url','loyalty_points',
+        ];
+        for (const key of scFields) {
+            const v = req.body[key];
+            if (v === undefined) continue;
+            if (typeof v === 'string' && v.includes('••••')) continue;
+            updates[key] = v;
         }
+        // Shopify URL: store domain only (no https://)
+        const su = req.body.shopify_url;
+        if (su && !String(su).includes('••••'))
+            updates.shopify_url = su.replace(/https?:\/\//, '').replace(/\/$/, '');
+        const st = req.body.shopify_access_token;
+        if (st && !String(st).includes('••••'))
+            updates.shopify_access_token = st;
+        if (Object.keys(updates).length)
+            await SystemConfig.findByIdAndUpdate('main', { $set: updates }, { upsert: true });
     } catch (e) {
-        console.warn('[config/setup POST] MongoDB save failed:', e.message);
+        console.warn('[config/setup POST] SystemConfig save failed:', e.message);
     }
 
     res.json({ success: true, business_name: CONFIG.business_name });
@@ -1105,14 +1098,14 @@ app.post('/api/whatsapp/send', async (req, res) => {
     const cleanPhone = phone.replace(/[^\d]/g, "");
 
     // If CONFIG is empty (e.g. after a Railway redeploy before startup loader ran),
-    // try loading from the first tenant's MongoDB config on-demand.
+    // load from SystemConfig on-demand.
     if (!CONFIG.phone_number_id || !CONFIG.access_token) {
         try {
-            const Tenant = require('./models/Tenant');
-            const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
-            if (t?.config) {
-                if (!CONFIG.phone_number_id && t.config.phone_number_id) CONFIG.phone_number_id = t.config.phone_number_id;
-                if (!CONFIG.access_token    && t.config.access_token)    CONFIG.access_token    = t.config.access_token;
+            const SystemConfig = require('./models/SystemConfig');
+            const sc = await SystemConfig.findById('main').lean();
+            if (sc) {
+                if (!CONFIG.phone_number_id && sc.phone_number_id) CONFIG.phone_number_id = sc.phone_number_id;
+                if (!CONFIG.access_token    && sc.access_token)    CONFIG.access_token    = sc.access_token;
             }
         } catch (_) {}
     }
@@ -1381,12 +1374,12 @@ app.get('/webhook', async (req, res) => {
     const token     = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    // Load verify_token from MongoDB if CONFIG is empty (e.g. after Railway redeploy)
+    // Load verify_token from SystemConfig if CONFIG is empty (e.g. after Railway redeploy)
     if (!CONFIG.verify_token) {
         try {
-            const Tenant = require('./models/Tenant');
-            const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
-            if (t?.config?.verify_token) CONFIG.verify_token = t.config.verify_token;
+            const SystemConfig = require('./models/SystemConfig');
+            const sc = await SystemConfig.findById('main').lean();
+            if (sc?.verify_token) CONFIG.verify_token = sc.verify_token;
         } catch (_) {}
     }
 
