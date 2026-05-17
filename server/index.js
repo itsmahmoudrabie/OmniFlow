@@ -10,9 +10,61 @@ const FormData = require('form-data');
 const mongoose = require('mongoose');
 const { authMiddleware } = require('./middleware/auth');
 
-// Connect to MongoDB
+// Connect to MongoDB — then auto-refresh Shopify token on every startup
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/omniflow';
-mongoose.connect(MONGODB_URI).then(() => console.log('MongoDB connected')).catch(e => console.error('MongoDB error:', e.message));
+mongoose.connect(MONGODB_URI)
+    .then(async () => {
+        console.log('MongoDB connected');
+        // Auto-connect Shopify on every server startup (no button press needed)
+        try {
+            const ShopifyConfig = require('./models/ShopifyConfig');
+            const clientId  = process.env.SHOPIFY_API_KEY    || '';
+            const clientSec = process.env.SHOPIFY_API_SECRET || '';
+
+            // Find the last-used shop from MongoDB
+            const cfg = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
+            const shop = cfg?.shop ||
+                (process.env.SHOPIFY_URL || '').replace(/https?:\/\//, '').replace(/\/$/, '');
+
+            if (!shop || !shop.includes('myshopify.com')) {
+                console.log('[Shopify] No store configured yet — press "ربط المتجر" in Settings.');
+                return;
+            }
+
+            // Token still valid (more than 10 min remaining)?
+            if (cfg?.access_token && cfg?.token_expiry &&
+                new Date(cfg.token_expiry) > new Date(Date.now() + 10 * 60 * 1000)) {
+                CONFIG.shopify_url          = shop;
+                CONFIG.shopify_access_token = cfg.access_token;
+                console.log(`[Shopify] ✅ Token loaded from DB for ${shop} (valid until ${cfg.token_expiry})`);
+                return;
+            }
+
+            // Token expired / missing — auto-refresh
+            if (!clientId || !clientSec) {
+                console.warn('[Shopify] SHOPIFY_API_KEY/SHOPIFY_API_SECRET not set — cannot auto-refresh token.');
+                return;
+            }
+            const resp = await axios.post(
+                `https://${shop}/admin/oauth/access_token`,
+                `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
+                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
+            );
+            const { access_token, expires_in, scope } = resp.data;
+            const expiry = new Date(Date.now() + (expires_in || 86399) * 1000);
+            await ShopifyConfig.findOneAndUpdate(
+                { shop },
+                { $set: { shop, access_token, token_expiry: expiry, scope: scope || '' } },
+                { upsert: true, new: true }
+            );
+            CONFIG.shopify_url          = shop;
+            CONFIG.shopify_access_token = access_token;
+            console.log(`[Shopify] ✅ Token auto-refreshed at startup for ${shop}, expires ${expiry}`);
+        } catch (e) {
+            console.warn('[Shopify] Startup auto-connect failed:', e.response?.data || e.message);
+        }
+    })
+    .catch(e => console.error('MongoDB error:', e.message));
 
 
 const app = express();
@@ -332,30 +384,30 @@ app.post('/api/config/branding', (req, res) => {
 // جلب كل الإعدادات (بدون إظهار التوكنات كاملة)
 app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const mask = (val) => val ? val.slice(0, 6) + '••••••••' + val.slice(-4) : '';
-    // Populate CONFIG from MongoDB (survives Railway redeploys)
-    let dbCfg = {};
+    // Populate CONFIG from ShopifyConfig collection (takes priority, persists across redeploys)
+    let shopifyCfg = {};
     try {
-        const Tenant = require('./models/Tenant');
-        const t = await Tenant.findById(req.tenant._id).lean();
-        if (t?.config) dbCfg = t.config;
-        if (dbCfg.shopify_url && !CONFIG.shopify_url)
-            CONFIG.shopify_url = dbCfg.shopify_url.replace('https://', '').replace(/\/$/, '');
-        if (dbCfg.shopify_access_token && !CONFIG.shopify_access_token)
-            CONFIG.shopify_access_token = dbCfg.shopify_access_token;
+        const ShopifyConfig = require('./models/ShopifyConfig');
+        const sc = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
+        if (sc?.shop) {
+            shopifyCfg = { shopify_url: sc.shop, shopify_access_token: sc.access_token };
+            if (!CONFIG.shopify_url) CONFIG.shopify_url = sc.shop;
+            if (!CONFIG.shopify_access_token) CONFIG.shopify_access_token = sc.access_token;
+        }
     } catch (_) {}
 
     res.json({
         business_name: CONFIG.business_name,
         phone_number_id: CONFIG.phone_number_id,
         api_version: CONFIG.api_version,
-        shopify_url: CONFIG.shopify_url || dbCfg.shopify_url?.replace('https://', '').replace(/\/$/, '') || '',
+        shopify_url: CONFIG.shopify_url || shopifyCfg.shopify_url || '',
         catalog_id: CONFIG.catalog_id,
         server_url: CONFIG.server_url,
         gemini_api_key: CONFIG.gemini_api_key ? mask(CONFIG.gemini_api_key) : '',
         groq_api_key: CONFIG.groq_api_key ? mask(CONFIG.groq_api_key) : '',
         groq_model: CONFIG.groq_model || 'llama-3.3-70b-versatile',
         access_token: CONFIG.access_token ? mask(CONFIG.access_token) : '',
-        shopify_access_token: CONFIG.shopify_access_token ? mask(CONFIG.shopify_access_token) : '',
+        shopify_access_token: (CONFIG.shopify_access_token || shopifyCfg.shopify_access_token) ? mask(CONFIG.shopify_access_token || shopifyCfg.shopify_access_token) : '',
         verify_token: CONFIG.verify_token ? mask(CONFIG.verify_token) : '',
         woo_url: CONFIG.woo_url || '',
         woo_consumer_key: CONFIG.woo_consumer_key ? mask(CONFIG.woo_consumer_key) : '',
