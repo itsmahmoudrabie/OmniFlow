@@ -45,28 +45,23 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
 const { mountShopifyOAuth, loadShops, getShopToken, setShopToken, isValidShopDomain } = require('./shopify-oauth');
 
-// Helper: get active Shopify shop credentials with auto-refresh via Client Credentials Grant
-// Priority: MongoDB (auto-refresh if expired) → shops.json (shpat_ only) → env vars
+// Helper: get active Shopify credentials with auto-refresh via Client Credentials Grant
+// Priority: ShopifyConfig collection (persistent) → in-memory CONFIG → env vars
 const getActiveShopify = async () => {
-    // 1. MongoDB — check expiry, auto-refresh with client_credentials if needed
+    const clientId  = process.env.SHOPIFY_API_KEY    || '';
+    const clientSec = process.env.SHOPIFY_API_SECRET || '';
+
+    // 1. ShopifyConfig MongoDB collection (persists across redeploys, independent of tenants)
     try {
-        const Tenant = require('./models/Tenant');
-        const tenants = await Tenant.find({
-            'config.shopify_url': { $exists: true, $ne: '' },
-        }).sort({ updatedAt: -1 }).lean();
+        const ShopifyConfig = require('./models/ShopifyConfig');
+        const cfg = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
 
-        for (const t of tenants) {
-            const cfg = t.config;
-            if (!cfg?.shopify_url) continue;
+        if (cfg?.shop && cfg?.access_token) {
+            const shop   = cfg.shop;
+            const token  = cfg.access_token;
+            const expiry = cfg.token_expiry;
 
-            const shop      = cfg.shopify_url.replace('https://', '').replace(/\/$/, '');
-            const token     = cfg.shopify_access_token;
-            const expiry    = cfg.shopify_token_expiry;
-            // Use env vars (app credentials) — never stored per-tenant
-            const clientId  = process.env.SHOPIFY_API_KEY   || '';
-            const clientSec = process.env.SHOPIFY_API_SECRET || '';
-
-            // Token is valid if it exists and (has no expiry OR expiry > now + 5 min buffer)
+            // Token valid: exists, not shpua_, not expired (5 min buffer)
             const tokenValid = token && !token.startsWith('shpua_') &&
                                (!expiry || new Date(expiry) > new Date(Date.now() + 5 * 60 * 1000));
 
@@ -74,7 +69,7 @@ const getActiveShopify = async () => {
                 return { shopify_url: shop, shopify_access_token: token };
             }
 
-            // Token missing / expired / shpua_ — try Client Credentials Grant refresh
+            // Expired or shpua_ → auto-refresh
             if (clientId && clientSec) {
                 try {
                     const resp = await axios.post(
@@ -82,46 +77,37 @@ const getActiveShopify = async () => {
                         `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
                         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 8000 }
                     );
-                    const newToken   = resp.data.access_token;
-                    const expiresIn  = resp.data.expires_in || 86399;
-                    const newExpiry  = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-                    await Tenant.findByIdAndUpdate(t._id, { $set: {
-                        'config.shopify_access_token': newToken,
-                        'config.shopify_token_expiry': newExpiry,
-                    }});
-                    console.log(`[Shopify] Token auto-refreshed for ${shop}, expires ${newExpiry}`);
+                    const newToken  = resp.data.access_token;
+                    const expiresIn = resp.data.expires_in || 86399;
+                    const newExpiry = new Date(Date.now() + expiresIn * 1000);
+                    await ShopifyConfig.findByIdAndUpdate(cfg._id, {
+                        $set: { access_token: newToken, token_expiry: newExpiry }
+                    });
+                    CONFIG.shopify_url          = shop;
+                    CONFIG.shopify_access_token = newToken;
+                    console.log(`[Shopify] Token auto-refreshed for ${shop}`);
                     return { shopify_url: shop, shopify_access_token: newToken };
                 } catch (e) {
-                    console.warn('[Shopify] Client credentials refresh failed:', e.response?.data || e.message);
+                    console.warn('[Shopify] Auto-refresh failed:', e.response?.data || e.message);
                 }
             }
-
-            // Last resort: return whatever token exists (might fail Shopify side)
+            // Return whatever we have (may fail Shopify-side but better than nothing)
             if (token) return { shopify_url: shop, shopify_access_token: token };
         }
-    } catch (_) {}
-
-    // 2. shops.json — only use shpat_ (permanent) tokens
-    const shops = loadShops();
-    const shopDomain = Object.keys(shops).find(d => shops[d]?.access_token?.startsWith('shpat_'));
-    if (shopDomain && shops[shopDomain]?.access_token) {
-        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
+    } catch (e) {
+        console.warn('[getActiveShopify] ShopifyConfig read failed:', e.message);
     }
 
-    // 3. in-memory CONFIG (set by fetch-token in same session)
+    // 2. In-memory CONFIG (set by fetch-token in current session before redeploy)
     if (CONFIG.shopify_access_token && CONFIG.shopify_url &&
-        !CONFIG.shopify_url.includes('railway.app') && !CONFIG.shopify_url.includes('localhost')) {
+        CONFIG.shopify_url.includes('myshopify.com')) {
         return { shopify_url: CONFIG.shopify_url, shopify_access_token: CONFIG.shopify_access_token };
     }
 
-    // 4. env vars (only if they look like a real Shopify domain)
-    const envUrl = process.env.SHOPIFY_URL || '';
-    if (envUrl && envUrl.includes('myshopify.com')) {
-        return {
-            shopify_url: envUrl.replace('https://', '').replace(/\/$/, ''),
-            shopify_access_token: process.env.SHOPIFY_ACCESS_TOKEN || ''
-        };
+    // 3. Env vars (only if SHOPIFY_URL looks like a real Shopify domain)
+    const envUrl = (process.env.SHOPIFY_URL || '').replace('https://', '').replace(/\/$/, '');
+    if (envUrl.includes('myshopify.com') && process.env.SHOPIFY_ACCESS_TOKEN) {
+        return { shopify_url: envUrl, shopify_access_token: process.env.SHOPIFY_ACCESS_TOKEN };
     }
 
     return { shopify_url: '', shopify_access_token: '' };
@@ -497,36 +483,19 @@ app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
         const { access_token, expires_in, scope } = resp.data;
         const expiry = new Date(Date.now() + (expires_in || 86399) * 1000).toISOString();
 
-        // Persist to MongoDB — always, regardless of dev/prod mode
+        // Persist to ShopifyConfig collection (independent of tenants, survives redeploys)
         try {
-            const Tenant = require('./models/Tenant');
-            // Find the best tenant to update:
-            // 1. Existing tenant for this shop
-            // 2. Current tenant (if not dev-admin)
-            // 3. Any tenant in the DB
-            let target = await Tenant.findOne({
-                'config.shopify_url': { $in: [`https://${domain}`, domain] }
-            });
-            if (!target && req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
-                target = await Tenant.findById(req.tenant._id);
-            }
-            if (!target) {
-                target = await Tenant.findOne({}).sort({ createdAt: -1 });
-            }
-            if (target) {
-                await Tenant.findByIdAndUpdate(target._id, { $set: {
-                    'config.shopify_url':          `https://${domain}`,
-                    'config.shopify_access_token': access_token,
-                    'config.shopify_token_expiry': expiry,
-                }});
-                console.log(`[fetch-token] Saved to MongoDB tenant ${target._id}`);
-            } else {
-                console.warn('[fetch-token] No MongoDB tenant found to save credentials');
-            }
+            const ShopifyConfig = require('./models/ShopifyConfig');
+            await ShopifyConfig.findOneAndUpdate(
+                { shop: domain },
+                { $set: { shop: domain, access_token, token_expiry: new Date(expiry), scope: scope || '' } },
+                { upsert: true, new: true }
+            );
+            console.log(`[fetch-token] Saved to ShopifyConfig for ${domain}`);
         } catch (dbErr) {
-            console.warn('[fetch-token] MongoDB save failed:', dbErr.message);
+            console.warn('[fetch-token] ShopifyConfig save failed:', dbErr.message);
         }
-        // Always update in-memory CONFIG too
+        // Also update in-memory CONFIG
         CONFIG.shopify_url          = domain;
         CONFIG.shopify_access_token = access_token;
 
