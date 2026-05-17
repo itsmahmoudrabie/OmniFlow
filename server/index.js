@@ -122,15 +122,29 @@ app.use('/media', express.static(path.join(__dirname, 'media')));
 // Railway/health probe — never authenticated, must return 200 quickly
 app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'omniflow', ts: Date.now() }));
 
-// Debug: check what Shopify credentials are resolved
+// Debug: check what Shopify credentials are resolved + test orders fetch
 app.get('/api/shopify/debug', async (_req, res) => {
     const { shopify_url, shopify_access_token } = await getActiveShopify();
-    res.json({
+    const result = {
         connected: !!(shopify_url && shopify_access_token),
         shop: shopify_url || null,
-        token_prefix: shopify_access_token ? shopify_access_token.slice(0, 6) + '...' : null,
+        token_prefix: shopify_access_token ? shopify_access_token.slice(0, 6) + '...' + shopify_access_token.slice(-4) : null,
         shops_json_exists: require('fs').existsSync(require('path').join(__dirname, 'shops.json')),
-    });
+        orders_test: null,
+        orders_error: null,
+    };
+    if (shopify_url && shopify_access_token) {
+        try {
+            const r = await axios.get(
+                `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=5`,
+                { headers: { 'X-Shopify-Access-Token': shopify_access_token }, timeout: 8000 }
+            );
+            result.orders_test = { count: r.data.orders?.length, first_id: r.data.orders?.[0]?.id };
+        } catch (e) {
+            result.orders_error = { status: e.response?.status, body: e.response?.data };
+        }
+    }
+    res.json(result);
 });
 
 // Serve React frontend (production build)
@@ -642,10 +656,12 @@ app.get('/api/orders', async (req, res) => {
             console.warn('[orders] No Shopify credentials found');
             return res.json([]);
         }
-        const url = `https://${shopify_url}/admin/api/2023-10/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
+        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=250`;
+        console.log(`[orders] Fetching: ${url.replace(shopify_access_token || '', '***')}`);
         const response = await axios.get(url, {
             headers: { 'X-Shopify-Access-Token': shopify_access_token }
         });
+        console.log(`[orders] Got ${response.data.orders?.length || 0} orders from Shopify`);
         
         const orders = response.data.orders;
         let localOrders = loadJSON(DB_FILE);
@@ -691,7 +707,9 @@ app.get('/api/orders', async (req, res) => {
         
         res.json(enrichedOrders);
     } catch (error) {
-        console.error('[orders]', error.response?.data || error.message);
+        const errData = error.response?.data;
+        const status  = error.response?.status;
+        console.error(`[orders] Shopify API error ${status}:`, errData || error.message);
         res.json([]);
     }
 });
