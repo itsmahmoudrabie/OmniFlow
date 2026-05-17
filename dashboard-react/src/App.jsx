@@ -4182,6 +4182,60 @@ const ShippingSettings = ({ isEn, showToast }) => {
     );
 };
 
+const LoyaltyPanel = ({ phone, isEn, showToast }) => {
+    const [points, setPoints] = useState(null);
+    const [adding, setAdding] = useState(false);
+    const [amount, setAmount] = useState('');
+
+    useEffect(() => {
+        if (!phone) return;
+        axios.get(`${API_URL}/loyalty/${encodeURIComponent(phone)}`)
+            .then(r => setPoints(r.data.points ?? 0))
+            .catch(() => setPoints(0));
+    }, [phone]);
+
+    const handleAdd = async () => {
+        const n = parseInt(amount);
+        if (!n || n <= 0) return;
+        setAdding(true);
+        try {
+            const r = await axios.post(`${API_URL}/loyalty/add`, { phone, points: n });
+            setPoints(r.data.points);
+            setAmount('');
+            showToast(isEn ? `Added ${n} points` : `تمت إضافة ${n} نقطة`, 'success');
+        } catch { showToast(isEn ? 'Failed to add points' : 'فشل إضافة النقاط', 'error'); }
+        setAdding(false);
+    };
+
+    return (
+        <div className="space-y-3">
+            <h4 className="font-bold text-brand-accent text-sm flex items-center gap-2">
+                <Star size={14} /> {isEn ? 'Loyalty Points' : 'نقاط الولاء'}
+            </h4>
+            <div className="bg-brand-bg/30 border border-brand-accent/10 rounded-xl p-4 flex items-center justify-between">
+                <span className="text-brand-muted text-sm">{isEn ? 'Total Points' : 'إجمالي النقاط'}</span>
+                <span className="text-2xl font-black text-brand-accent">{points ?? '...'}</span>
+            </div>
+            <div className="flex gap-2">
+                <input
+                    type="number"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    placeholder={isEn ? 'Add points...' : 'أضف نقاط...'}
+                    className="flex-1 bg-brand-bg/50 border border-brand-accent/20 rounded-xl px-3 py-2 text-sm text-brand-text placeholder-brand-muted focus:outline-none focus:border-brand-accent/50"
+                />
+                <button
+                    onClick={handleAdd}
+                    disabled={adding || !amount}
+                    className="px-4 py-2 bg-brand-accent/20 text-brand-accent rounded-xl text-sm font-bold hover:bg-brand-accent hover:text-brand-bg transition-all disabled:opacity-50"
+                >
+                    {adding ? '...' : (isEn ? 'Add' : 'إضافة')}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, showToast, isEn }) => {
     const [shipments, setShipments] = useState([]);
     const [showForm, setShowForm] = useState(false);
