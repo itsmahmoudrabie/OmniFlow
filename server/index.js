@@ -10,59 +10,80 @@ const FormData = require('form-data');
 const mongoose = require('mongoose');
 const { authMiddleware } = require('./middleware/auth');
 
-// Connect to MongoDB — then auto-refresh Shopify token on every startup
+// ─── Shopify token persistence layer ─────────────────────────────────────────
+// Rules:
+//   1. ShopifyConfig MongoDB = single source of truth (survives any redeploy)
+//   2. Only shpat_ tokens are accepted — shpua_ always triggers a fresh fetch
+//   3. Runs at startup + every 23h via setInterval (token expires after 24h)
+//   4. All order actions use getActiveShopify() which reads from ShopifyConfig
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/omniflow';
+
+const _refreshShopifyToken = async () => {
+    const ShopifyConfig = require('./models/ShopifyConfig');
+    const clientId  = process.env.SHOPIFY_API_KEY    || '';
+    const clientSec = process.env.SHOPIFY_API_SECRET || '';
+    if (!clientId || !clientSec) {
+        console.warn('[Shopify] SHOPIFY_API_KEY/SHOPIFY_API_SECRET missing — skipping token refresh.');
+        return;
+    }
+    // Shop: from MongoDB (last successful connect) → SHOPIFY_STORE env var
+    const cfg  = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
+    const shop = cfg?.shop ||
+        (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
+
+    if (!shop || !shop.includes('myshopify.com')) {
+        console.log('[Shopify] No store configured — user must click "ربط المتجر" once in Settings.');
+        return;
+    }
+
+    // Accept ONLY shpat_ tokens with > 30 min remaining — reject shpua_ always
+    const tok = cfg?.access_token || '';
+    const exp = cfg?.token_expiry;
+    const tokenStillValid = tok.startsWith('shpat_') && exp &&
+        new Date(exp) > new Date(Date.now() + 30 * 60 * 1000);
+
+    if (cfg?.shop === shop && tokenStillValid) {
+        CONFIG.shopify_url          = shop;
+        CONFIG.shopify_access_token = tok;
+        console.log(`[Shopify] ✅ shpat_ token loaded from DB — valid until ${new Date(exp).toLocaleString()}`);
+        return;
+    }
+
+    const reason = !tok           ? 'no token'
+                 : tok.startsWith('shpua_') ? 'shpua_ (online) → must replace with shpat_'
+                 : 'expired';
+    console.log(`[Shopify] Fetching fresh shpat_ token for ${shop} (${reason})...`);
+
+    const resp = await axios.post(
+        `https://${shop}/admin/oauth/access_token`,
+        `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 12000 }
+    );
+    const { access_token, expires_in, scope } = resp.data;
+
+    if (!access_token) throw new Error('Shopify returned no access_token');
+
+    const expiry = new Date(Date.now() + (expires_in || 86399) * 1000);
+    await ShopifyConfig.findOneAndUpdate(
+        { shop },
+        { $set: { shop, access_token, token_expiry: expiry, scope: scope || '' } },
+        { upsert: true, new: true }
+    );
+    CONFIG.shopify_url          = shop;
+    CONFIG.shopify_access_token = access_token;
+    console.log(`[Shopify] ✅ Fresh ${access_token.slice(0,6)} token saved for ${shop} — expires ${expiry.toLocaleString()}`);
+};
+
 mongoose.connect(MONGODB_URI)
     .then(async () => {
         console.log('MongoDB connected');
-        // Auto-connect Shopify on every server startup (no button press needed)
-        try {
-            const ShopifyConfig = require('./models/ShopifyConfig');
-            const clientId  = process.env.SHOPIFY_API_KEY    || '';
-            const clientSec = process.env.SHOPIFY_API_SECRET || '';
-
-            // Find the last-used shop from MongoDB
-            const cfg = await ShopifyConfig.findOne({}).sort({ updatedAt: -1 });
-            const shop = cfg?.shop ||
-                (process.env.SHOPIFY_URL || '').replace(/https?:\/\//, '').replace(/\/$/, '');
-
-            if (!shop || !shop.includes('myshopify.com')) {
-                console.log('[Shopify] No store configured yet — press "ربط المتجر" in Settings.');
-                return;
-            }
-
-            // Token still valid (more than 10 min remaining)?
-            if (cfg?.access_token && cfg?.token_expiry &&
-                new Date(cfg.token_expiry) > new Date(Date.now() + 10 * 60 * 1000)) {
-                CONFIG.shopify_url          = shop;
-                CONFIG.shopify_access_token = cfg.access_token;
-                console.log(`[Shopify] ✅ Token loaded from DB for ${shop} (valid until ${cfg.token_expiry})`);
-                return;
-            }
-
-            // Token expired / missing — auto-refresh
-            if (!clientId || !clientSec) {
-                console.warn('[Shopify] SHOPIFY_API_KEY/SHOPIFY_API_SECRET not set — cannot auto-refresh token.');
-                return;
-            }
-            const resp = await axios.post(
-                `https://${shop}/admin/oauth/access_token`,
-                `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSec)}`,
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
-            );
-            const { access_token, expires_in, scope } = resp.data;
-            const expiry = new Date(Date.now() + (expires_in || 86399) * 1000);
-            await ShopifyConfig.findOneAndUpdate(
-                { shop },
-                { $set: { shop, access_token, token_expiry: expiry, scope: scope || '' } },
-                { upsert: true, new: true }
-            );
-            CONFIG.shopify_url          = shop;
-            CONFIG.shopify_access_token = access_token;
-            console.log(`[Shopify] ✅ Token auto-refreshed at startup for ${shop}, expires ${expiry}`);
-        } catch (e) {
-            console.warn('[Shopify] Startup auto-connect failed:', e.response?.data || e.message);
-        }
+        try { await _refreshShopifyToken(); }
+        catch (e) { console.warn('[Shopify] Startup connect failed:', e.response?.data || e.message); }
+        // Auto-refresh every 23h — token lasts 24h, 1h safety margin
+        setInterval(async () => {
+            try { await _refreshShopifyToken(); }
+            catch (e) { console.warn('[Shopify] Scheduled refresh failed:', e.response?.data || e.message); }
+        }, 23 * 60 * 60 * 1000);
     })
     .catch(e => console.error('MongoDB error:', e.message));
 
