@@ -1354,14 +1354,25 @@ app.post('/api/whatsapp/read', async (req, res) => {
     }
 });
 
-app.get('/webhook', (req, res) => {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
+app.get('/webhook', async (req, res) => {
+    const mode      = req.query['hub.mode'];
+    const token     = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    if (mode && token === CONFIG.verify_token) {
+    // Load verify_token from MongoDB if CONFIG is empty (e.g. after Railway redeploy)
+    if (!CONFIG.verify_token) {
+        try {
+            const Tenant = require('./models/Tenant');
+            const t = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
+            if (t?.config?.verify_token) CONFIG.verify_token = t.config.verify_token;
+        } catch (_) {}
+    }
+
+    if (mode === 'subscribe' && token && token === CONFIG.verify_token) {
+        console.log('[Webhook] ✅ Verified by Meta');
         res.status(200).send(challenge);
     } else {
+        console.warn(`[Webhook] ❌ Verification failed — received token: "${token}", expected: "${CONFIG.verify_token || '(empty)'}"`);
         res.sendStatus(403);
     }
 });
