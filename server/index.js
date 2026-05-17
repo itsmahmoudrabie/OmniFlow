@@ -43,7 +43,7 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
-const { mountShopifyOAuth, loadShops, getShopToken } = require('./shopify-oauth');
+const { mountShopifyOAuth, loadShops, getShopToken, setShopToken, isValidShopDomain } = require('./shopify-oauth');
 
 // Helper: get active Shopify shop credentials
 // Priority: MongoDB Tenant (permanent) → shops.json (OAuth cache) → env vars
@@ -401,6 +401,93 @@ app.post('/api/config/test-shopify', async (req, res) => {
     } catch (e) {
         const msg = e.response?.data?.errors || 'Invalid store URL or token';
         res.status(400).json({ error: typeof msg === 'string' ? msg : 'Connection failed' });
+    }
+});
+
+// Generate Shopify OAuth URL (redirect_uri=http://localhost so code shows in address bar)
+app.get('/api/shopify/auth-url', authMiddleware, (req, res) => {
+    const shop = String(req.query.shop || '').toLowerCase().trim().replace(/https?:\/\//, '').replace(/\/$/, '');
+    if (!isValidShopDomain(shop)) return res.status(400).json({ error: 'Invalid shop domain. Use format: yourstore.myshopify.com' });
+    const API_KEY = process.env.SHOPIFY_API_KEY || '';
+    if (!API_KEY) return res.status(400).json({ error: 'SHOPIFY_API_KEY not set on server' });
+    const SCOPES = (process.env.SHOPIFY_SCOPES || 'read_products,read_orders,write_orders,read_customers,read_inventory,read_fulfillments,write_fulfillments').trim();
+    const state = require('crypto').randomBytes(16).toString('hex');
+    const authUrl = `https://${shop}/admin/oauth/authorize` +
+        `?client_id=${encodeURIComponent(API_KEY)}` +
+        `&scope=${encodeURIComponent(SCOPES)}` +
+        `&redirect_uri=${encodeURIComponent('http://localhost')}` +
+        `&state=${encodeURIComponent(state)}`;
+    res.json({ auth_url: authUrl, state });
+});
+
+// Exchange OAuth code for permanent shpat_ token — paste the full redirect URL
+app.post('/api/shopify/exchange-code', authMiddleware, async (req, res) => {
+    let { shop, code, redirect_url } = req.body;
+
+    // Extract shop + code from pasted redirect URL (http://localhost?shop=...&code=...)
+    if (redirect_url) {
+        try {
+            const qs = redirect_url.replace(/^[^?]*\?/, '');
+            const params = Object.fromEntries(new URLSearchParams(qs));
+            if (params.code) code = params.code;
+            if (params.shop) shop = params.shop;
+        } catch (_) {}
+    }
+
+    if (!shop || !code) return res.status(400).json({ error: 'shop and code are required (or paste the full redirect URL)' });
+    shop = String(shop).toLowerCase().trim().replace(/https?:\/\//, '').replace(/\/$/, '');
+    if (!isValidShopDomain(shop)) return res.status(400).json({ error: 'Invalid shop domain' });
+
+    const API_KEY = process.env.SHOPIFY_API_KEY || '';
+    const API_SECRET = process.env.SHOPIFY_API_SECRET || '';
+    if (!API_KEY || !API_SECRET) return res.status(400).json({ error: 'SHOPIFY_API_KEY / SHOPIFY_API_SECRET not configured on server' });
+
+    try {
+        const tokenRes = await axios.post(`https://${shop}/admin/oauth/access_token`, {
+            client_id: API_KEY,
+            client_secret: API_SECRET,
+            code
+        });
+        const { access_token, scope } = tokenRes.data;
+        if (!access_token) return res.status(400).json({ error: 'No token in response' });
+
+        const tokenType = access_token.startsWith('shpat_') ? 'offline (permanent ✓)' :
+                          access_token.startsWith('shpua_') ? 'online (expires — see app config)' :
+                          'unknown';
+
+        // Save everywhere
+        setShopToken(shop, access_token, scope);
+        CONFIG.shopify_url = shop;
+        CONFIG.shopify_access_token = access_token;
+
+        // MongoDB — find any tenant or the authenticated one
+        try {
+            const Tenant = require('./models/Tenant');
+            const filter = req.tenant?._id && req.tenant._id !== 'dev-admin-001'
+                ? { _id: req.tenant._id }
+                : {};
+            await Tenant.findOneAndUpdate(
+                filter,
+                { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': access_token } },
+                { sort: { createdAt: -1 }, upsert: false }
+            );
+            console.log(`[exchange-code] Token saved to MongoDB for ${shop}`);
+        } catch (e) {
+            console.warn('[exchange-code] MongoDB save failed (token still in CONFIG/shops.json):', e.message);
+        }
+
+        res.json({
+            success: true,
+            shop,
+            token_prefix: access_token.slice(0, 10) + '...',
+            token_type: tokenType,
+            scope
+        });
+    } catch (err) {
+        const errData = err.response?.data;
+        const msg = errData?.error_description || errData?.error || err.message || 'Exchange failed';
+        console.error('[exchange-code] Failed:', errData || err.message);
+        res.status(500).json({ error: msg });
     }
 });
 
