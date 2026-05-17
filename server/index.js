@@ -109,11 +109,22 @@ const getActiveShopify = async () => {
         return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
     }
 
-    // 3. env vars fallback
-    return {
-        shopify_url: CONFIG.shopify_url,
-        shopify_access_token: CONFIG.shopify_access_token
-    };
+    // 3. in-memory CONFIG (set by fetch-token in same session)
+    if (CONFIG.shopify_access_token && CONFIG.shopify_url &&
+        !CONFIG.shopify_url.includes('railway.app') && !CONFIG.shopify_url.includes('localhost')) {
+        return { shopify_url: CONFIG.shopify_url, shopify_access_token: CONFIG.shopify_access_token };
+    }
+
+    // 4. env vars (only if they look like a real Shopify domain)
+    const envUrl = process.env.SHOPIFY_URL || '';
+    if (envUrl && envUrl.includes('myshopify.com')) {
+        return {
+            shopify_url: envUrl.replace('https://', '').replace(/\/$/, ''),
+            shopify_access_token: process.env.SHOPIFY_ACCESS_TOKEN || ''
+        };
+    }
+
+    return { shopify_url: '', shopify_access_token: '' };
 };
 
 // Serve Media
@@ -486,21 +497,38 @@ app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
         const { access_token, expires_in, scope } = resp.data;
         const expiry = new Date(Date.now() + (expires_in || 86399) * 1000).toISOString();
 
-        // Persist to MongoDB (survives Railway redeploys, enables auto-refresh)
+        // Persist to MongoDB — always, regardless of dev/prod mode
         try {
-            if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
-                const Tenant = require('./models/Tenant');
-                await Tenant.findByIdAndUpdate(req.tenant._id, { $set: {
+            const Tenant = require('./models/Tenant');
+            // Find the best tenant to update:
+            // 1. Existing tenant for this shop
+            // 2. Current tenant (if not dev-admin)
+            // 3. Any tenant in the DB
+            let target = await Tenant.findOne({
+                'config.shopify_url': { $in: [`https://${domain}`, domain] }
+            });
+            if (!target && req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
+                target = await Tenant.findById(req.tenant._id);
+            }
+            if (!target) {
+                target = await Tenant.findOne({}).sort({ createdAt: -1 });
+            }
+            if (target) {
+                await Tenant.findByIdAndUpdate(target._id, { $set: {
                     'config.shopify_url':          `https://${domain}`,
                     'config.shopify_access_token': access_token,
                     'config.shopify_token_expiry': expiry,
                 }});
+                console.log(`[fetch-token] Saved to MongoDB tenant ${target._id}`);
+            } else {
+                console.warn('[fetch-token] No MongoDB tenant found to save credentials');
             }
-            CONFIG.shopify_url          = domain;
-            CONFIG.shopify_access_token = access_token;
         } catch (dbErr) {
             console.warn('[fetch-token] MongoDB save failed:', dbErr.message);
         }
+        // Always update in-memory CONFIG too
+        CONFIG.shopify_url          = domain;
+        CONFIG.shopify_access_token = access_token;
 
         console.log(`[Shopify] fetch-token OK for ${domain} — expires ${expiry}`);
         res.json({ ok: true, access_token, expires_in, expiry, scope });
