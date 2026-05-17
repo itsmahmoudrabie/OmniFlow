@@ -77,6 +77,26 @@ const _refreshShopifyToken = async () => {
 mongoose.connect(MONGODB_URI)
     .then(async () => {
         console.log('MongoDB connected');
+
+        // Load the first tenant's config into CONFIG so WhatsApp/webhook/other endpoints
+        // work immediately after a Railway redeploy (before any user request arrives).
+        try {
+            const Tenant = require('./models/Tenant');
+            const tenant = await Tenant.findOne({}).sort({ createdAt: 1 }).lean();
+            if (tenant?.config) {
+                const tc = tenant.config;
+                const apply = (key) => { if (tc[key]) CONFIG[key] = tc[key]; };
+                ['access_token','phone_number_id','verify_token','business_name',
+                 'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
+                 'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+                 'shopify_url','shopify_access_token'].forEach(apply);
+                if (tc.loyalty_points) CONFIG.loyalty_points = tc.loyalty_points;
+                console.log('[Config] ✅ Tenant config loaded from MongoDB into CONFIG');
+            }
+        } catch (e) {
+            console.warn('[Config] Failed to load tenant config at startup:', e.message);
+        }
+
         try { await _refreshShopifyToken(); }
         catch (e) { console.warn('[Shopify] Startup connect failed:', e.response?.data || e.message); }
         // Auto-refresh every 23h — token lasts 24h, 1h safety margin
@@ -405,7 +425,22 @@ app.post('/api/config/branding', (req, res) => {
 // جلب كل الإعدادات (بدون إظهار التوكنات كاملة)
 app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const mask = (val) => val ? val.slice(0, 6) + '••••••••' + val.slice(-4) : '';
-    // Populate CONFIG from ShopifyConfig collection (takes priority, persists across redeploys)
+
+    // Tenant config from MongoDB (fresh on every request, survives redeploys)
+    const tc = (req.tenant?._id !== 'dev-admin-001' ? req.tenant?.config : null) || {};
+
+    // Populate in-memory CONFIG from tenant config for any field that's empty
+    // (handles the window between redeploy and first GET /config/setup call)
+    const keys = ['access_token','phone_number_id','verify_token','business_name',
+                  'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
+                  'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+                  'shopify_url','shopify_access_token'];
+    for (const k of keys) {
+        if (!CONFIG[k] && tc[k]) CONFIG[k] = tc[k];
+    }
+    if (!CONFIG.loyalty_points && tc.loyalty_points) CONFIG.loyalty_points = tc.loyalty_points;
+
+    // ShopifyConfig collection (separate persistent store for OAuth tokens)
     let shopifyCfg = {};
     try {
         const ShopifyConfig = require('./models/ShopifyConfig');
@@ -417,28 +452,32 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         }
     } catch (_) {}
 
-    // SHOPIFY_STORE env var = the store domain (set once in Railway, never changes)
     const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
+    const shopifyToken = CONFIG.shopify_access_token || shopifyCfg.shopify_access_token || '';
 
     res.json({
-        business_name: CONFIG.business_name,
-        phone_number_id: CONFIG.phone_number_id,
+        business_name: CONFIG.business_name || tc.business_name || '',
+        phone_number_id: CONFIG.phone_number_id || tc.phone_number_id || '',
         api_version: CONFIG.api_version,
         shopify_url: CONFIG.shopify_url || shopifyCfg.shopify_url || envStore || '',
-        catalog_id: CONFIG.catalog_id,
-        server_url: CONFIG.server_url,
-        gemini_api_key: CONFIG.gemini_api_key ? mask(CONFIG.gemini_api_key) : '',
-        groq_api_key: CONFIG.groq_api_key ? mask(CONFIG.groq_api_key) : '',
-        groq_model: CONFIG.groq_model || 'llama-3.3-70b-versatile',
-        access_token: CONFIG.access_token ? mask(CONFIG.access_token) : '',
-        shopify_access_token: (CONFIG.shopify_access_token || shopifyCfg.shopify_access_token) ? mask(CONFIG.shopify_access_token || shopifyCfg.shopify_access_token) : '',
-        verify_token: CONFIG.verify_token ? mask(CONFIG.verify_token) : '',
-        woo_url: CONFIG.woo_url || '',
-        woo_consumer_key: CONFIG.woo_consumer_key ? mask(CONFIG.woo_consumer_key) : '',
-        woo_consumer_secret: CONFIG.woo_consumer_secret ? mask(CONFIG.woo_consumer_secret) : '',
-        webhook_url: CONFIG.webhook_url || '',
-        loyalty_points: CONFIG.loyalty_points || 10,
-        is_configured: !!(CONFIG.access_token && CONFIG.phone_number_id && CONFIG.verify_token),
+        catalog_id: CONFIG.catalog_id || tc.catalog_id || '',
+        server_url: CONFIG.server_url || tc.server_url || '',
+        gemini_api_key: (CONFIG.gemini_api_key || tc.gemini_api_key) ? mask(CONFIG.gemini_api_key || tc.gemini_api_key) : '',
+        groq_api_key: (CONFIG.groq_api_key || tc.groq_api_key) ? mask(CONFIG.groq_api_key || tc.groq_api_key) : '',
+        groq_model: CONFIG.groq_model || tc.groq_model || 'llama-3.3-70b-versatile',
+        access_token: (CONFIG.access_token || tc.access_token) ? mask(CONFIG.access_token || tc.access_token) : '',
+        shopify_access_token: shopifyToken ? mask(shopifyToken) : '',
+        verify_token: (CONFIG.verify_token || tc.verify_token) ? mask(CONFIG.verify_token || tc.verify_token) : '',
+        woo_url: CONFIG.woo_url || tc.woo_url || '',
+        woo_consumer_key: (CONFIG.woo_consumer_key || tc.woo_consumer_key) ? mask(CONFIG.woo_consumer_key || tc.woo_consumer_key) : '',
+        woo_consumer_secret: (CONFIG.woo_consumer_secret || tc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || tc.woo_consumer_secret) : '',
+        webhook_url: CONFIG.webhook_url || tc.webhook_url || '',
+        loyalty_points: CONFIG.loyalty_points || tc.loyalty_points || 10,
+        is_configured: !!(
+            (CONFIG.access_token || tc.access_token) &&
+            (CONFIG.phone_number_id || tc.phone_number_id) &&
+            (CONFIG.verify_token || tc.verify_token)
+        ),
     });
 });
 
@@ -481,21 +520,35 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
 
     fs.writeFileSync(envPath, envContent, 'utf8');
 
-    // Also persist Shopify credentials to MongoDB (survives Railway redeploys)
+    // Persist ALL settings to MongoDB Tenant.config (survives Railway redeploys)
     try {
         if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
             const Tenant = require('./models/Tenant');
             const updates = {};
+            const mongoFields = [
+                'business_name','access_token','phone_number_id','verify_token',
+                'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
+                'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url','loyalty_points',
+            ];
+            for (const key of mongoFields) {
+                const v = req.body[key];
+                if (v === undefined) continue;
+                if (typeof v === 'string' && v.includes('••••')) continue;
+                updates[`config.${key}`] = v;
+            }
+            // Shopify URL: store domain only (no https://)
             const su = req.body.shopify_url;
-            const st = req.body.shopify_access_token;
             if (su && !String(su).includes('••••'))
-                updates['config.shopify_url'] = 'https://' + su.replace(/https?:\/\//, '').replace(/\/$/, '');
+                updates['config.shopify_url'] = su.replace(/https?:\/\//, '').replace(/\/$/, '');
+            const st = req.body.shopify_access_token;
             if (st && !String(st).includes('••••'))
                 updates['config.shopify_access_token'] = st;
             if (Object.keys(updates).length)
                 await Tenant.findByIdAndUpdate(req.tenant._id, { $set: updates });
         }
-    } catch (_) {}
+    } catch (e) {
+        console.warn('[config/setup POST] MongoDB save failed:', e.message);
+    }
 
     res.json({ success: true, business_name: CONFIG.business_name });
 });
