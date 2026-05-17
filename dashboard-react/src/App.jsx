@@ -455,18 +455,11 @@ const App = () => {
         { id: 'config', label: lang === 'en' ? 'App Settings' : 'إعدادات التطبيق', icon: Cog },
     ];
 
-    const [shopifyNotConnected, setShopifyNotConnected] = useState(false);
     const fetchOrders = async () => {
         setLoading(true);
         try {
             const res = await axios.get(`${API_URL}/orders`);
-            if (res.data?.error === 'shopify_not_connected') {
-                setShopifyNotConnected(true);
-                setOrders([]);
-            } else {
-                setShopifyNotConnected(false);
-                setOrders(Array.isArray(res.data) ? res.data : (res.data?.orders || []));
-            }
+            setOrders(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
         setLoading(false);
     };
@@ -765,7 +758,7 @@ const App = () => {
                 ) : (
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                     {activeTab === 'dash' && <Dashboard inbox={inbox} orders={orders} abandonedCarts={abandonedCarts} onOpenChat={handleOpenChat} setActiveTab={setActiveTab} lang={lang} aiEnabled={aiEnabled} />}
-                    {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} shopifyNotConnected={shopifyNotConnected} />}
+                    {activeTab === 'shop' && <ShopifyOrders orders={orders} refresh={fetchOrders} loading={loading} templates={templates} onOpenChat={handleOpenChat} showToast={showToast} lang={lang} />}
                     {activeTab === 'campaigns' && (
                         !hasFeature('growth') ? (
                             <UpgradePrompt feature="Broadcasts" minPlan="Growth" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
@@ -1177,7 +1170,7 @@ const ShopifyConnectPrompt = ({ isEn, onConnected }) => {
     );
 };
 
-const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang, shopifyNotConnected }) => {
+const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showToast, lang }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [statusFilter, setStatusFilter] = useState('all');
     const [lastUpdated, setLastUpdated] = useState(Date.now());
@@ -1245,18 +1238,6 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
 
     return (
         <div className={`space-y-4 ${isEn ? 'text-left' : 'text-right'}`}>
-            {/* Shopify not connected — small banner only, doesn't block the page */}
-            {shopifyNotConnected && (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-orange-500/20 bg-orange-500/8 text-sm">
-                    <AlertTriangle size={15} className="text-orange-400 shrink-0" />
-                    <span className="text-orange-300">{isEn ? 'Shopify not connected — go to' : 'Shopify غير متصل — روح'}</span>
-                    <button onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'config' }))}
-                        className="underline text-orange-300 font-bold">
-                        {isEn ? 'App Settings → Shopify' : 'إعدادات التطبيق ← Shopify'}
-                    </button>
-                    <span className="text-orange-300">{isEn ? 'to add your token' : 'وأضف التوكن'}.</span>
-                </div>
-            )}
             {/* Subtitle + action buttons */}
             <div className="flex items-center justify-between">
                 <p className="text-[10px] font-mono text-brand-muted tracking-[0.15em] uppercase">

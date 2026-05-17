@@ -456,8 +456,8 @@ app.get('/api/orders', async (req, res) => {
     try {
         const { shopify_url, shopify_access_token } = await getActiveShopify();
         if (!shopify_url || !shopify_access_token) {
-            console.warn('[orders] No Shopify credentials found. Re-run OAuth at /auth?shop=YOUR-STORE.myshopify.com');
-            return res.json({ error: 'shopify_not_connected', orders: [] });
+            console.warn('[orders] No Shopify credentials found');
+            return res.json([]);
         }
         const url = `https://${shopify_url}/admin/api/2023-10/orders.json?fulfillment_status=unfulfilled&status=any&limit=250`;
         const response = await axios.get(url, {
@@ -508,11 +508,8 @@ app.get('/api/orders', async (req, res) => {
         
         res.json(enrichedOrders);
     } catch (error) {
-        const status = error.response?.status;
-        if (status === 401 || status === 403) {
-            return res.json({ error: 'shopify_not_connected', orders: [], detail: error.response?.data?.errors || error.message });
-        }
-        res.status(500).json({ error: error.message });
+        console.error('[orders]', error.response?.data || error.message);
+        res.json([]);
     }
 });
 
