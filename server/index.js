@@ -48,26 +48,43 @@ const { mountShopifyOAuth, loadShops, getShopToken, setShopToken, isValidShopDom
 // Helper: get active Shopify shop credentials
 // Priority: MongoDB Tenant (permanent) → shops.json (OAuth cache) → env vars
 const getActiveShopify = async () => {
-    // 1. MongoDB Tenant — primary source of truth (survives redeploys)
+    // 1. MongoDB — prefer shpat_ (permanent offline) tokens only
     try {
         const Tenant = require('./models/Tenant');
-        const tenant = await Tenant.findOne({
+        // First try: find any tenant with a shpat_ token
+        const tenants = await Tenant.find({
             'config.shopify_url': { $exists: true, $ne: '' },
             'config.shopify_access_token': { $exists: true, $ne: '' }
-        }).lean();
-        if (tenant?.config?.shopify_access_token) {
+        }).sort({ updatedAt: -1 }).lean();
+
+        // Prefer shpat_ (permanent) — skip shpua_ (user/expiring)
+        const best = tenants.find(t => t.config?.shopify_access_token?.startsWith('shpat_'))
+                  || tenants.find(t => t.config?.shopify_access_token);
+
+        if (best?.config?.shopify_access_token) {
+            const token = best.config.shopify_access_token;
+            if (token.startsWith('shpua_')) {
+                console.warn('[getActiveShopify] Only shpua_ token found in MongoDB — will be rejected by Shopify. Re-connect via Settings.');
+            }
             return {
-                shopify_url: tenant.config.shopify_url.replace('https://', '').replace(/\/$/, ''),
-                shopify_access_token: tenant.config.shopify_access_token
+                shopify_url: best.config.shopify_url.replace('https://', '').replace(/\/$/, ''),
+                shopify_access_token: token
             };
         }
     } catch (_) {}
-    // 2. shops.json (set by OAuth callback, ephemeral but useful right after OAuth)
+
+    // 2. shops.json — only use shpat_ tokens (skip shpua_)
     const shops = loadShops();
-    const shopDomain = Object.keys(shops)[0];
+    const shopDomain = Object.keys(shops).find(d => shops[d]?.access_token?.startsWith('shpat_'))
+                    || Object.keys(shops)[0];
     if (shopDomain && shops[shopDomain]?.access_token) {
-        return { shopify_url: shopDomain, shopify_access_token: shops[shopDomain].access_token };
+        const token = shops[shopDomain].access_token;
+        if (!token.startsWith('shpua_')) {
+            return { shopify_url: shopDomain, shopify_access_token: token };
+        }
+        console.warn('[getActiveShopify] shops.json has shpua_ token — skipping.');
     }
+
     // 3. env vars fallback
     return {
         shopify_url: CONFIG.shopify_url,
