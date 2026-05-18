@@ -586,7 +586,7 @@ const App = () => {
     const [showSearch, setShowSearch] = React.useState(false);
     const [quickRepliesGlobal, setQuickRepliesGlobal] = React.useState([]);
     const prevInboxLen = React.useRef(0);
-    const prevOrdersLen = React.useRef(0);
+    const seenOrderIds = React.useRef(new Set());
     const notifIdRef = React.useRef(0);
 
     const addNotif = React.useCallback((type, title, body, tab) => {
@@ -747,7 +747,6 @@ const App = () => {
 
         const interval = setInterval(async () => {
             const prevI = prevInboxLen.current;
-            const prevO = prevOrdersLen.current;
             await fetchInbox();
             await fetchOrders();
             await fetchAbandonedCarts();
@@ -763,14 +762,16 @@ const App = () => {
                 return cur;
             });
             setOrders(cur => {
-                const newLen = cur.length;
-                if (prevO > 0 && newLen > prevO) {
-                    const newest = cur[0];
-                    addNotif('order',
-                        `New order #${newest?.order_number || newest?.id}`,
-                        `${newest?.customer?.first_name || ''} · EGP ${newest?.total_price || 0}`, 'shop');
-                }
-                prevOrdersLen.current = newLen;
+                cur.forEach(o => {
+                    if (!seenOrderIds.current.has(o.id)) {
+                        if (seenOrderIds.current.size > 0) {
+                            addNotif('order',
+                                `New order #${o.order_number || o.id}`,
+                                `${o.customer?.first_name || ''} · EGP ${o.total_price || 0}`, 'shop');
+                        }
+                        seenOrderIds.current.add(o.id);
+                    }
+                });
                 return cur;
             });
         }, 5000);
@@ -1544,10 +1545,10 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
                                     <td className="px-5 py-4">
                                         <span className="text-sm font-bold text-brand-accent font-mono">{o.name}</span>
                                     </td>
-                                    <td className="px-5 py-4">
-                                        <div className="flex items-center gap-2.5">
+                                    <td className="px-5 py-4 max-w-[160px]">
+                                        <div className="flex items-center gap-2.5 min-w-0">
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 ${getAvatarColor(name)}`}>{getInitials(fn,ln)}</div>
-                                            <span className="font-bold text-sm">{name}</span>
+                                            <span className="font-bold text-sm truncate">{name}</span>
                                         </div>
                                     </td>
                                     <td className="px-5 py-4 text-sm text-brand-muted">{itemCount} {isEn?(itemCount===1?'item':'items'):'منتج'}</td>
@@ -1561,10 +1562,10 @@ const ShopifyOrders = ({ orders, refresh, loading, templates, onOpenChat, showTo
                                             {st.label}
                                         </span>
                                     </td>
-                                    <td className="px-5 py-4 text-xs font-mono">
+                                    <td className="px-5 py-4 text-xs font-mono" dir="ltr">
                                         <span className={wa.cls}>{wa.text}</span>
                                     </td>
-                                    <td className="px-5 py-4 text-xs text-brand-muted font-mono">{date}</td>
+                                    <td className="px-5 py-4 text-xs text-brand-muted font-mono" dir="ltr">{date}</td>
                                     <td className="px-5 py-4">
                                         <div className="flex items-center gap-2">
                                             <button onClick={e => { e.stopPropagation(); const p=o.shipping_address?.phone||o.customer?.phone; if(p) onOpenChat(p); }}
