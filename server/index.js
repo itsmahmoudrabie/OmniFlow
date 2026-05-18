@@ -851,7 +851,7 @@ app.get('/api/orders', async (req, res) => {
             console.warn('[orders] No Shopify credentials found');
             return res.json([]);
         }
-        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?fulfillment_status=unfulfilled&status=open&limit=250`;
+        const url = `https://${shopify_url}/admin/api/2024-04/orders.json?status=any&limit=250`;
         console.log(`[orders] Fetching: ${url.replace(shopify_access_token || '', '***')}`);
         const response = await axios.get(url, {
             headers: { 'X-Shopify-Access-Token': shopify_access_token }
