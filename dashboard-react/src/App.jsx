@@ -512,9 +512,6 @@ const App = () => {
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
                 setAuthTenant(tenant);
                 setAuthScreen(null);
-                axios.post(`${API_URL}/shopify/ensure-connected`, {}, {
-                    headers: { Authorization: `Bearer ${token}` }, timeout: 8000
-                }).catch(() => {});
                 finishLoading(tenant.name || '');
             } catch {
                 localStorage.removeItem('omni_shop');
@@ -538,10 +535,6 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     setAuthScreen(null);
-                    // Fire-and-forget: warm up server's in-memory Shopify config
-                    axios.post(`${API_URL}/shopify/ensure-connected`, {}, {
-                        headers: { Authorization: `Bearer ${token}` }, timeout: 8000
-                    }).catch(() => {});
                     finishLoading(r.data.name || '');
                 } catch {
                     localStorage.removeItem('omni_token');
