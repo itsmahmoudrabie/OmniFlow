@@ -4637,6 +4637,150 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
 
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
+// ── WasenderAPI Settings Section ─────────────────────────────────────────────
+const WasenderSettings = ({ ws, setWs, showSecrets, toggleSecret, isEn, waConnected, showToast, renderField }) => {
+    const [testing,       setTesting]       = React.useState(false);
+    const [sessionStatus, setSessionStatus] = React.useState(null);
+    const set = (k, v) => setWs(p => ({ ...p, [k]: v }));
+
+    const testConnection = async () => {
+        setTesting(true);
+        setSessionStatus(null);
+        try {
+            const r = await axios.post(`${API_URL}/config/test-whatsapp`, {
+                wasender_session_id:  ws.wasender_session_id,
+                wasender_session_key: ws.wasender_session_key,
+            });
+            setSessionStatus({ ok: r.data.ok, status: r.data.status, name: r.data.name });
+            showToast(r.data.ok
+                ? (isEn ? `Connected ✅ — ${r.data.status}` : `متصل ✅ — ${r.data.status}`)
+                : (isEn ? `Not connected: ${r.data.status}` : `غير متصل: ${r.data.status}`),
+                r.data.ok ? 'success' : 'error'
+            );
+        } catch (e) {
+            const err = e.response?.data?.error || e.message;
+            setSessionStatus({ ok: false, status: 'error', name: err });
+            showToast(err, 'error');
+        }
+        setTesting(false);
+    };
+
+    const serverUrl = window.location.origin;
+    const webhookUrl = `${serverUrl}/webhook/wasender`;
+
+    return (
+        <div className="glass rounded-2xl p-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#25D366'}}>
+                    <MessageCircle size={18} color="#fff" />
+                </div>
+                <div>
+                    <p className="text-[14px] font-black text-brand-egg">WasenderAPI</p>
+                    <p className="text-[10px] text-brand-muted">QR-BASED · $6/MONTH · UNLIMITED MESSAGES</p>
+                </div>
+                <span className={`ml-auto text-[9px] font-black px-2 py-1 rounded-full ${waConnected ? 'text-brand-accent' : 'text-brand-muted'}`}
+                    style={{background: waConnected ? 'rgba(140,200,80,0.12)' : 'rgba(100,100,100,0.1)'}}>
+                    ● {waConnected
+                        ? (sessionStatus?.status || 'CONFIGURED')
+                        : 'NOT SET'}
+                </span>
+            </div>
+
+            {/* Credentials */}
+            <div className="space-y-4">
+                {renderField({ label: isEn ? 'Session ID' : 'معرف الجلسة (Session ID)', field: 'wasender_session_id', placeholder: 'session_abc123' })}
+
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">
+                        {isEn ? 'Session API Key (secret)' : 'مفتاح الجلسة (Session Key)'}
+                    </label>
+                    <div className="relative" dir="ltr">
+                        <input
+                            type={showSecrets['wasender_session_key'] ? 'text' : 'password'}
+                            value={ws.wasender_session_key || ''}
+                            onChange={e => set('wasender_session_key', e.target.value)}
+                            placeholder="sk_live_xxxxxxxxxxxxxxxxxx"
+                            className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none text-brand-egg text-left"
+                        />
+                        <button onClick={() => toggleSecret('wasender_session_key')} type="button"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-egg">
+                            {showSecrets['wasender_session_key'] ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">
+                        {isEn ? 'Webhook Secret (optional)' : 'سر الـ Webhook (اختياري)'}
+                    </label>
+                    <div className="relative" dir="ltr">
+                        <input
+                            type={showSecrets['wasender_webhook_secret'] ? 'text' : 'password'}
+                            value={ws.wasender_webhook_secret || ''}
+                            onChange={e => set('wasender_webhook_secret', e.target.value)}
+                            placeholder="whsec_xxxxxxxxxxxxxxxxxx"
+                            className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-xs focus:border-brand-accent outline-none text-brand-egg text-left"
+                        />
+                        <button onClick={() => toggleSecret('wasender_webhook_secret')} type="button"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-egg">
+                            {showSecrets['wasender_webhook_secret'] ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Test button */}
+            <button onClick={testConnection} disabled={testing || !ws.wasender_session_id || !ws.wasender_session_key}
+                className="w-full py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all disabled:opacity-40"
+                style={{background:'#25D366', color:'#fff'}}>
+                {testing ? (isEn ? '⏳ Testing...' : '⏳ جاري الفحص...') : (isEn ? '→ Test Connection' : '→ اختبار الاتصال')}
+            </button>
+
+            {sessionStatus && (
+                <div className={`p-3 rounded-xl text-[11px] font-bold text-center ${sessionStatus.ok ? 'text-brand-accent' : 'text-red-400'}`}
+                    style={{background: sessionStatus.ok ? 'rgba(140,200,80,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${sessionStatus.ok ? 'rgba(140,200,80,0.2)' : 'rgba(239,68,68,0.2)'}`}}>
+                    {sessionStatus.ok ? '✅' : '❌'} {sessionStatus.name || sessionStatus.status}
+                </div>
+            )}
+
+            {/* Webhook URL info */}
+            <div className="rounded-xl p-4 space-y-2" style={{background:'rgba(140,200,80,0.05)', border:'1px solid rgba(140,200,80,0.1)'}}>
+                <p className="text-[10px] font-black text-brand-egg uppercase tracking-wider">
+                    {isEn ? '🔗 Webhook URL (set in WasenderAPI Dashboard)' : '🔗 رابط الـ Webhook (أضفه في لوحة WasenderAPI)'}
+                </p>
+                <div className="flex items-center gap-2" dir="ltr">
+                    <code className="flex-1 text-[10px] text-brand-accent bg-black/20 px-2 py-1.5 rounded-lg break-all">
+                        {webhookUrl}
+                    </code>
+                    <button onClick={() => navigator.clipboard.writeText(webhookUrl).then(() => showToast(isEn ? 'Copied!' : 'تم النسخ!', 'success'))}
+                        className="shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg">
+                        {isEn ? 'Copy' : 'نسخ'}
+                    </button>
+                </div>
+                <p className="text-[10px] text-brand-muted leading-relaxed">
+                    {isEn
+                        ? '1. Go to wasenderapi.com → Sessions → Webhooks\n2. Paste the URL above\n3. Copy the Webhook Secret and paste it above'
+                        : '١. افتح wasenderapi.com → Sessions → Webhooks\n٢. الصق الرابط أعلاه\n٣. انسخ الـ Webhook Secret وضعه في الحقل أعلاه'}
+                </p>
+            </div>
+
+            {/* Setup guide */}
+            <div className="rounded-xl p-4 space-y-2" style={{background:'rgba(37,211,102,0.04)', border:'1px solid rgba(37,211,102,0.12)'}}>
+                <p className="text-[10px] font-black text-brand-egg uppercase tracking-wider">
+                    {isEn ? '📱 How to connect WhatsApp' : '📱 كيفية ربط واتساب'}
+                </p>
+                <ol className="space-y-1 text-[10px] text-brand-muted leading-relaxed list-none">
+                    {(isEn
+                        ? ['1. Register at wasenderapi.com ($6/month)', '2. Dashboard → Sessions → Create New Session', '3. Scan the QR Code from WhatsApp → Linked Devices', '4. Copy Session ID & API Key, paste above', '5. Save Settings']
+                        : ['١. سجّل في wasenderapi.com (6 دولار/شهر)', '٢. Dashboard → Sessions → Create New Session', '٣. امسح QR Code من واتساب → الأجهزة المرتبطة', '٤. انسخ Session ID والـ API Key وضعهم أعلاه', '٥. احفظ الإعدادات']
+                    ).map((step, i) => <li key={i}>{step}</li>)}
+                </ol>
+            </div>
+        </div>
+    );
+};
+
 // ── App Settings ─────────────────────────────────────────────────────────────
 const SetupManager = ({ showToast, lang, onSave }) => {
     const isEn = lang === 'en';
@@ -4646,7 +4790,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     // ── Data state ──────────────────────────────────────────────────────────
     const [ws, setWs] = React.useState({
         brand_name: '', region: '', language: 'ar+en', currency: 'EGP',
-        wa_phone: '', wa_token: '', wa_phone_id: '', wa_business_id: '',
+        wasender_session_id: '', wasender_session_key: '', wasender_webhook_secret: '',
         shopify_store: '', shopify_key: '', shopify_secret: '', shopify_webhook: '',
         shopify_client_id: '', shopify_client_secret: '',
         ai_enabled: false, ai_instruction: '',
@@ -4672,10 +4816,13 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 setWs(p => ({
                     ...p,
                     ...r.data,
-                    shopify_store:         r.data.shopify_url             || p.shopify_store         || '',
-                    shopify_key:           r.data.shopify_access_token    || p.shopify_key           || '',
-                    shopify_client_id:     r.data.shopify_client_id       || p.shopify_client_id     || '',
-                    shopify_client_secret: r.data.shopify_client_secret   || p.shopify_client_secret || '',
+                    shopify_store:           r.data.shopify_url             || p.shopify_store           || '',
+                    shopify_key:             r.data.shopify_access_token    || p.shopify_key             || '',
+                    shopify_client_id:       r.data.shopify_client_id       || p.shopify_client_id       || '',
+                    shopify_client_secret:   r.data.shopify_client_secret   || p.shopify_client_secret   || '',
+                    wasender_session_id:     r.data.wasender_session_id     || p.wasender_session_id     || '',
+                    wasender_session_key:    r.data.wasender_session_key    || p.wasender_session_key    || '',
+                    wasender_webhook_secret: r.data.wasender_webhook_secret || p.wasender_webhook_secret || '',
                 }));
             }
         }).catch(() => {});
@@ -4709,10 +4856,13 @@ const SetupManager = ({ showToast, lang, onSave }) => {
             // Map frontend field names → backend field names before saving
             const payload = {
                 ...ws,
-                shopify_url:           ws.shopify_store         || ws.shopify_url           || '',
-                shopify_access_token:  ws.shopify_key           || ws.shopify_access_token  || '',
-                shopify_client_id:     ws.shopify_client_id     || '',
-                shopify_client_secret: ws.shopify_client_secret || '',
+                shopify_url:             ws.shopify_store           || ws.shopify_url           || '',
+                shopify_access_token:    ws.shopify_key             || ws.shopify_access_token  || '',
+                shopify_client_id:       ws.shopify_client_id       || '',
+                shopify_client_secret:   ws.shopify_client_secret   || '',
+                wasender_session_id:     ws.wasender_session_id     || '',
+                wasender_session_key:    ws.wasender_session_key    || '',
+                wasender_webhook_secret: ws.wasender_webhook_secret || '',
             };
             await axios.post(`${API_URL}/config/setup`, payload);
             await axios.post(`${API_URL}/settings`, {
@@ -4812,7 +4962,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
         { id: 'appearance', icon: Palette,       label: isEn ? 'Appearance'         : 'المظهر' },
     ];
 
-    const waConnected   = !!(ws.wa_token && ws.wa_phone_id);
+    const waConnected   = !!(ws.wasender_session_id && ws.wasender_session_key);
     const shopConnected = !!(ws.shopify_store && ws.shopify_key);
     const aiActive      = ws.ai_enabled;
 
@@ -4860,7 +5010,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
 
                 {/* 3 integration status cards */}
                 <div className="grid grid-cols-3 gap-3">
-                    {renderIntCard({ icon:MessageCircle, iconBg:"#25D366", name:"WhatsApp Cloud", subtitle:ws.wa_phone||(isEn?'Not connected':'غير متصل'), stat:waConnected?(isEn?'Official Meta API connected':'Meta API متصل'):(isEn?'Add credentials to connect':'أضف بيانات الاتصال'), connectedAt:integrations.wa?.connected_at||null, status:waConnected?'connected':'disconnected' })}
+                    {renderIntCard({ icon:MessageCircle, iconBg:"#25D366", name:"WasenderAPI", subtitle:ws.wasender_session_id||(isEn?'Not connected':'غير متصل'), stat:waConnected?(isEn?'WhatsApp session active':'جلسة واتساب نشطة'):(isEn?'Add Session ID & Key':'أضف Session ID والـ Key'), connectedAt:integrations.wa?.connected_at||null, status:waConnected?'connected':'disconnected' })}
                     {renderIntCard({ icon:ShoppingCart, iconBg:"#96BF48", name:"Shopify", subtitle:ws.shopify_store||(isEn?'Not connected':'غير متصل'), stat:integrations.shopify?`${integrations.shopify.products||0} ${isEn?'products':'منتج'} · ${integrations.shopify.orders||0} ${isEn?'orders':'طلب'}`:(isEn?'Add store URL to connect':'أضف رابط المتجر'), connectedAt:integrations.shopify?.connected_at||null, status:shopConnected?'synced':'disconnected' })}
                     {renderIntCard({ icon:Sparkles, iconBg:"#FF6B35", name:"AI Assistant", stat:aiActive?(isEn?'AI assistant active':'مساعد AI نشط'):(isEn?'AI assistant disabled':'مساعد AI معطل'), connectedAt:integrations.ai?.connected_at||null, status:aiActive?'active':'disconnected' })}
                 </div>
@@ -4932,30 +5082,8 @@ const SetupManager = ({ showToast, lang, onSave }) => {
         );
 
         case 'whatsapp': return (
-            <div className="glass rounded-2xl p-6 space-y-5">
-                <div className="flex items-center gap-3 pb-4 border-b border-brand-border/20">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'#25D366'}}>
-                        <MessageCircle size={18} color="#fff" />
-                    </div>
-                    <div>
-                        <p className="text-[14px] font-black text-brand-egg">WhatsApp Cloud API</p>
-                        <p className="text-[10px] text-brand-muted">META BUSINESS · OFFICIAL API</p>
-                    </div>
-                    <span className={`ml-auto text-[9px] font-black px-2 py-1 rounded-full ${waConnected ? 'text-brand-accent' : 'text-brand-muted'}`}
-                        style={{background: waConnected ? 'rgba(140,200,80,0.12)' : 'rgba(100,100,100,0.1)'}}>
-                        ● {waConnected ? 'CONNECTED' : 'NOT SET'}
-                    </span>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    {renderField({label:(isEn ? 'Phone Number' : 'رقم الهاتف'), field:"wa_phone", placeholder:"+20 100 000 0000", dir:"ltr"})}
-                    {renderField({label:(isEn ? 'Phone Number ID' : 'معرف رقم الهاتف'), field:"wa_phone_id", placeholder:"123456789", dir:"ltr", secret:true})}
-                    {renderField({label:(isEn ? 'Business Account ID' : 'معرف حساب الأعمال'), field:"wa_business_id", placeholder:"987654321", dir:"ltr", secret:true})}
-                    {renderField({label:(isEn ? 'Permanent Access Token' : 'رمز الوصول الدائم'), field:"wa_token", placeholder:"EAAxxxxxxxx...", dir:"ltr", secret:true})}
-                </div>
-                <div className="p-3 rounded-xl text-[11px] text-brand-muted" style={{background:'rgba(140,200,80,0.05)',border:'1px solid rgba(140,200,80,0.1)'}}>
-                    {isEn ? 'Find these values in Meta Business Suite → WhatsApp → API Setup' : 'ستجد هذه القيم في Meta Business Suite → WhatsApp → API Setup'}
-                </div>
-            </div>
+            <WasenderSettings ws={ws} setWs={setWs} showSecrets={showSecrets} toggleSecret={toggleSecret}
+                isEn={isEn} waConnected={waConnected} showToast={showToast} renderField={renderField} />
         );
 
         case 'shopify': return (

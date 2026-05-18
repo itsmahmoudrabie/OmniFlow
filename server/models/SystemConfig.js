@@ -17,9 +17,12 @@ const systemConfigSchema = new mongoose.Schema({
     woo_consumer_key:     { type: String, default: '' },
     woo_consumer_secret:  { type: String, default: '' },
     webhook_url:          { type: String, default: '' },
-    loyalty_points:       { type: Number, default: 10 },
-    shopify_url:          { type: String, default: '' },
-    shopify_access_token: { type: String, default: '' },
+    loyalty_points:         { type: Number, default: 10 },
+    shopify_url:            { type: String, default: '' },
+    shopify_access_token:   { type: String, default: '' },
+    wasender_session_id:    { type: String, default: '' },
+    wasender_session_key:   { type: String, default: '' },
+    wasender_webhook_secret:{ type: String, default: '' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('SystemConfig', systemConfigSchema);

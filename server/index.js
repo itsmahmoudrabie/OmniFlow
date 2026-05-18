@@ -84,10 +84,10 @@ mongoose.connect(MONGODB_URI)
             const sc = await SystemConfig.findById('main').lean();
             if (sc) {
                 const apply = (key) => { if (sc[key]) CONFIG[key] = sc[key]; };
-                ['access_token','phone_number_id','verify_token','business_name',
-                 'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
-                 'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
-                 'shopify_url','shopify_access_token'].forEach(apply);
+                ['business_name','catalog_id','server_url','groq_api_key','gemini_api_key',
+                 'groq_model','woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+                 'shopify_url','shopify_access_token',
+                 'wasender_session_id','wasender_session_key','wasender_webhook_secret'].forEach(apply);
                 if (sc.loyalty_points) CONFIG.loyalty_points = sc.loyalty_points;
                 console.log('[Config] ✅ SystemConfig loaded from MongoDB into CONFIG');
             }
@@ -127,8 +127,9 @@ app.use(cors({
     credentials: true
 }));
 
-// Raw body for Shopify webhooks — MUST be before bodyParser.json
+// Raw body for Shopify + WasenderAPI webhooks — MUST be before bodyParser.json
 app.use('/webhooks/shopify', express.raw({ type: 'application/json' }));
+app.use('/webhook/wasender', express.raw({ type: 'application/json' }));
 
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
@@ -278,23 +279,23 @@ const CONFIG = {
     shopify_api_secret: process.env.SHOPIFY_API_SECRET || "",
     shopify_app_url: process.env.SHOPIFY_APP_URL || "",
     shopify_scopes: process.env.SHOPIFY_SCOPES || "read_products,read_orders,write_orders,read_customers",
-    // WhatsApp Cloud API
-    access_token: process.env.META_ACCESS_TOKEN || "",
-    phone_number_id: process.env.PHONE_NUMBER_ID || "1108371902361717",
-    api_version: "v25.0",
-    verify_token: process.env.VERIFY_TOKEN || "your-random-verify-token",
     shopify_url: process.env.SHOPIFY_URL || "",
     shopify_access_token: process.env.SHOPIFY_ACCESS_TOKEN || "",
+    // WasenderAPI (replaces Meta WhatsApp Cloud API)
+    wasender_session_id:     process.env.WASENDER_SESSION_ID     || "",
+    wasender_session_key:    process.env.WASENDER_SESSION_KEY    || "",
+    wasender_webhook_secret: process.env.WASENDER_WEBHOOK_SECRET || "",
+    // AI & general
     gemini_api_key: process.env.GEMINI_API_KEY || "",
-    groq_api_key: process.env.GROQ_API_KEY || "",
-    groq_model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-    catalog_id: process.env.CATALOG_ID || "",
-    server_url: process.env.SERVER_URL || "",
-    business_name: process.env.BUSINESS_NAME || "My Business",
-    woo_url: process.env.WOO_URL || "",
-    woo_consumer_key: process.env.WOO_CONSUMER_KEY || "",
-    woo_consumer_secret: process.env.WOO_CONSUMER_SECRET || "",
-    webhook_url: process.env.WEBHOOK_URL || "",
+    groq_api_key:   process.env.GROQ_API_KEY   || "",
+    groq_model:     process.env.GROQ_MODEL     || "llama-3.3-70b-versatile",
+    catalog_id:     process.env.CATALOG_ID     || "",
+    server_url:     process.env.SERVER_URL      || "",
+    business_name:  process.env.BUSINESS_NAME   || "My Business",
+    woo_url:              process.env.WOO_URL              || "",
+    woo_consumer_key:     process.env.WOO_CONSUMER_KEY     || "",
+    woo_consumer_secret:  process.env.WOO_CONSUMER_SECRET  || "",
+    webhook_url:          process.env.WEBHOOK_URL           || "",
     loyalty_points: parseInt(process.env.LOYALTY_POINTS || '10')
 };
 
@@ -344,6 +345,20 @@ const fireWebhook = (event, data) => {
         source: 'omniflow',
         business: CONFIG.business_name
     }, { timeout: 5000 }).catch(e => console.warn('[Webhook] Fire failed:', e.message));
+};
+
+// ── WasenderAPI send helper ────────────────────────────────────────────────────
+const sendViaWasender = async (to, msgObj) => {
+    const sessionId = CONFIG.wasender_session_id;
+    const apiKey    = CONFIG.wasender_session_key;
+    if (!sessionId || !apiKey)
+        throw new Error('WasenderAPI غير مُهيَّأ — أدخل Session ID و Session Key في الإعدادات');
+    const cleanTo = String(to).replace(/[^\d]/g, '');
+    const url = `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/messages/send`;
+    return await axios.post(url, { to: cleanTo, ...msgObj }, {
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: 15000
+    });
 };
 
 // دالة توحيد أرقام الهواتف للمقارنة
@@ -449,10 +464,10 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         const SystemConfig = require('./models/SystemConfig');
         sc = (await SystemConfig.findById('main').lean()) || {};
         // Populate CONFIG from SystemConfig for any field currently missing in memory
-        const keys = ['access_token','phone_number_id','verify_token','business_name',
-                      'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
-                      'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
-                      'shopify_url','shopify_access_token'];
+        const keys = ['business_name','catalog_id','server_url','groq_api_key','gemini_api_key',
+                      'groq_model','woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+                      'shopify_url','shopify_access_token',
+                      'wasender_session_id','wasender_session_key','wasender_webhook_secret'];
         for (const k of keys) { if (!CONFIG[k] && sc[k]) CONFIG[k] = sc[k]; }
         if (!CONFIG.loyalty_points && sc.loyalty_points) CONFIG.loyalty_points = sc.loyalty_points;
     } catch (_) {}
@@ -472,51 +487,51 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
     const shopifyToken = CONFIG.shopify_access_token || shopifyCfg.shopify_access_token || sc.shopify_access_token || '';
 
+    const wasenderSessionId  = CONFIG.wasender_session_id     || sc.wasender_session_id     || '';
+    const wasenderSessionKey = CONFIG.wasender_session_key    || sc.wasender_session_key    || '';
+    const wasenderSecret     = CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret || '';
+
     res.json({
-        business_name:   CONFIG.business_name   || sc.business_name   || '',
-        phone_number_id: CONFIG.phone_number_id || sc.phone_number_id || '',
-        api_version:     CONFIG.api_version,
-        shopify_url:     CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
-        catalog_id:      CONFIG.catalog_id  || sc.catalog_id  || '',
-        server_url:      CONFIG.server_url  || sc.server_url  || '',
-        gemini_api_key:  (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
-        groq_api_key:    (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
-        groq_model:      CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
-        access_token:    (CONFIG.access_token    || sc.access_token)    ? mask(CONFIG.access_token    || sc.access_token)    : '',
-        shopify_access_token: shopifyToken ? mask(shopifyToken) : '',
-        verify_token:    (CONFIG.verify_token    || sc.verify_token)    ? mask(CONFIG.verify_token    || sc.verify_token)    : '',
-        woo_url:         CONFIG.woo_url      || sc.woo_url      || '',
-        woo_consumer_key:    (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
-        woo_consumer_secret: (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
-        webhook_url:     CONFIG.webhook_url  || sc.webhook_url  || '',
-        loyalty_points:  CONFIG.loyalty_points || sc.loyalty_points || 10,
-        is_configured: !!(
-            (CONFIG.access_token    || sc.access_token)    &&
-            (CONFIG.phone_number_id || sc.phone_number_id) &&
-            (CONFIG.verify_token    || sc.verify_token)
-        ),
+        business_name:           CONFIG.business_name || sc.business_name || '',
+        shopify_url:             CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
+        catalog_id:              CONFIG.catalog_id  || sc.catalog_id  || '',
+        server_url:              CONFIG.server_url  || sc.server_url  || '',
+        gemini_api_key:          (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
+        groq_api_key:            (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
+        groq_model:              CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
+        shopify_access_token:    shopifyToken ? mask(shopifyToken) : '',
+        woo_url:                 CONFIG.woo_url      || sc.woo_url      || '',
+        woo_consumer_key:        (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
+        woo_consumer_secret:     (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
+        webhook_url:             CONFIG.webhook_url  || sc.webhook_url  || '',
+        loyalty_points:          CONFIG.loyalty_points || sc.loyalty_points || 10,
+        // WasenderAPI
+        wasender_session_id:     wasenderSessionId,
+        wasender_session_key:    wasenderSessionKey    ? mask(wasenderSessionKey)    : '',
+        wasender_webhook_secret: wasenderSecret        ? mask(wasenderSecret)        : '',
+        is_configured:           !!(wasenderSessionId && wasenderSessionKey),
     });
 });
 
 // حفظ الإعدادات في .env وتحديث CONFIG
 app.post('/api/config/setup', authMiddleware, async (req, res) => {
     const fields = {
-        BUSINESS_NAME: 'business_name',
-        META_ACCESS_TOKEN: 'access_token',
-        PHONE_NUMBER_ID: 'phone_number_id',
-        VERIFY_TOKEN: 'verify_token',
-        SHOPIFY_URL: 'shopify_url',
-        SHOPIFY_ACCESS_TOKEN: 'shopify_access_token',
-        GEMINI_API_KEY: 'gemini_api_key',
-        GROQ_API_KEY: 'groq_api_key',
-        GROQ_MODEL: 'groq_model',
-        CATALOG_ID: 'catalog_id',
-        SERVER_URL: 'server_url',
-        WOO_URL: 'woo_url',
-        WOO_CONSUMER_KEY: 'woo_consumer_key',
-        WOO_CONSUMER_SECRET: 'woo_consumer_secret',
-        WEBHOOK_URL: 'webhook_url',
-        LOYALTY_POINTS: 'loyalty_points'
+        BUSINESS_NAME:           'business_name',
+        SHOPIFY_URL:             'shopify_url',
+        SHOPIFY_ACCESS_TOKEN:    'shopify_access_token',
+        GEMINI_API_KEY:          'gemini_api_key',
+        GROQ_API_KEY:            'groq_api_key',
+        GROQ_MODEL:              'groq_model',
+        CATALOG_ID:              'catalog_id',
+        SERVER_URL:              'server_url',
+        WOO_URL:                 'woo_url',
+        WOO_CONSUMER_KEY:        'woo_consumer_key',
+        WOO_CONSUMER_SECRET:     'woo_consumer_secret',
+        WEBHOOK_URL:             'webhook_url',
+        LOYALTY_POINTS:          'loyalty_points',
+        WASENDER_SESSION_ID:     'wasender_session_id',
+        WASENDER_SESSION_KEY:    'wasender_session_key',
+        WASENDER_WEBHOOK_SECRET: 'wasender_webhook_secret',
     };
 
     const envPath = path.join(__dirname, '.env');
@@ -542,9 +557,9 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
         const SystemConfig = require('./models/SystemConfig');
         const updates = {};
         const scFields = [
-            'business_name','access_token','phone_number_id','verify_token',
-            'catalog_id','server_url','groq_api_key','gemini_api_key','groq_model',
-            'woo_url','woo_consumer_key','woo_consumer_secret','webhook_url','loyalty_points',
+            'business_name','catalog_id','server_url','groq_api_key','gemini_api_key',
+            'groq_model','woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
+            'loyalty_points','wasender_session_id','wasender_session_key','wasender_webhook_secret',
         ];
         for (const key of scFields) {
             const v = req.body[key];
@@ -568,18 +583,21 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
     res.json({ success: true, business_name: CONFIG.business_name });
 });
 
-// Test WhatsApp connection
+// Test WasenderAPI session connection
 app.post('/api/config/test-whatsapp', async (req, res) => {
-    const { access_token, phone_number_id } = req.body;
-    if (!access_token || !phone_number_id) return res.status(400).json({ error: 'Missing credentials' });
+    const sessionId  = req.body.wasender_session_id  || CONFIG.wasender_session_id;
+    const sessionKey = req.body.wasender_session_key || CONFIG.wasender_session_key;
+    if (!sessionId || !sessionKey) return res.status(400).json({ error: 'Session ID and Session Key are required' });
     try {
         const r = await axios.get(
-            `https://graph.facebook.com/v25.0/${phone_number_id}`,
-            { headers: { Authorization: `Bearer ${access_token}` }, timeout: 8000 }
+            `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/status`,
+            { headers: { Authorization: `Bearer ${sessionKey}` }, timeout: 8000 }
         );
-        res.json({ ok: true, name: r.data?.verified_name || r.data?.display_phone_number || 'Connected' });
+        const status = r.data?.data?.status || r.data?.status || 'unknown';
+        const connected = status === 'connected';
+        res.json({ ok: connected, status, name: r.data?.data?.name || sessionId });
     } catch (e) {
-        const msg = e.response?.data?.error?.message || 'Invalid token or Phone ID';
+        const msg = e.response?.data?.message || e.response?.data?.error || 'Invalid Session ID or Key';
         res.status(400).json({ error: msg });
     }
 });
@@ -678,6 +696,23 @@ app.post('/api/shopify/ensure-connected', authMiddleware, async (req, res) => {
     } catch (e) {
         console.warn('[ensure-connected] Error (non-fatal):', e.message);
         res.json({ connected: false, shop: null });
+    }
+});
+
+// WasenderAPI session status check
+app.get('/api/wasender/session-status', authMiddleware, async (req, res) => {
+    const sessionId  = CONFIG.wasender_session_id;
+    const sessionKey = CONFIG.wasender_session_key;
+    if (!sessionId || !sessionKey) return res.json({ connected: false, status: 'not_configured' });
+    try {
+        const r = await axios.get(
+            `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/status`,
+            { headers: { Authorization: `Bearer ${sessionKey}` }, timeout: 8000 }
+        );
+        const status = r.data?.data?.status || r.data?.status || 'unknown';
+        res.json({ connected: status === 'connected', status, name: r.data?.data?.name });
+    } catch (e) {
+        res.json({ connected: false, status: 'error', error: e.response?.data?.message || e.message });
     }
 });
 
@@ -1009,17 +1044,8 @@ app.post('/api/abandoned_carts/trigger', async (req, res) => {
     if (!cleanPhone) return res.status(400).json({ error: "رقم الهاتف مطلوب" });
 
     try {
-        const url = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
         const textMsg = customMsg || `مرحباً ${customerName || "عزيزي العميل"}، لاحظنا أنك تركت بعض المنتجات في سلة التسوق الخاصة بك في ${CONFIG.business_name}. هل ترغب في المساعدة لإتمام طلبك؟ رابط السلة: ${checkoutUrl || ""}`;
-        
-        const response = await axios.post(url, {
-            messaging_product: "whatsapp",
-            to: cleanPhone,
-            type: "text",
-            text: { body: textMsg }
-        }, {
-            headers: { 'Authorization': `Bearer ${CONFIG.access_token}` }
-        });
+        const response = await sendViaWasender(cleanPhone, { messageType: 'text', text: textMsg });
 
         let localOrders = loadJSON(DB_FILE);
         if (Array.isArray(localOrders)) localOrders = {};
@@ -1125,194 +1151,104 @@ app.get('/api/customers', async (req, res) => {
     }
 });
 
-// إرسال رسالة واتساب
+// إرسال رسالة واتساب عبر WasenderAPI
 app.post('/api/whatsapp/send', async (req, res) => {
-    const { phone, template, templateLanguage, templateImageUrl, templateButtons, params, headerLink, textMsg, actionType, orderName, orderId, imageBase64, catalogId, productRetailerId, fileBase64, fileType, fileName } = req.body;
-    const cleanPhone = phone.replace(/[^\d]/g, "");
+    const { phone, template, params, textMsg, actionType, orderName, orderId,
+            imageBase64, fileBase64, fileType, fileName, productRetailerId } = req.body;
+    const cleanPhone = normalizePhone(phone);
 
-    // If CONFIG is empty (e.g. after a Railway redeploy before startup loader ran),
-    // load from SystemConfig on-demand.
-    if (!CONFIG.phone_number_id || !CONFIG.access_token) {
+    // Load wasender config from SystemConfig if not in memory yet
+    if (!CONFIG.wasender_session_id || !CONFIG.wasender_session_key) {
         try {
             const SystemConfig = require('./models/SystemConfig');
             const sc = await SystemConfig.findById('main').lean();
             if (sc) {
-                if (!CONFIG.phone_number_id && sc.phone_number_id) CONFIG.phone_number_id = sc.phone_number_id;
-                if (!CONFIG.access_token    && sc.access_token)    CONFIG.access_token    = sc.access_token;
+                if (!CONFIG.wasender_session_id  && sc.wasender_session_id)  CONFIG.wasender_session_id  = sc.wasender_session_id;
+                if (!CONFIG.wasender_session_key && sc.wasender_session_key) CONFIG.wasender_session_key = sc.wasender_session_key;
             }
         } catch (_) {}
     }
 
-    if (!CONFIG.phone_number_id || !CONFIG.access_token) {
-        return res.status(503).json({ error: 'WhatsApp غير مُهيَّأ — افتح الإعدادات وأدخل Phone Number ID و Access Token ثم احفظ.' });
+    if (!CONFIG.wasender_session_id || !CONFIG.wasender_session_key) {
+        return res.status(503).json({ error: 'WasenderAPI غير مُهيَّأ — افتح الإعدادات وأدخل Session ID و Session Key ثم احفظ.' });
     }
 
-    let payload = {
-        messaging_product: "whatsapp",
-        to: cleanPhone,
-    };
-
-    const url = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
-
-    
     try {
-        let mediaId = null;
-        let finalType = "text";
-        
+        let msgObj = null;
+        let finalMsgText = '';
+
         console.log(`[SendAPI] Target: ${phone}, Template: ${template || 'None'}, Text: ${textMsg || 'None'}`);
 
-
-        // التعامل مع الوسائط (صور، مستندات، فيديو، صوت)
+        // حفظ الوسائط على الديسك وإرسالها عبر رابط عام
         const mediaData = imageBase64 || fileBase64;
         if (mediaData) {
-            const mediaUrl = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/media`;
             const base64Data = mediaData.includes(',') ? mediaData.split(',')[1] : mediaData;
             const buffer = Buffer.from(base64Data, 'base64');
-            
-            let mimeType = "image/png";
-            let ext = "png";
-            finalType = "image";
-
-            if (fileType) {
-                finalType = fileType;
-                if (fileType === "document") {
-                    mimeType = "application/pdf";
-                    ext = "pdf";
-                } else if (fileType === "video") {
-                    mimeType = "video/mp4";
-                    ext = "mp4";
-                } else if (fileType === "audio") {
-                    mimeType = "audio/mpeg";
-                    ext = "mp3";
-                }
-            } else if (imageBase64) {
-                const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
-                if (matches) mimeType = matches[1];
-                ext = mimeType.split('/')[1] || "png";
+            let mediaTypeStr = 'image', ext = 'jpg';
+            if (fileType === 'document') { mediaTypeStr = 'document'; ext = 'pdf'; }
+            else if (fileType === 'video')    { mediaTypeStr = 'video';    ext = 'mp4'; }
+            else if (fileType === 'audio')    { mediaTypeStr = 'audio';    ext = 'mp3'; }
+            else if (imageBase64) {
+                const m = imageBase64.match(/^data:(.+);base64,/);
+                if (m) ext = m[1].split('/')[1] || 'jpg';
             }
+            const savedName = `out_${Date.now()}.${ext}`;
+            fs.writeFileSync(path.join(MEDIA_DIR, savedName), buffer);
+            const serverUrl = (CONFIG.server_url || process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
+            const mediaUrl  = `${serverUrl}/media/${savedName}`;
+            if (mediaTypeStr === 'image')    { msgObj = { messageType: 'image',    imageUrl:    mediaUrl, caption:  textMsg || undefined }; finalMsgText = textMsg || '[صورة]'; }
+            else if (mediaTypeStr === 'document') { msgObj = { messageType: 'document', documentUrl: mediaUrl, fileName: fileName || savedName }; finalMsgText = fileName || '[مستند]'; }
+            else if (mediaTypeStr === 'video')    { msgObj = { messageType: 'video',    videoUrl:    mediaUrl, caption:  textMsg || undefined }; finalMsgText = textMsg || '[فيديو]'; }
+            else                                  { msgObj = { messageType: 'audio',    audioUrl:    mediaUrl }; finalMsgText = '[مقطع صوتي]'; }
 
-            const tempFileName = `temp_${Date.now()}.${ext}`;
-            const tempFilePath = path.join(MEDIA_DIR, tempFileName);
-            fs.writeFileSync(tempFilePath, buffer);
-
-            const form = new FormData();
-            form.append('file', fs.createReadStream(tempFilePath), {
-                filename: fileName || tempFileName,
-                contentType: mimeType
-            });
-            form.append('messaging_product', 'whatsapp');
-
-
-            const mediaRes = await axios.post(mediaUrl, form, {
-                headers: {
-                    ...form.getHeaders(),
-                    'Authorization': `Bearer ${CONFIG.access_token}`
-                }
-            });
-            mediaId = mediaRes.data.id;
-            fs.unlinkSync(tempFilePath);
-        }
-
-        if (template) {
-            const components = [];
-            if (headerLink) {
-                components.push({
-                    type: "header",
-                    parameters: [{ type: "document", document: { link: headerLink, filename: `${CONFIG.business_name}.pdf` } }]
-                });
-            } else if (templateImageUrl) {
-                components.push({
-                    type: "header",
-                    parameters: [{ type: "image", image: { link: templateImageUrl } }]
-                });
-            } else if (mediaId) {
-                components.push({
-                    type: "header",
-                    parameters: [{ type: finalType, [finalType]: { id: mediaId } }]
+        } else if (template) {
+            // القوالب: استبدال المتغيرات وإرسال كنص عادي
+            const templates = loadJSON(TEMPLATES_FILE);
+            const tpl = Array.isArray(templates) ? templates.find(t => t.name === template) : null;
+            let tplText = tpl?.body || tpl?.content || template;
+            if (params && Array.isArray(params)) {
+                params.forEach((p, i) => {
+                    tplText = tplText.replace(new RegExp(`\\{\\{${i + 1}\\}\\}`, 'g'), String(p));
                 });
             }
+            finalMsgText = tplText;
+            msgObj = { messageType: 'text', text: tplText };
 
-
-            if (params) {
-                components.push({
-                    type: "body",
-                    parameters: params.map(p => ({ type: "text", text: String(p) }))
-                });
-            }
-            if (templateButtons && Array.isArray(templateButtons)) {
-                templateButtons.forEach(btn => {
-                    if (btn.sub_type === 'copy_code') {
-                        components.push({
-                            type: "button",
-                            sub_type: "copy_code",
-                            index: String(btn.index ?? 0),
-                            parameters: [{ type: "coupon_code", coupon_code: btn.coupon_code }]
-                        });
-                    }
-                });
-            }
-            payload.type = "template";
-            payload.template = {
-                name: template,
-                language: { code: templateLanguage || "en" },
-                components
-            };
         } else if (productRetailerId) {
-            payload.type = "interactive";
-            payload.interactive = {
-                type: "product",
-                body: {
-                    text: textMsg || `استكشف منتجاتنا المميزة من ${CONFIG.business_name}!`
-                },
-                footer: {
-                    text: `متجر ${CONFIG.business_name}`
-                },
-                action: {
-                    catalog_id: catalogId || CONFIG.catalog_id,
-                    product_retailer_id: productRetailerId
-                }
-            };
-        } else if (mediaId) {
-            payload.type = finalType;
-            payload[finalType] = { id: mediaId };
-            if (finalType === 'document' && fileName) payload[finalType].filename = fileName;
-            if (textMsg && finalType !== 'audio') {
-                payload[finalType].caption = textMsg;
-            }
-        } else if (textMsg) {
-            payload.type = "text";
-            payload.text = { body: textMsg };
-        } else {
-            return res.status(400).json({ error: "No template, imageBase64, product or text provided" });
-        }
-        const response = await axios.post(url, payload, {
-            headers: { 'Authorization': `Bearer ${CONFIG.access_token}` }
-        });
+            const shopUrl = CONFIG.shopify_url
+                ? `https://${CONFIG.shopify_url}/products/${productRetailerId}`
+                : productRetailerId;
+            const txt = `${textMsg || 'تفضل/ي رابط المنتج:'}\n${shopUrl}`;
+            finalMsgText = txt;
+            msgObj = { messageType: 'text', text: txt };
 
-        if (template && actionType) {
-            // حفظ الحالة محلياً للطلبات
+        } else if (textMsg) {
+            finalMsgText = textMsg;
+            msgObj = { messageType: 'text', text: textMsg };
+
+        } else {
+            return res.status(400).json({ error: 'No message content provided' });
+        }
+
+        const response = await sendViaWasender(cleanPhone, msgObj);
+
+        // تحديث حالة الطلب
+        if (actionType) {
             let localOrders = loadJSON(DB_FILE);
             if (Array.isArray(localOrders)) localOrders = {};
-            
-            // تحديد الحالة بناءً على نوع الإجراء
             let status = 'pending';
             if (actionType === 'followup') status = 'followed_up';
-            if (actionType === 'confirm') status = 'confirmed';
+            if (actionType === 'confirm')  status = 'confirmed';
             if (actionType === 'shipping') status = 'shipped';
-            if (actionType === 'cancel') status = 'cancelled';
-
-            const cleanPhone = normalizePhone(phone);
+            if (actionType === 'cancel')   status = 'cancelled';
             const dbKey = orderId || cleanPhone;
-
             localOrders[dbKey] = {
-                phone: cleanPhone,
-                status: status,
+                phone: cleanPhone, status,
                 time: new Date().toISOString(),
-                name: orderName || findLocalOrder(localOrders, cleanPhone, orderId)?.name || "عميل شوبيفاي",
+                name: orderName || findLocalOrder(localOrders, cleanPhone, orderId)?.name || 'عميل',
                 id: orderId || null
             };
             saveJSON(DB_FILE, localOrders);
-
             if (status === 'confirmed') {
                 let loyalty = loadJSON(LOYALTY_FILE);
                 if (!Array.isArray(loyalty)) loyalty = [];
@@ -1320,40 +1256,35 @@ app.post('/api/whatsapp/send', async (req, res) => {
                 if (!lEntry) { lEntry = { phone: cleanPhone, points: 0, history: [] }; loyalty.push(lEntry); }
                 const pts = CONFIG.loyalty_points || 10;
                 lEntry.points = (lEntry.points || 0) + pts;
-                lEntry.history = lEntry.history || [];
                 lEntry.history.push({ points: pts, reason: 'Order confirmed', time: new Date().toISOString() });
                 saveJSON(LOYALTY_FILE, loyalty);
             }
-
             if (status !== 'pending') {
                 triggerAutomation('order_status_changed', status, cleanPhone, orderName || localOrders[cleanPhone]?.name || 'عميل');
                 fireWebhook('order_status_changed', { phone: cleanPhone, status, name: orderName });
             }
         }
 
-        // تسجيل الرسالة المرسلة في أرشيف المحادثات
+        // تسجيل الرسالة في صندوق الوارد
         let inbox = loadJSON(INBOX_FILE);
         if (!Array.isArray(inbox)) inbox = [];
         let existing = inbox.find(c => c.phone === cleanPhone);
-        
         const sentMsgObj = {
-            text: template ? `[قالب: ${template}]` : (productRetailerId ? `[منتج تفاعلي: ${productRetailerId}] ${textMsg || ''}` : (textMsg || `[ملف مرفق: ${finalType}]`)),
-
-            from: "agent",
+            text: template ? `[قالب: ${template}]: ${finalMsgText}` : finalMsgText,
+            from: 'agent',
             time: new Date().toLocaleString('ar-EG'),
             status: 'sent',
-            wamid: response.data?.messages?.[0]?.id || null
+            wamid: response.data?.messageId || response.data?.id || null
         };
-
         if (imageBase64) {
-            const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
-            const buffer = Buffer.from(matches[2], 'base64');
-            const fileName = `out_${Date.now()}.jpg`;
-            const filePath = path.join(MEDIA_DIR, fileName);
-            fs.writeFileSync(filePath, buffer);
-            sentMsgObj.image = `/media/${fileName}`;
+            const m = imageBase64.match(/^data:(.+);base64,(.+)$/);
+            if (m) {
+                const buf = Buffer.from(m[2], 'base64');
+                const img = `out_${Date.now()}.jpg`;
+                fs.writeFileSync(path.join(MEDIA_DIR, img), buf);
+                sentMsgObj.image = `/media/${img}`;
+            }
         }
-
         if (existing) {
             existing.messages = existing.messages || [];
             existing.messages.push(sentMsgObj);
@@ -1361,19 +1292,13 @@ app.post('/api/whatsapp/send', async (req, res) => {
             inbox = inbox.filter(c => c.phone !== cleanPhone);
             inbox.unshift(existing);
         } else {
-            inbox.unshift({
-                phone: cleanPhone,
-                name: "عميل", // اسم افتراضي لحين رده
-                messages: [sentMsgObj],
-                lastUpdated: new Date().toLocaleString('ar-EG')
-            });
+            inbox.unshift({ phone: cleanPhone, name: 'عميل', messages: [sentMsgObj], lastUpdated: new Date().toLocaleString('ar-EG') });
         }
         saveJSON(INBOX_FILE, inbox.slice(0, 100));
 
-        res.json(response.data);
+        res.json({ success: true, data: response.data });
     } catch (error) {
-        const errData = error.response?.data;
-        const errMsg = errData?.error?.message || errData?.error || error.message;
+        const errMsg = error.response?.data?.message || error.response?.data?.error || error.message;
         res.status(500).json({ error: typeof errMsg === 'object' ? JSON.stringify(errMsg) : errMsg });
     }
 });
@@ -1382,246 +1307,141 @@ app.post('/api/whatsapp/send', async (req, res) => {
 //  الويب هوك (Webhook)
 // ─────────────────────────────────────────────
 
-// تمييز الرسالة كمقروءة في واتساب
-app.post('/api/whatsapp/read', async (req, res) => {
-    const { wamid } = req.body;
-    if (!wamid) return res.status(400).json({ error: "wamid is required" });
+// WasenderAPI يمرر إيصال القراءة تلقائياً — لا نحتاج لإجراء
+app.post('/api/whatsapp/read', (_req, res) => res.json({ success: true }));
 
-    try {
-        const url = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
-        await axios.post(url, {
-            messaging_product: "whatsapp",
-            status: "read",
-            message_id: wamid
-        }, {
-            headers: { 'Authorization': `Bearer ${CONFIG.access_token}` }
-        });
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+// ─────────────────────────────────────────────
+//  WasenderAPI Webhook
+// ─────────────────────────────────────────────
+const crypto = require('crypto');
 
-app.get('/webhook', async (req, res) => {
-    const mode      = req.query['hub.mode'];
-    const token     = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+app.post('/webhook/wasender', (req, res) => {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
 
-    // Load verify_token from SystemConfig if CONFIG is empty (e.g. after Railway redeploy)
-    if (!CONFIG.verify_token) {
+    // التحقق من التوقيع إن وُجد سر
+    if (CONFIG.wasender_webhook_secret) {
+        const signature = req.get('X-Wasender-Signature') || req.get('X-Hub-Signature-256') || '';
+        const expected  = `sha256=${crypto.createHmac('sha256', CONFIG.wasender_webhook_secret).update(rawBody).digest('hex')}`;
         try {
-            const SystemConfig = require('./models/SystemConfig');
-            const sc = await SystemConfig.findById('main').lean();
-            if (sc?.verify_token) CONFIG.verify_token = sc.verify_token;
-        } catch (_) {}
+            if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)))
+                return res.status(401).send('Invalid signature');
+        } catch { return res.status(401).send('Invalid signature'); }
     }
 
-    if (mode === 'subscribe' && token && token === CONFIG.verify_token) {
-        console.log('[Webhook] ✅ Verified by Meta');
-        res.status(200).send(challenge);
-    } else {
-        console.warn(`[Webhook] ❌ Verification failed — received token: "${token}", expected: "${CONFIG.verify_token || '(empty)'}"`);
-        res.sendStatus(403);
-    }
-});
+    let data;
+    try { data = JSON.parse(rawBody.toString('utf8')); }
+    catch { return res.sendStatus(200); }
 
-app.post('/webhook', (req, res) => {
-    const data = req.body;
-    if (data.object === 'whatsapp_business_account') {
-        data.entry.forEach(entry => {
-            entry.changes.forEach(change => {
-                const value = change.value;
-                if (value.statuses) {
-                    value.statuses.forEach(statusUpdate => {
-                        const wamid = statusUpdate.id;
-                        const newStatus = statusUpdate.status; // 'sent' | 'delivered' | 'read'
-                        if (!wamid || !newStatus) return;
+    const event = data.event || '';
+    console.log(`[WasenderWebhook] event: ${event}`);
 
-                        let inbox = loadJSON(INBOX_FILE);
-                        if (!Array.isArray(inbox)) return;
-
-                        let changed = false;
-                        for (const chat of inbox) {
-                            if (!chat.messages) continue;
-                            for (const m of chat.messages) {
-                                if (m.wamid === wamid) {
-                                    const rank = { sent: 1, delivered: 2, read: 3 };
-                                    if ((rank[newStatus] || 0) > (rank[m.status] || 0)) {
-                                        m.status = newStatus === 'read' ? 'seen' : newStatus;
-                                        changed = true;
-                                    }
-                                }
-                            }
+    if (event === 'messages.upsert') {
+        handleWasenderMessage(data.data).catch(e =>
+            console.error('[WasenderWebhook] handler error:', e.message)
+        );
+    } else if (event === 'messages.update') {
+        // تحديث حالة رسالة مرسلة (delivered / read)
+        const updates = Array.isArray(data.data) ? data.data : [data.data];
+        updates.forEach(upd => {
+            const wamid     = upd?.key?.id;
+            const newStatus = upd?.update?.status;
+            if (!wamid || !newStatus) return;
+            let inbox = loadJSON(INBOX_FILE);
+            if (!Array.isArray(inbox)) return;
+            let changed = false;
+            for (const chat of inbox) {
+                for (const m of (chat.messages || [])) {
+                    if (m.wamid === wamid) {
+                        const rank = { sent: 1, delivered: 2, read: 3 };
+                        if ((rank[newStatus] || 0) > (rank[m.status] || 0)) {
+                            m.status = newStatus === 'read' ? 'seen' : newStatus;
+                            changed = true;
                         }
-                        if (changed) saveJSON(INBOX_FILE, inbox);
-                    });
+                    }
                 }
-
-                if (value.messages) {
-                    value.messages.forEach(async msg => {
-                        const phone = msg.from;
-                        const name = value.contacts?.[0]?.profile?.name || phone;
-
-                        // ── Extract text by type ──────────────────────────────
-                        let text = "";
-                        if (msg.type === "text") {
-                            text = msg.text?.body || "";
-                        } else if (msg.type === "button") {
-                            text = msg.button?.text || msg.button?.payload || "";
-                        } else if (msg.type === "interactive") {
-                            const interact = msg.interactive;
-                            if (interact?.type === "button_reply")
-                                text = interact.button_reply?.title || interact.button_reply?.id || "";
-                            else if (interact?.type === "list_reply")
-                                text = interact.list_reply?.title || interact.list_reply?.id || "";
-                        } else if (msg.type === "location") {
-                            text = `📍 ${msg.location?.name || ''} ${msg.location?.address || ''}`.trim() || "📍 موقع";
-                        } else if (msg.type === "reaction") {
-                            text = msg.reaction?.emoji || "👍";
-                        } else if (msg.type === "contacts") {
-                            const c = msg.contacts?.[0];
-                            text = `👤 ${c?.name?.formatted_name || ''} ${c?.phones?.[0]?.phone || ''}`.trim() || "👤 جهة اتصال";
-                        } else if (msg.type === "sticker") {
-                            text = "🎭 ملصق";
-                        } else if (msg.type === "image") {
-                            text = msg.image?.caption || "📷 صورة";
-                        } else if (msg.type === "video") {
-                            text = msg.video?.caption || "🎬 فيديو";
-                        } else if (msg.type === "document") {
-                            text = msg.document?.filename || "📄 مستند";
-                        } else if (msg.type === "audio") {
-                            text = "🎤 مقطع صوتي";
-                        } else if (msg.type === "system") {
-                            text = msg.system?.body || "🔔 رسالة نظام";
-                        } else if (msg.type === "request_welcome") {
-                            text = "👋 بدأ محادثة جديدة";
-                        } else if (msg.type === "order") {
-                            const items = msg.order?.product_items?.map(p => `${p.quantity}x ${p.product_retailer_id}`).join(', ') || '';
-                            text = `🛒 طلب: ${items}`;
-                        } else if (msg.type === "referral") {
-                            text = `🔗 جاء عبر: ${msg.referral?.source_url || msg.referral?.headline || 'رابط'}`;
-                        } else if (msg.type === "unsupported") {
-                            const errCode = msg.errors?.[0]?.code;
-                            const errTitle = msg.errors?.[0]?.title || '';
-                            if (errCode === 131051 || errTitle.toLowerCase().includes('poll'))
-                                text = "📊 أرسل استطلاعاً (غير مدعوم في API)";
-                            else if (errTitle.toLowerCase().includes('call') || errCode === 131052)
-                                text = "📞 مكالمة واتساب فائتة";
-                            else if (errTitle.toLowerCase().includes('view once') || errCode === 131053)
-                                text = "🔒 صورة/فيديو للمشاهدة مرة واحدة";
-                            else
-                                text = `⚠️ رسالة غير مدعومة${errTitle ? ': ' + errTitle : ''}`;
-                        } else if (!text) {
-                            console.warn(`[Webhook] Unknown msg.type: "${msg.type}" — raw:`, JSON.stringify(msg).slice(0, 300));
-                            text = `📨 رسالة (${msg.type})`;
-                        }
-
-                        console.log(`[Webhook] Incoming type: ${msg.type}, From: ${phone}`);
-
-                        // ── Download media (image, video, audio, document, sticker) ──
-                        const mediaTypes = ["image", "document", "video", "audio", "sticker"];
-                        const mediaType = mediaTypes.find(t => msg[t]?.id);
-                        const mediaObj  = mediaType ? msg[mediaType] : null;
-                        let savedUrl = null;
-
-                        if (mediaObj) {
-                            try {
-                                const mediaRes = await axios.get(
-                                    `https://graph.facebook.com/${CONFIG.api_version}/${mediaObj.id}`,
-                                    { headers: { Authorization: `Bearer ${CONFIG.access_token}` } }
-                                );
-                                const dlRes = await axios.get(mediaRes.data.url, {
-                                    headers: { Authorization: `Bearer ${CONFIG.access_token}` },
-                                    responseType: 'arraybuffer'
-                                });
-                                const extMap = { image:'jpg', video:'mp4', audio:'ogg', document:'', sticker:'webp' };
-                                const ext = mediaType === 'document'
-                                    ? (mediaObj.filename?.split('.').pop() || 'pdf')
-                                    : extMap[mediaType];
-                                const fileName = `${mediaObj.id}.${ext}`;
-                                fs.writeFileSync(path.join(MEDIA_DIR, fileName), dlRes.data);
-                                savedUrl = `/media/${fileName}`;
-                                console.log(`[Webhook] Saved ${mediaType}: ${fileName}`);
-                            } catch (e) {
-                                console.error(`[Webhook] Failed to download ${mediaType}:`, e.message);
-                            }
-                        }
-
-                        // ── Build message object ──────────────────────────────
-                        let inbox = loadJSON(INBOX_FILE);
-                        if (!Array.isArray(inbox)) inbox = [];
-
-                        let existing = inbox.find(c => c.phone === phone);
-                        const incomingMsgObj = {
-                            msgType: msg.type,
-                            text,
-                            from: "customer",
-                            time: new Date().toLocaleString('ar-EG'),
-                            wamid: msg.id,
-                        };
-                        if (savedUrl) {
-                            if (msg.type === 'audio' || msg.type === 'voice') incomingMsgObj.audio = savedUrl;
-                            else if (msg.type === 'video')   incomingMsgObj.video   = savedUrl;
-                            else if (msg.type === 'sticker') incomingMsgObj.sticker = savedUrl;
-                            else                             incomingMsgObj.image   = savedUrl;
-                        }
-                        if (msg.type === 'location') {
-                            incomingMsgObj.location = {
-                                lat: msg.location?.latitude,
-                                lng: msg.location?.longitude,
-                                name: msg.location?.name || '',
-                                address: msg.location?.address || '',
-                            };
-                        }
-
-                        if (existing) {
-                            existing.messages = existing.messages || [];
-                            existing.messages.push(incomingMsgObj);
-                            existing.lastUpdated = new Date().toLocaleString('ar-EG');
-                            existing.name = name;
-                            inbox = inbox.filter(c => c.phone !== phone);
-                            inbox.unshift(existing);
-                        } else {
-                            inbox.unshift({
-                                phone, 
-                                name, 
-                                messages: [incomingMsgObj],
-                                lastUpdated: new Date().toLocaleString('ar-EG')
-                            });
-                        }
-                        
-                        saveJSON(INBOX_FILE, inbox.slice(0, 100));
-                        console.log(`[Webhook] Message from ${name}: ${text}`);
-                        if (text.trim()) {
-                            triggerAutomation('new_message', text, phone, name);
-                            triggerAutomation('keyword_received', text, phone, name);
-                        }
-
-                        // تحديث الحالة فقط عند وجود كلمة صريحة ومعزولة (تجنب التطابق الجزئي مثل "لا" في "لا بأس")
-                        const words = text.trim().split(/[\s,،.!؟?\r\n]+/).map(w => w.toLowerCase()).filter(Boolean);
-                        const isConfirm = words.some(w => ['تأكيد','موافق','نعم','اوك','اوكي','confirm','yes','approved','accepted','ok','okay'].includes(w));
-                        const isCancel = words.some(w => ['إلغاء','الغاء','ألغي','إلغي','ألغاء','رفض','مرفوض','cancel','cancelled','canceled','reject','rejected'].includes(w));
-
-                        if (isConfirm) {
-                            console.log(`[Webhook] Action detected: CONFIRM for ${phone}`);
-                            handleWebhookAction(phone, name, 'confirmed');
-                        } else if (isCancel) {
-                            console.log(`[Webhook] Action detected: CANCEL for ${phone}`);
-                            handleWebhookAction(phone, name, 'cancelled');
-                        } else if (hasAI() && text.trim()) {
-                            handleAIAutoReply(phone, name, text);
-                        }
-
-
-                    });
-                }
-            });
+            }
+            if (changed) saveJSON(INBOX_FILE, inbox);
         });
-        res.sendStatus(200);
-    } else {
-        res.sendStatus(404);
+    } else if (event === 'session.status') {
+        console.log('[WasenderWebhook] Session status:', data.data?.status);
     }
+
+    res.sendStatus(200);
 });
+
+const handleWasenderMessage = async (msgData) => {
+    if (!msgData) return;
+    if (msgData.key?.fromMe) return;          // رسائل صادرة — تجاهل
+
+    const remoteJid = msgData.key?.remoteJid || '';
+    if (remoteJid.includes('@g.us')) return;  // مجموعات — تجاهل
+
+    const phone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    if (!phone) return;
+
+    const name = msgData.pushName || phone;
+    const msg  = msgData.message || {};
+
+    let text = '', msgType = 'text';
+
+    if (msg.conversation)                        { text = msg.conversation; }
+    else if (msg.extendedTextMessage?.text)      { text = msg.extendedTextMessage.text; }
+    else if (msg.imageMessage)                   { text = msg.imageMessage.caption || '📷 صورة'; msgType = 'image'; }
+    else if (msg.videoMessage)                   { text = msg.videoMessage.caption || '🎬 فيديو'; msgType = 'video'; }
+    else if (msg.audioMessage || msg.pttMessage) { text = '🎤 مقطع صوتي'; msgType = 'audio'; }
+    else if (msg.documentMessage)                { text = msg.documentMessage.fileName || '📄 مستند'; msgType = 'document'; }
+    else if (msg.locationMessage) {
+        text = `📍 ${msg.locationMessage.name || ''} (${msg.locationMessage.degreesLatitude}, ${msg.locationMessage.degreesLongitude})`.trim();
+        msgType = 'location';
+    }
+    else if (msg.contactMessage)  { text = `👤 ${msg.contactMessage.displayName || ''}`; msgType = 'contact'; }
+    else if (msg.stickerMessage)  { text = '🎭 ملصق'; msgType = 'sticker'; }
+    else if (msg.reactionMessage) { text = msg.reactionMessage.text || '👍'; msgType = 'reaction'; }
+    else { text = '📨 رسالة'; msgType = 'unknown'; }
+
+    console.log(`[WasenderWebhook] ${msgType} from ${name} (${phone}): ${text.slice(0, 80)}`);
+
+    let inbox = loadJSON(INBOX_FILE);
+    if (!Array.isArray(inbox)) inbox = [];
+    let existing = inbox.find(c => c.phone === phone);
+    const incomingMsgObj = {
+        msgType, text, from: 'customer',
+        time: new Date().toLocaleString('ar-EG'),
+        wamid: msgData.key?.id || null,
+    };
+    if (msgType === 'location') {
+        incomingMsgObj.location = {
+            lat: msg.locationMessage?.degreesLatitude,
+            lng: msg.locationMessage?.degreesLongitude,
+            name: msg.locationMessage?.name || '',
+            address: msg.locationMessage?.address || '',
+        };
+    }
+    if (existing) {
+        existing.messages = existing.messages || [];
+        existing.messages.push(incomingMsgObj);
+        existing.lastUpdated = new Date().toLocaleString('ar-EG');
+        existing.name = name;
+        inbox = inbox.filter(c => c.phone !== phone);
+        inbox.unshift(existing);
+    } else {
+        inbox.unshift({ phone, name, messages: [incomingMsgObj], lastUpdated: new Date().toLocaleString('ar-EG') });
+    }
+    saveJSON(INBOX_FILE, inbox.slice(0, 100));
+
+    if (text.trim()) {
+        triggerAutomation('new_message', text, phone, name);
+        triggerAutomation('keyword_received', text, phone, name);
+    }
+
+    const words = text.trim().split(/[\s,،.!؟?\r\n]+/).map(w => w.toLowerCase()).filter(Boolean);
+    const isConfirm = words.some(w => ['تأكيد','موافق','نعم','اوك','اوكي','confirm','yes','approved','accepted','ok','okay'].includes(w));
+    const isCancel  = words.some(w => ['إلغاء','الغاء','ألغي','إلغي','ألغاء','رفض','مرفوض','cancel','cancelled','canceled','reject','rejected'].includes(w));
+
+    if (isConfirm)               { handleWebhookAction(phone, name, 'confirmed'); }
+    else if (isCancel)           { handleWebhookAction(phone, name, 'cancelled'); }
+    else if (hasAI() && text.trim()) { handleAIAutoReply(phone, name, text); }
+};
 
 
 const handleWebhookAction = async (phone, name, status) => {
@@ -1723,15 +1543,7 @@ ${history}
         const replyText = await callAI(prompt);
 
         if (replyText) {
-            const url = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
-            await axios.post(url, {
-                messaging_product: "whatsapp",
-                to: cleanPhone,
-                type: "text",
-                text: { body: replyText }
-            }, {
-                headers: { 'Authorization': `Bearer ${CONFIG.access_token}` }
-            });
+            await sendViaWasender(cleanPhone, { messageType: 'text', text: replyText });
 
             let inbox = loadJSON(INBOX_FILE);
             let existing = inbox.find(c => c.phone === cleanPhone);
