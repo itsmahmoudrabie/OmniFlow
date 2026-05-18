@@ -2829,10 +2829,15 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
     const filteredCustomers = customers.filter(c => {
         if (selectedTag === 'all') return true;
         if (selectedTag === 'vip') return c.tag?.includes('VIP');
-        if (selectedTag === 'buyer') return c.tag?.includes('مشتري فعلي');
+        if (selectedTag === 'buyer') return c.tag?.includes('مشتري');
         if (selectedTag === 'chat') return c.tag?.includes('محادثة');
         return true;
     });
+
+    // تحديث الأرقام المختارة تلقائياً عند تغيير الفلتر
+    useEffect(() => {
+        setSelectedPhones(new Set(filteredCustomers.map(c => c.phone)));
+    }, [selectedTag, customers]);
 
     const toggleCustomer = (phone) => {
         const newSet = new Set(selectedPhones);
@@ -2941,7 +2946,7 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                 <div>
                     <h2 className="text-2xl font-black text-brand-egg">{isEn ? 'Broadcasts' : 'الحملات'}</h2>
                     <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5">
-                        {liveCamps.length} {isEn ? 'ACTIVE · OFFICIAL META CLOUD API' : 'نشطة · واجهة Meta Cloud الرسمية'}
+                        {liveCamps.length} {isEn ? 'ACTIVE · WASENDER API' : 'نشطة · WasenderAPI'}
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -3134,6 +3139,169 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                     </>)}
                 </div>
             </div>
+
+            {/* ── Campaign Creation Modal ─────────────────────────────────────── */}
+            {showScheduler && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                     onClick={() => !sending && setShowScheduler(false)}>
+                    <div className={`w-[520px] max-h-[90vh] bg-brand-sidebar rounded-3xl border border-brand-border/20 shadow-2xl flex flex-col overflow-hidden ${isEn ? 'text-left' : 'text-right'}`}
+                         onClick={e => e.stopPropagation()}>
+
+                        {/* Header */}
+                        <div className={`flex items-center justify-between px-6 py-4 border-b border-brand-border/20 ${isEn ? '' : 'flex-row-reverse'}`}>
+                            <span className="text-lg font-black text-brand-egg">{isEn ? '📣 New Broadcast' : '📣 حملة جديدة'}</span>
+                            {!sending && (
+                                <button onClick={() => setShowScheduler(false)} className="text-brand-muted hover:text-brand-egg transition-colors">
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-5">
+
+                            {/* Campaign name */}
+                            <div>
+                                <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'CAMPAIGN NAME' : 'اسم الحملة'}</label>
+                                <input value={scheduleName} onChange={e => setScheduleName(e.target.value)}
+                                    placeholder={isEn ? 'e.g. Eid Sale 2026' : 'مثال: عرض العيد 2026'}
+                                    className="mt-1.5 w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent transition-colors" />
+                            </div>
+
+                            {/* Message type toggle */}
+                            <div>
+                                <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'MESSAGE TYPE' : 'نوع الرسالة'}</label>
+                                <div className="flex gap-2 mt-1.5">
+                                    {[
+                                        { k: 'template', label: isEn ? '📋 Template' : '📋 قالب' },
+                                        { k: 'text',     label: isEn ? '✏️ Custom Text' : '✏️ نص حر' },
+                                    ].map(t => (
+                                        <button key={t.k} onClick={() => setCampaignType(t.k)}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${campaignType === t.k ? 'bg-brand-accent text-brand-bg border-brand-accent' : 'glass-subtle text-brand-muted border-brand-border/30 hover:text-brand-egg'}`}>
+                                            {t.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Template selector */}
+                            {campaignType === 'template' && (
+                                <div>
+                                    <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'SELECT TEMPLATE' : 'اختر القالب'}</label>
+                                    <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}
+                                        className="mt-1.5 w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent">
+                                        <option value="">{isEn ? '— Select a template —' : '— اختر قالب —'}</option>
+                                        {Object.entries(templates).map(([id, t]) => (
+                                            <option key={id} value={id}>{t.name || id}</option>
+                                        ))}
+                                    </select>
+                                    {selectedTemplate && templates[selectedTemplate] && (
+                                        <div className="mt-2 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/15 text-[12px] text-brand-egg leading-relaxed whitespace-pre-line">
+                                            {templates[selectedTemplate].body || templates[selectedTemplate].content || ''}
+                                        </div>
+                                    )}
+                                    {templates[selectedTemplate]?.has_header_image && (
+                                        <input value={templateImageUrl} onChange={e => setTemplateImageUrl(e.target.value)}
+                                            placeholder={isEn ? 'Header image URL...' : 'رابط صورة الهيدر...'}
+                                            className="mt-2 w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent" />
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Custom text */}
+                            {campaignType === 'text' && (
+                                <div>
+                                    <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'MESSAGE' : 'الرسالة'}</label>
+                                    <p className="text-[10px] text-brand-muted mt-0.5 mb-1.5">{isEn ? 'Use [Name] to personalize with the customer\'s name' : 'استخدم [Name] لوضع اسم العميل تلقائياً'}</p>
+                                    <textarea value={messageText} onChange={e => setMessageText(e.target.value)} rows={4}
+                                        placeholder={isEn ? 'Hi [Name], check out our latest offer! 🎉' : 'أهلاً [Name]، تفضل أحدث عروضنا! 🎉'}
+                                        className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent resize-none transition-colors" />
+                                </div>
+                            )}
+
+                            {/* Audience */}
+                            <div>
+                                <div className={`flex items-center justify-between mb-1.5 ${isEn ? '' : 'flex-row-reverse'}`}>
+                                    <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'AUDIENCE' : 'الجمهور'}</label>
+                                    <span className="text-[12px] font-black text-brand-accent">
+                                        {loading ? '...' : `${selectedPhones.size} ${isEn ? 'recipients' : 'مستلم'}`}
+                                    </span>
+                                </div>
+                                <div className={`flex gap-1.5 flex-wrap ${isEn ? '' : 'flex-row-reverse'}`}>
+                                    {[
+                                        { k: 'all',   label: isEn ? 'All Customers' : 'كل العملاء' },
+                                        { k: 'buyer', label: isEn ? '🛍️ Buyers' : '🛍️ مشترين' },
+                                        { k: 'vip',   label: 'VIP 👑' },
+                                        { k: 'chat',  label: isEn ? '💬 WhatsApp' : '💬 واتساب' },
+                                    ].map(f => (
+                                        <button key={f.k} onClick={() => setSelectedTag(f.k)}
+                                            className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all ${selectedTag === f.k ? 'bg-brand-accent text-brand-bg border-brand-accent' : 'glass-subtle text-brand-muted border-brand-border/30 hover:text-brand-egg'}`}>
+                                            {f.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {!loading && (
+                                    <p className="text-[10px] text-brand-muted mt-1.5">
+                                        {isEn ? `${customers.length} total customers from Shopify` : `${customers.length} عميل إجمالي من شوبيفاي`}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Schedule (optional) */}
+                            <div>
+                                <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'SCHEDULE (OPTIONAL)' : 'الجدولة (اختياري)'}</label>
+                                <p className="text-[10px] text-brand-muted mt-0.5 mb-1.5">{isEn ? 'Leave empty to send immediately' : 'اتركه فارغاً للإرسال الآن فوراً'}</p>
+                                <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
+                                    className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent" />
+                            </div>
+
+                            {/* Progress bar while sending */}
+                            {sending && progress && (
+                                <div>
+                                    <div className={`flex items-center justify-between mb-1.5 text-[11px] font-bold ${isEn ? '' : 'flex-row-reverse'}`}>
+                                        <span className="text-brand-muted">{isEn ? 'Sending...' : 'جاري الإرسال...'}</span>
+                                        <span className="text-brand-accent">{progress.current} / {progress.total}</span>
+                                    </div>
+                                    <div className="h-2 rounded-full bg-brand-accent/10 overflow-hidden">
+                                        <div className="h-full bg-brand-accent rounded-full transition-all duration-300"
+                                             style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className={`px-6 py-4 border-t border-brand-border/20 flex gap-3 ${isEn ? '' : 'flex-row-reverse'}`}>
+                            <button onClick={() => setShowScheduler(false)} disabled={sending}
+                                className="flex-1 py-2.5 rounded-xl border border-brand-border/30 text-sm font-bold text-brand-muted hover:text-brand-egg hover:border-brand-accent/20 transition-all disabled:opacity-40">
+                                {isEn ? 'Cancel' : 'إلغاء'}
+                            </button>
+                            {scheduleDate ? (
+                                <button onClick={async () => { await handleSchedule(); setShowScheduler(false); }}
+                                    disabled={scheduling}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                                    style={{background:'#FF6400'}}>
+                                    <Calendar size={14} />
+                                    {scheduling ? '...' : (isEn ? 'Schedule' : 'جدولة')}
+                                </button>
+                            ) : (
+                                <button onClick={async () => {
+                                        await startCampaign();
+                                        setShowScheduler(false);
+                                    }}
+                                    disabled={sending}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                                    style={{background:'#FF6400'}}>
+                                    <Zap size={14} />
+                                    {sending
+                                        ? `${isEn?'Sending':'إرسال'} ${progress?.current||0}/${progress?.total||0}`
+                                        : (isEn ? 'Send Now' : 'إرسال الآن')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
