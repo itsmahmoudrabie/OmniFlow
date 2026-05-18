@@ -487,29 +487,22 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
     const shopifyToken = CONFIG.shopify_access_token || shopifyCfg.shopify_access_token || sc.shopify_access_token || '';
 
-    const wasenderSessionId  = CONFIG.wasender_session_id     || sc.wasender_session_id     || '';
-    const wasenderSessionKey = CONFIG.wasender_session_key    || sc.wasender_session_key    || '';
-    const wasenderSecret     = CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret || '';
-
     res.json({
-        business_name:           CONFIG.business_name || sc.business_name || '',
-        shopify_url:             CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
-        catalog_id:              CONFIG.catalog_id  || sc.catalog_id  || '',
-        server_url:              CONFIG.server_url  || sc.server_url  || '',
-        gemini_api_key:          (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
-        groq_api_key:            (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
-        groq_model:              CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
-        shopify_access_token:    shopifyToken ? mask(shopifyToken) : '',
-        woo_url:                 CONFIG.woo_url      || sc.woo_url      || '',
-        woo_consumer_key:        (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
-        woo_consumer_secret:     (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
-        webhook_url:             CONFIG.webhook_url  || sc.webhook_url  || '',
-        loyalty_points:          CONFIG.loyalty_points || sc.loyalty_points || 10,
-        // WasenderAPI
-        wasender_session_id:     wasenderSessionId,
-        wasender_session_key:    wasenderSessionKey    ? mask(wasenderSessionKey)    : '',
-        wasender_webhook_secret: wasenderSecret        ? mask(wasenderSecret)        : '',
-        is_configured:           !!(wasenderSessionId && wasenderSessionKey),
+        business_name:        CONFIG.business_name || sc.business_name || '',
+        shopify_url:          CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
+        catalog_id:           CONFIG.catalog_id  || sc.catalog_id  || '',
+        server_url:           CONFIG.server_url  || sc.server_url  || '',
+        gemini_api_key:       (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
+        groq_api_key:         (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
+        groq_model:           CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
+        shopify_access_token: shopifyToken ? mask(shopifyToken) : '',
+        woo_url:              CONFIG.woo_url     || sc.woo_url     || '',
+        woo_consumer_key:     (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
+        woo_consumer_secret:  (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
+        webhook_url:          CONFIG.webhook_url  || sc.webhook_url  || '',
+        loyalty_points:       CONFIG.loyalty_points || sc.loyalty_points || 10,
+        // WasenderAPI credentials are server-only (env vars) — expose only a boolean
+        wa_configured:        !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
     });
 });
 
@@ -529,9 +522,6 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
         WOO_CONSUMER_SECRET:     'woo_consumer_secret',
         WEBHOOK_URL:             'webhook_url',
         LOYALTY_POINTS:          'loyalty_points',
-        WASENDER_SESSION_ID:     'wasender_session_id',
-        WASENDER_SESSION_KEY:    'wasender_session_key',
-        WASENDER_WEBHOOK_SECRET: 'wasender_webhook_secret',
     };
 
     const envPath = path.join(__dirname, '.env');
@@ -559,7 +549,7 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
         const scFields = [
             'business_name','catalog_id','server_url','groq_api_key','gemini_api_key',
             'groq_model','woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
-            'loyalty_points','wasender_session_id','wasender_session_key','wasender_webhook_secret',
+            'loyalty_points',
         ];
         for (const key of scFields) {
             const v = req.body[key];
