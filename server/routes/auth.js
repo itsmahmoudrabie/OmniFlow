@@ -58,6 +58,65 @@ router.post('/login', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Login failed' }); }
 });
 
+// POST /api/auth/auto-reconnect — silently re-issue JWT using stored shpat_ token
+router.post('/auto-reconnect', async (req, res) => {
+    if (!Tenant) return res.status(503).json({ error: 'Database not available' });
+
+    let { shop } = req.body || {};
+    if (!shop || typeof shop !== 'string')
+        return res.status(400).json({ error: 'shop is required' });
+
+    shop = shop.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+    if (!shop.includes('.myshopify.com'))
+        return res.status(400).json({ error: 'Invalid shop domain' });
+
+    try {
+        const tenant = await Tenant.findOne({
+            $or: [
+                { 'config.shopify_url': `https://${shop}` },
+                { 'config.shopify_url': shop },
+            ]
+        });
+
+        if (!tenant)
+            return res.status(401).json({ error: 'reconnect_failed', reason: 'shop_not_found' });
+
+        const storedToken = tenant.config?.shopify_access_token || '';
+        if (!storedToken || !storedToken.startsWith('shpat_'))
+            return res.status(401).json({ error: 'reconnect_failed', reason: 'no_shpat_token' });
+
+        // Validate token is still accepted by Shopify
+        const axiosLib = require('axios');
+        try {
+            await axiosLib.get(`https://${shop}/admin/api/2024-01/shop.json`, {
+                headers: { 'X-Shopify-Access-Token': storedToken },
+                timeout: 8000,
+            });
+        } catch (shopifyErr) {
+            const status = shopifyErr.response?.status;
+            if (status === 401 || status === 403)
+                return res.status(401).json({ error: 'reconnect_failed', reason: 'token_invalid' });
+            // Network blips are non-fatal — still issue JWT
+            console.warn(`[auto-reconnect] Shopify check non-fatal (${status}):`, shopifyErr.message);
+        }
+
+        const token = signToken(tenant._id);
+        const tenantData = {
+            id: tenant._id, name: tenant.name, email: tenant.email,
+            plan: tenant.plan, status: tenant.status, trialEnds: tenant.trialEnds,
+            limits: tenant.limits, config: tenant.config,
+            shopifyChargeId: tenant.shopifyChargeId,
+            shopifyChargeStatus: tenant.shopifyChargeStatus,
+        };
+        console.log(`[auto-reconnect] Issued fresh JWT for ${shop} / tenant ${tenant._id}`);
+        res.json({ token, tenant: tenantData });
+
+    } catch (e) {
+        console.error('[auto-reconnect] Error:', e.message);
+        res.status(500).json({ error: 'reconnect_failed', reason: 'server_error' });
+    }
+});
+
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req, res) => {
     const t = req.tenant;
