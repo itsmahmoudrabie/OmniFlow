@@ -1460,10 +1460,18 @@ app.post('/webhook', (req, res) => {
                             text = "🎤 مقطع صوتي";
                         } else if (msg.type === "system") {
                             text = msg.system?.body || "🔔 رسالة نظام";
+                        } else if (msg.type === "request_welcome") {
+                            text = "👋 بدأ محادثة جديدة";
+                        } else if (msg.type === "order") {
+                            const items = msg.order?.product_items?.map(p => `${p.quantity}x ${p.product_retailer_id}`).join(', ') || '';
+                            text = `🛒 طلب: ${items}`;
+                        } else if (msg.type === "referral") {
+                            text = `🔗 جاء عبر: ${msg.referral?.source_url || msg.referral?.headline || 'رابط'}`;
                         } else if (msg.type === "unsupported") {
                             text = "⚠️ رسالة غير مدعومة";
                         } else if (!text) {
-                            text = `[${msg.type}]`;
+                            console.warn(`[Webhook] Unknown msg.type: "${msg.type}" — raw:`, JSON.stringify(msg).slice(0, 300));
+                            text = `📨 رسالة (${msg.type})`;
                         }
 
                         console.log(`[Webhook] Incoming type: ${msg.type}, From: ${phone}`);
