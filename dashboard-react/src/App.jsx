@@ -2871,20 +2871,20 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
             try {
                 if (campaignType === 'template') {
                     const tpl = templates[selectedTemplate];
+                    // استبدال المتغيرات باسم العميل وإرسال كنص عبر WasenderAPI
+                    const body = (tpl.body || tpl.content || '')
+                        .replace(/\{\{1\}\}/g, customer.name)
+                        .replace(/\{\{name\}\}/gi, customer.name);
                     await axios.post(`${API_URL}/whatsapp/send`, {
                         phone: customer.phone,
-                        template: tpl.meta_name,
-                        templateLanguage: tpl.language || 'en',
-                        params: tpl.params_count > 0 ? [customer.name] : undefined,
-                        templateImageUrl: tpl.has_header_image ? templateImageUrl : undefined,
-                        templateButtons: tpl.buttons?.length > 0 ? tpl.buttons : undefined,
+                        textMsg: body,
                         actionType: 'campaign',
                         orderName: customer.name
                     });
                 } else {
                     await axios.post(`${API_URL}/whatsapp/send`, {
                         phone: customer.phone,
-                        textMsg: messageText.replace('[Name]', customer.name),
+                        textMsg: messageText.replace(/\[Name\]/gi, customer.name),
                         actionType: 'campaign',
                         orderName: customer.name
                     });
