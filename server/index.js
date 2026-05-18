@@ -890,10 +890,24 @@ app.get('/api/orders', async (req, res) => {
             }
 
             const currentLocal = findLocalOrder(localOrders, cleanPhone, o.id);
+
+            // Auto-sync: if Shopify cancelled this order, mirror it locally
+            let effectiveStatus = currentLocal?.status || null;
+            if (o.cancelled_at && effectiveStatus !== 'cancelled') {
+                const key = String(o.id || cleanPhone);
+                if (localOrders[key]) {
+                    localOrders[key].status = 'cancelled';
+                } else {
+                    localOrders[key] = { phone: cleanPhone, status: 'cancelled', time: o.cancelled_at, id: o.id };
+                }
+                effectiveStatus = 'cancelled';
+                dbChanged = true;
+            }
+
             return {
                 ...o,
                 is_sent: !!currentLocal,
-                local_status: currentLocal?.status || null
+                local_status: effectiveStatus
             };
 
         });
