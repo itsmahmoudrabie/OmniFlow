@@ -648,6 +648,39 @@ app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
     }
 });
 
+// Called from the frontend loading screen on every app open.
+// Forces getActiveShopify() to run, which loads ShopifyConfig from MongoDB,
+// auto-refreshes expired tokens, and updates in-memory CONFIG — so all
+// subsequent Shopify API calls work without any manual user action.
+// Always returns 200 (non-fatal) so it never breaks the loading flow.
+app.post('/api/shopify/ensure-connected', authMiddleware, async (req, res) => {
+    try {
+        let resolved = await getActiveShopify();
+
+        // Fallback: use the authenticated tenant's own stored token
+        if (!resolved.shopify_url && req.tenant?.config?.shopify_url) {
+            const tenantShop  = req.tenant.config.shopify_url
+                .replace(/https?:\/\//i, '').replace(/\/$/, '').toLowerCase().trim();
+            const tenantToken = req.tenant.config?.shopify_access_token || '';
+            if (tenantToken) {
+                resolved = { shopify_url: tenantShop, shopify_access_token: tenantToken };
+                console.log(`[ensure-connected] Loaded from tenant config: ${tenantShop}`);
+            }
+        }
+
+        if (resolved.shopify_url) {
+            CONFIG.shopify_url          = resolved.shopify_url;
+            CONFIG.shopify_access_token = resolved.shopify_access_token;
+            console.log(`[ensure-connected] OK: ${resolved.shopify_url}`);
+            return res.json({ connected: true, shop: resolved.shopify_url });
+        }
+        res.json({ connected: false, shop: null });
+    } catch (e) {
+        console.warn('[ensure-connected] Error (non-fatal):', e.message);
+        res.json({ connected: false, shop: null });
+    }
+});
+
 // Generate Shopify OAuth URL — redirect_uri = Railway server /auth/callback
 app.get('/api/shopify/auth-url', authMiddleware, (req, res) => {
     const shop = String(req.query.shop || '').toLowerCase().trim().replace(/https?:\/\//, '').replace(/\/$/, '');

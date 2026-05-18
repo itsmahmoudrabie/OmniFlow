@@ -502,9 +502,10 @@ const App = () => {
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
                 setAuthTenant(tenant);
                 setAuthScreen(null);
-                await delay(700);
+                try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }); } catch (_) {}
+                await delay(350);
                 setLoadingStep(3);
-                await delay(600);
+                await delay(500);
                 setLoadingFading(true);
                 setTimeout(() => {
                     setLoadingScreen(false);
@@ -535,14 +536,15 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     setAuthScreen(null);
-                    await delay(700);
+                    try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { timeout: 8000 }); } catch (_) {}
+                    await delay(350);
                     setLoadingStep(3);
-                    await delay(600);
+                    await delay(500);
                     setLoadingFading(true);
                     setTimeout(() => {
                         setLoadingScreen(false);
                         setWelcomeName(r.data.name || '');
-                        setShowWelcome(true); // welcome banner every open
+                        setShowWelcome(true);
                     }, 600);
                 } catch {
                     localStorage.removeItem('omni_token');
