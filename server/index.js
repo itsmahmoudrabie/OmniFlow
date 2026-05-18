@@ -1427,7 +1427,9 @@ app.post('/webhook', (req, res) => {
                 if (value.messages) {
                     value.messages.forEach(async msg => {
                         const phone = msg.from;
-                        // استخراج النص من أنواع الرسائل المختلفة (نص، زر، تفاعلي)
+                        const name = value.contacts?.[0]?.profile?.name || phone;
+
+                        // ── Extract text by type ──────────────────────────────
                         let text = "";
                         if (msg.type === "text") {
                             text = msg.text?.body || "";
@@ -1435,82 +1437,86 @@ app.post('/webhook', (req, res) => {
                             text = msg.button?.text || msg.button?.payload || "";
                         } else if (msg.type === "interactive") {
                             const interact = msg.interactive;
-                            if (interact.type === "button_reply") {
+                            if (interact?.type === "button_reply")
                                 text = interact.button_reply?.title || interact.button_reply?.id || "";
-                            } else if (interact.type === "list_reply") {
+                            else if (interact?.type === "list_reply")
                                 text = interact.list_reply?.title || interact.list_reply?.id || "";
-                            }
+                        } else if (msg.type === "location") {
+                            text = `📍 ${msg.location?.name || ''} ${msg.location?.address || ''}`.trim() || "📍 موقع";
+                        } else if (msg.type === "reaction") {
+                            text = msg.reaction?.emoji || "👍";
+                        } else if (msg.type === "contacts") {
+                            const c = msg.contacts?.[0];
+                            text = `👤 ${c?.name?.formatted_name || ''} ${c?.phones?.[0]?.phone || ''}`.trim() || "👤 جهة اتصال";
+                        } else if (msg.type === "sticker") {
+                            text = "";
                         } else if (msg.type === "image") {
-                            text = "[صورة مرفقة]";
-                        } else if (msg.type === "document") {
-                            text = `[مستند مرفق: ${msg.document?.filename || 'document'}]`;
+                            text = msg.image?.caption || "";
                         } else if (msg.type === "video") {
-                            text = "[فيديو مرفق]";
+                            text = msg.video?.caption || "";
+                        } else if (msg.type === "document") {
+                            text = msg.document?.filename || "مستند";
                         } else if (msg.type === "audio") {
-                            text = "[مقطع صوتي]";
+                            text = "";
                         }
 
+                        console.log(`[Webhook] Incoming type: ${msg.type}, From: ${phone}`);
 
-
-                        console.log(`[Webhook] Incoming message type: ${msg.type}, Text: "${text}", From: ${phone}`);
-
-                        const name = value.contacts?.[0]?.profile?.name || phone;
-                        
-                        let imageUrl = null;
-                        
-                        // معالجة الوسائط المرفقة (صور، مستندات، فيديو، صوت)
-                        const mediaTypes = ["image", "document", "video", "audio"];
-                        const mediaType = mediaTypes.find(t => msg[t] && msg[t].id);
-                        const mediaObj = mediaType ? msg[mediaType] : null;
+                        // ── Download media (image, video, audio, document, sticker) ──
+                        const mediaTypes = ["image", "document", "video", "audio", "sticker"];
+                        const mediaType = mediaTypes.find(t => msg[t]?.id);
+                        const mediaObj  = mediaType ? msg[mediaType] : null;
+                        let savedUrl = null;
 
                         if (mediaObj) {
                             try {
-                                const mediaRes = await axios.get(`https://graph.facebook.com/${CONFIG.api_version}/${mediaObj.id}`, {
-                                    headers: { 'Authorization': `Bearer ${CONFIG.access_token}` }
-                                });
-                                const mediaUrl = mediaRes.data.url;
-                                
-                                const dlRes = await axios.get(mediaUrl, {
-                                    headers: { 'Authorization': `Bearer ${CONFIG.access_token}` },
+                                const mediaRes = await axios.get(
+                                    `https://graph.facebook.com/${CONFIG.api_version}/${mediaObj.id}`,
+                                    { headers: { Authorization: `Bearer ${CONFIG.access_token}` } }
+                                );
+                                const dlRes = await axios.get(mediaRes.data.url, {
+                                    headers: { Authorization: `Bearer ${CONFIG.access_token}` },
                                     responseType: 'arraybuffer'
                                 });
-                                
-                                let ext = "bin";
-                                if (mediaType === "image") ext = "jpg";
-                                else if (mediaType === "video") ext = "mp4";
-                                else if (mediaType === "audio") ext = "mp3";
-                                else if (mediaType === "document") ext = mediaObj.filename?.split('.').pop() || "pdf";
-
+                                const extMap = { image:'jpg', video:'mp4', audio:'ogg', document:'', sticker:'webp' };
+                                const ext = mediaType === 'document'
+                                    ? (mediaObj.filename?.split('.').pop() || 'pdf')
+                                    : extMap[mediaType];
                                 const fileName = `${mediaObj.id}.${ext}`;
-                                const filePath = path.join(MEDIA_DIR, fileName);
-                                fs.writeFileSync(filePath, dlRes.data);
-                                imageUrl = `/media/${fileName}`;
-                                
-                                if (mediaType === "document") {
-                                    text = `[مستند: ${mediaObj.filename || fileName}]`;
-                                } else if (mediaType === "image") {
-                                    text = mediaObj.caption || "[صورة]";
-                                } else {
-                                    text = `[${mediaType}]`;
-                                }
-                                console.log(`[Webhook] Downloaded ${mediaType} for ${name}: ${fileName}`);
+                                fs.writeFileSync(path.join(MEDIA_DIR, fileName), dlRes.data);
+                                savedUrl = `/media/${fileName}`;
+                                console.log(`[Webhook] Saved ${mediaType}: ${fileName}`);
                             } catch (e) {
                                 console.error(`[Webhook] Failed to download ${mediaType}:`, e.message);
                             }
                         }
 
-
-                        // حفظ وتجميع في الإنفبوكس (نظام الشات)
+                        // ── Build message object ──────────────────────────────
                         let inbox = loadJSON(INBOX_FILE);
                         if (!Array.isArray(inbox)) inbox = [];
-                        
+
                         let existing = inbox.find(c => c.phone === phone);
                         const incomingMsgObj = {
-                            text: text || (msg.type === 'image' ? 'صورة' : 'رسالة غير مدعومة'),
+                            msgType: msg.type,
+                            text,
                             from: "customer",
-                            time: new Date().toLocaleString('ar-EG')
+                            time: new Date().toLocaleString('ar-EG'),
+                            wamid: msg.id,
                         };
-                        if (imageUrl) incomingMsgObj.image = imageUrl;
+                        if (savedUrl) {
+                            if (msg.type === 'audio' || msg.type === 'voice') incomingMsgObj.audio = savedUrl;
+                            else if (msg.type === 'video')   incomingMsgObj.video   = savedUrl;
+                            else if (msg.type === 'sticker') incomingMsgObj.sticker = savedUrl;
+                            else                             incomingMsgObj.image   = savedUrl;
+                        }
+                        if (msg.type === 'location') {
+                            incomingMsgObj.location = {
+                                lat: msg.location?.latitude,
+                                lng: msg.location?.longitude,
+                                name: msg.location?.name || '',
+                                address: msg.location?.address || '',
+                            };
+                        }
 
                         if (existing) {
                             existing.messages = existing.messages || [];

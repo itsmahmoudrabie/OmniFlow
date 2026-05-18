@@ -1983,31 +1983,77 @@ const ChatInterface = ({ inbox, orders = [], activePhone, onSelectChat, refreshI
                             )}
                             {activeChat.messages?.map((msg, idx) => {
                                 const isAgent = msg.from === 'agent';
+                                const base = API_URL.replace('/api', '');
                                 return (
                                     <div key={idx} className={`flex ${isAgent ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[65%] px-4 py-3 rounded-2xl relative ${isAgent
                                                 ? 'bg-brand-bg text-brand-egg border border-brand-border/30'
                                                 : 'glass border border-brand-accent/10'
                                             }`}>
-                                            {msg.image && (
-                                                <div className="mb-2">
-                                                    {msg.image.toLowerCase().match(/\.(pdf|doc|docx|xls|xlsx|txt|zip|bin)$/) || msg.text?.includes('[مستند') ? (
-                                                        <div className="flex items-center gap-3 p-3 bg-white/10 rounded-xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all"
-                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')}>
-                                                            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400"><FileText size={20} /></div>
-                                                            <div className="flex flex-col min-w-0">
-                                                                <span className="text-xs font-bold truncate">{isEn ? 'Document' : 'مستند'}</span>
-                                                                <span className="text-[10px] opacity-60">PDF / Doc</span>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <img src={`${API_URL.replace('/api', '')}${msg.image}`} alt=""
-                                                            className="max-w-[250px] w-full rounded-xl object-cover border border-brand-accent/20 cursor-pointer hover:opacity-90 transition-opacity"
-                                                            onClick={() => window.open(`${API_URL.replace('/api', '')}${msg.image}`, '_blank')} />
-                                                    )}
+
+                                            {/* ── Image ── */}
+                                            {msg.image && !msg.image.toLowerCase().match(/\.(pdf|doc|docx|xls|xlsx|txt|zip|bin)$/) && (
+                                                <img src={`${base}${msg.image}`} alt=""
+                                                    className="max-w-[250px] w-full rounded-xl object-cover border border-brand-accent/20 cursor-pointer hover:opacity-90 transition-opacity mb-1"
+                                                    onClick={() => window.open(`${base}${msg.image}`, '_blank')} />
+                                            )}
+
+                                            {/* ── Document ── */}
+                                            {msg.image && msg.image.toLowerCase().match(/\.(pdf|doc|docx|xls|xlsx|txt|zip|bin)$/) && (
+                                                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-xl border border-white/20 cursor-pointer hover:bg-white/20 transition-all mb-1"
+                                                    onClick={() => window.open(`${base}${msg.image}`, '_blank')}>
+                                                    <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400"><FileText size={20} /></div>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-xs font-bold truncate">{msg.text || (isEn ? 'Document' : 'مستند')}</span>
+                                                        <span className="text-[10px] opacity-60">{msg.image.split('.').pop()?.toUpperCase()}</span>
+                                                    </div>
                                                 </div>
                                             )}
-                                            <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+
+                                            {/* ── Audio ── */}
+                                            {msg.audio && (
+                                                <audio controls className="w-full max-w-[260px] mb-1 rounded-lg" style={{height:36}}>
+                                                    <source src={`${base}${msg.audio}`} />
+                                                </audio>
+                                            )}
+
+                                            {/* ── Video ── */}
+                                            {msg.video && (
+                                                <video controls className="max-w-[260px] w-full rounded-xl mb-1 border border-brand-accent/20">
+                                                    <source src={`${base}${msg.video}`} />
+                                                </video>
+                                            )}
+
+                                            {/* ── Sticker ── */}
+                                            {msg.sticker && (
+                                                <img src={`${base}${msg.sticker}`} alt="sticker"
+                                                    className="w-24 h-24 object-contain mb-1" />
+                                            )}
+
+                                            {/* ── Location ── */}
+                                            {msg.location && (
+                                                <a href={`https://maps.google.com/?q=${msg.location.lat},${msg.location.lng}`}
+                                                    target="_blank" rel="noreferrer"
+                                                    className="flex items-center gap-2 p-3 bg-white/10 rounded-xl border border-white/20 hover:bg-white/20 transition-all mb-1">
+                                                    <span className="text-2xl">📍</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-xs font-bold truncate">{msg.location.name || (isEn ? 'Location' : 'موقع')}</span>
+                                                        {msg.location.address && <span className="text-[10px] opacity-60 truncate">{msg.location.address}</span>}
+                                                    </div>
+                                                </a>
+                                            )}
+
+                                            {/* ── Reaction ── */}
+                                            {msg.msgType === 'reaction' && (
+                                                <span className="text-3xl">{msg.text}</span>
+                                            )}
+
+                                            {/* ── Text (skip if reaction or doc-with-no-caption) ── */}
+                                            {msg.text && msg.msgType !== 'reaction' && !(msg.image && msg.image.match(/\.(pdf|doc|docx|xls|xlsx|txt|zip|bin)$/)) && (
+                                                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                            )}
+
+                                            {/* ── Timestamp + status ── */}
                                             <div className={`text-[9px] mt-1.5 flex items-center gap-1 ${isAgent ? 'text-brand-egg-mute justify-end' : 'text-brand-egg-mute justify-start'} dir-ltr`}>
                                                 <span>{msg.time?.split(' ')[1]}</span>
                                                 {isAgent && (
