@@ -679,6 +679,15 @@ app.post('/api/shopify/ensure-connected', authMiddleware, async (req, res) => {
         if (resolved.shopify_url) {
             CONFIG.shopify_url          = resolved.shopify_url;
             CONFIG.shopify_access_token = resolved.shopify_access_token;
+            // Persist to ShopifyConfig so getActiveShopify() finds it after server restart
+            try {
+                const ShopifyConfig = require('./models/ShopifyConfig');
+                await ShopifyConfig.findOneAndUpdate(
+                    { shop: resolved.shopify_url },
+                    { shop: resolved.shopify_url, access_token: resolved.shopify_access_token },
+                    { upsert: true, new: true }
+                );
+            } catch (_) {}
             console.log(`[ensure-connected] OK: ${resolved.shopify_url}`);
             return res.json({ connected: true, shop: resolved.shopify_url });
         }
