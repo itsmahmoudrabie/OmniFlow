@@ -481,19 +481,30 @@ const App = () => {
     useEffect(() => {
         if (!loadingScreen || window.location.hash.includes('shopify_token=')) return;
 
+        const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+        // Extract clean shop domain from a URL and save to localStorage
+        const persistShop = (shopUrl) => {
+            if (!shopUrl) return;
+            const domain = shopUrl.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+            if (domain.includes('myshopify.com')) localStorage.setItem('omni_shop', domain);
+        };
+
         const tryAutoReconnect = async (shop) => {
             try {
                 setLoadingStep(1);
+                await delay(500);
                 const r = await axios.post(`${API_URL}/auth/auto-reconnect`, { shop });
                 setLoadingStep(2);
                 const { token, tenant } = r.data;
+                persistShop(tenant?.config?.shopify_url || shop);
                 localStorage.setItem('omni_token', token);
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
                 setAuthTenant(tenant);
                 setAuthScreen(null);
-                await new Promise(res => setTimeout(res, 350));
+                await delay(700);
                 setLoadingStep(3);
-                await new Promise(res => setTimeout(res, 500));
+                await delay(600);
                 setLoadingFading(true);
                 setTimeout(() => {
                     setLoadingScreen(false);
@@ -514,18 +525,25 @@ const App = () => {
 
             if (token) {
                 setLoadingStep(1);
+                await delay(600); // keep step 1 visible
                 try {
                     const r = await axios.get(`${API_URL}/auth/me`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
+                    // Persist shop so future auto-reconnect works even for old sessions
+                    persistShop(r.data?.config?.shopify_url);
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     setAuthScreen(null);
-                    await new Promise(res => setTimeout(res, 300));
+                    await delay(700);
                     setLoadingStep(3);
-                    await new Promise(res => setTimeout(res, 400));
+                    await delay(600);
                     setLoadingFading(true);
-                    setTimeout(() => setLoadingScreen(false), 600);
+                    setTimeout(() => {
+                        setLoadingScreen(false);
+                        setWelcomeName(r.data.name || '');
+                        setShowWelcome(true); // welcome banner every open
+                    }, 600);
                 } catch {
                     localStorage.removeItem('omni_token');
                     if (shop) {
@@ -539,7 +557,7 @@ const App = () => {
                 await tryAutoReconnect(shop);
             } else {
                 setLoadingStep(1);
-                await new Promise(res => setTimeout(res, 600));
+                await delay(700);
                 setLoadingFading(true);
                 setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
             }
