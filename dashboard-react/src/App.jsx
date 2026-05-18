@@ -297,13 +297,112 @@ function UpgradePrompt({ feature, minPlan, onUpgrade, isEn }) {
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Loading Screen — shown on every cold-start while Shopify reconnects
+// ─────────────────────────────────────────────────────────────────────────────
+const LOADING_STEPS = [
+    { ar: 'جاري الاتصال بشوبيفاي...', en: 'Connecting to Shopify...',  pct: 15 },
+    { ar: 'التحقق من متجرك...',       en: 'Verifying your store...',   pct: 45 },
+    { ar: 'جاري تحميل بياناتك...',    en: 'Loading your data...',      pct: 75 },
+    { ar: 'جاهز!',                     en: 'Ready!',                    pct: 100 },
+];
+
+const LoadingScreen = ({ step = 0, lang = 'ar', fading = false }) => {
+    const isEn = lang === 'en';
+    const current = LOADING_STEPS[Math.min(step, LOADING_STEPS.length - 1)];
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: '#001A11',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: '2rem',
+            opacity: fading ? 0 : 1,
+            transition: 'opacity 0.6s ease',
+            direction: isEn ? 'ltr' : 'rtl',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <OmniFlowMark size={48} />
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#F5EBE1', letterSpacing: '-0.03em' }}>
+                    Omni<span style={{ fontWeight: 300 }}>Flow</span>
+                </span>
+            </div>
+            <div style={{ width: '240px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ height: '4px', borderRadius: '9999px', background: 'rgba(140,200,80,0.15)', overflow: 'hidden' }}>
+                    <div style={{
+                        height: '100%', width: `${current.pct}%`,
+                        background: 'linear-gradient(90deg, #5E9433, #8CC850)',
+                        borderRadius: '9999px',
+                        transition: 'width 0.55s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 0 12px rgba(140,200,80,0.5)',
+                    }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: isEn ? 'flex-start' : 'flex-end' }}>
+                    {LOADING_STEPS.map((s, i) => (
+                        <span key={i} style={{
+                            fontSize: '0.72rem',
+                            fontWeight: i === step ? 700 : 400,
+                            color: i === step ? '#8CC850' : i < step ? '#5E9433' : 'rgba(140,163,128,0.5)',
+                            transition: 'color 0.3s ease',
+                        }}>
+                            {isEn ? s.en : s.ar}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Welcome Banner — slides down after successful auto-reconnect (3s then gone)
+// ─────────────────────────────────────────────────────────────────────────────
+const WelcomeBanner = ({ name = '', lang = 'ar', visible = false, onDone }) => {
+    const isEn = lang === 'en';
+    useEffect(() => {
+        if (!visible) return;
+        const t = setTimeout(onDone, 3000);
+        return () => clearTimeout(t);
+    }, [visible, onDone]);
+    if (!visible) return null;
+    return (
+        <div style={{
+            position: 'fixed', top: '1.25rem', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 9998,
+            background: 'linear-gradient(135deg, #003223, #00261A)',
+            border: '1px solid rgba(140,200,80,0.35)',
+            borderRadius: '1rem', padding: '0.85rem 1.75rem',
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+            animation: 'omni-slide-down 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+            direction: isEn ? 'ltr' : 'rtl',
+        }}>
+            <style>{`
+                @keyframes omni-slide-down {
+                    from { opacity: 0; transform: translate(-50%, -1.5rem); }
+                    to   { opacity: 1; transform: translate(-50%, 0); }
+                }
+            `}</style>
+            <OmniFlowMark size={28} />
+            <div>
+                <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: '#F5EBE1' }}>
+                    {isEn ? `Welcome back${name ? `, ${name}` : ''}!` : `أهلاً بعودتك${name ? `، ${name}` : ''}!`}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: '#8CA380' }}>
+                    {isEn ? 'Your Shopify store reconnected automatically' : 'تم إعادة الاتصال بمتجر Shopify تلقائياً'}
+                </p>
+            </div>
+        </div>
+    );
+};
+
 const App = () => {
     // ── Auth state ───────────────────────────────────────────────────────────
     const [authScreen, setAuthScreen] = useState(() => {
         const token = localStorage.getItem('omni_token');
         if (token) return null;
-        // If Shopify just redirected with a token in the hash, don't show login screen yet
         if (window.location.hash.includes('shopify_token=')) return null;
+        const shop = localStorage.getItem('omni_shop');
+        if (shop) return null; // pending auto-reconnect
         return 'login';
     });
     const [authTenant, setAuthTenant] = useState(() => {
@@ -311,15 +410,27 @@ const App = () => {
     });
     const [showPricing, setShowPricing] = useState(false);
 
-    const handleLogin = (token, tenant) => {
+    // ── Loading screen state ─────────────────────────────────────────────────
+    const [loadingScreen, setLoadingScreen] = useState(
+        () => !window.location.hash.includes('shopify_token=')
+    );
+    const [loadingStep,   setLoadingStep]   = useState(0);
+    const [loadingFading, setLoadingFading] = useState(false);
+    const [showWelcome,   setShowWelcome]   = useState(false);
+    const [welcomeName,   setWelcomeName]   = useState('');
+
+    const handleLogin = (token, tenant, shopDomain = null) => {
         localStorage.setItem('omni_token', token);
         localStorage.setItem('omni_tenant', JSON.stringify(tenant));
+        if (shopDomain) localStorage.setItem('omni_shop', shopDomain);
         setAuthTenant(tenant);
         setAuthScreen(null);
     };
     const handleLogout = () => {
         localStorage.removeItem('omni_token');
         localStorage.removeItem('omni_tenant');
+        localStorage.removeItem('omni_shop');
+        localStorage.removeItem('omni_tab');
         setAuthTenant(null);
         setAuthScreen('login');
     };
@@ -348,21 +459,99 @@ const App = () => {
         if (!hash.includes('shopify_token=')) return;
         const params = new URLSearchParams(hash.slice(1));
         const token = params.get('shopify_token');
+        const shop  = params.get('shop');
         if (!token) return;
         const planActivated = params.get('plan_activated');
         window.history.replaceState(null, '', window.location.pathname);
+        if (shop) localStorage.setItem('omni_shop', shop);
         axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => {
-                handleLogin(token, r.data);
-                if (planActivated) {
-                    // Plan was just activated — close pricing overlay if open
-                    setShowPricing(false);
-                }
+                handleLogin(token, r.data, shop || null);
+                if (planActivated) setShowPricing(false);
+                setLoadingFading(true);
+                setTimeout(() => setLoadingScreen(false), 600);
             })
-            .catch(() => {});
+            .catch(() => {
+                setLoadingFading(true);
+                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+            });
     }, []);
 
-    const [activeTab, setActiveTab] = useState('dash');
+    // ── Cold-start init: validate JWT or auto-reconnect via stored shop ──────
+    useEffect(() => {
+        if (!loadingScreen || window.location.hash.includes('shopify_token=')) return;
+
+        const tryAutoReconnect = async (shop) => {
+            try {
+                setLoadingStep(1);
+                const r = await axios.post(`${API_URL}/auth/auto-reconnect`, { shop });
+                setLoadingStep(2);
+                const { token, tenant } = r.data;
+                localStorage.setItem('omni_token', token);
+                localStorage.setItem('omni_tenant', JSON.stringify(tenant));
+                setAuthTenant(tenant);
+                setAuthScreen(null);
+                await new Promise(res => setTimeout(res, 350));
+                setLoadingStep(3);
+                await new Promise(res => setTimeout(res, 500));
+                setLoadingFading(true);
+                setTimeout(() => {
+                    setLoadingScreen(false);
+                    setWelcomeName(tenant.name || '');
+                    setShowWelcome(true);
+                }, 600);
+            } catch {
+                localStorage.removeItem('omni_shop');
+                setLoadingFading(true);
+                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+            }
+        };
+
+        const doInit = async () => {
+            const token = localStorage.getItem('omni_token');
+            const shop  = localStorage.getItem('omni_shop');
+            setLoadingStep(0);
+
+            if (token) {
+                setLoadingStep(1);
+                try {
+                    const r = await axios.get(`${API_URL}/auth/me`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setLoadingStep(2);
+                    setAuthTenant(r.data);
+                    setAuthScreen(null);
+                    await new Promise(res => setTimeout(res, 300));
+                    setLoadingStep(3);
+                    await new Promise(res => setTimeout(res, 400));
+                    setLoadingFading(true);
+                    setTimeout(() => setLoadingScreen(false), 600);
+                } catch {
+                    localStorage.removeItem('omni_token');
+                    if (shop) {
+                        await tryAutoReconnect(shop);
+                    } else {
+                        setLoadingFading(true);
+                        setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+                    }
+                }
+            } else if (shop) {
+                await tryAutoReconnect(shop);
+            } else {
+                setLoadingStep(1);
+                await new Promise(res => setTimeout(res, 600));
+                setLoadingFading(true);
+                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+            }
+        };
+
+        doInit();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const [activeTab, setActiveTab] = useState(
+        () => localStorage.getItem('omni_tab') || 'dash'
+    );
     const [orders, setOrders] = useState([]);
     const [inbox, setInbox] = useState([]);
     const [templates, setTemplates] = useState({});
@@ -570,12 +759,18 @@ const App = () => {
 
     useEffect(() => { localStorage.setItem('omni_lang', lang); }, [lang]);
     useEffect(() => { localStorage.setItem('omni_theme', theme); }, [theme]);
+    useEffect(() => { localStorage.setItem('omni_tab', activeTab); }, [activeTab]);
 
     // Feature gate helpers
     const planLevel = { trial: 0, starter: 1, growth: 2, pro: 3, enterprise: 4 };
     const myPlan = authTenant?.plan || 'trial';
     const hasFeature = (minPlan) => (planLevel[myPlan] || 0) >= (planLevel[minPlan] || 0);
     const isEn = lang === 'en';
+
+    // Loading screen — blocks everything during cold-start init
+    if (loadingScreen) {
+        return <LoadingScreen step={loadingStep} lang={lang} fading={loadingFading} />;
+    }
 
     // Auth gate
     if (authScreen === 'pricing') return <AuthPricingPage onSelectPlan={(plan) => setAuthScreen('register:' + plan)} onLogin={() => setAuthScreen('login')} />;
@@ -600,6 +795,12 @@ const App = () => {
             className={`flex h-screen bg-brand-bg overflow-hidden text-brand-text theme-${theme} ${lang === 'en' ? 'dir-ltr' : 'dir-rtl'} p-5 gap-3.5 relative`}
             dir={lang === 'en' ? 'ltr' : 'rtl'}
         >
+            <WelcomeBanner
+                name={welcomeName}
+                lang={lang}
+                visible={showWelcome}
+                onDone={() => setShowWelcome(false)}
+            />
             {/* Sidebar */}
             <aside className="w-[200px] rounded-2xl flex flex-col shrink-0 p-4" style={{background:'color-mix(in srgb, var(--color-brand-card) 80%, transparent)'}}>
                 <div className={`${lang === 'en' ? 'pl-1' : 'pr-1'}`}>
@@ -4791,11 +4992,6 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                         style={{background:'#96BF48', color:'#fff'}}>
                         {isEn ? '→ Connect Shopify Store' : '→ ربط المتجر'}
                     </button>
-                    {shopifyTokenMsg && (
-                        <p className={`text-[11px] font-bold ${shopifyTokenMsg.startsWith('✅') ? 'text-brand-accent' : shopifyTokenMsg.startsWith('❌') ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {shopifyTokenMsg}
-                        </p>
-                    )}
                 </div>
 
                 {shopConnected && integrations.shopify && (
