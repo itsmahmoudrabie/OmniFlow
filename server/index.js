@@ -1468,7 +1468,16 @@ app.post('/webhook', (req, res) => {
                         } else if (msg.type === "referral") {
                             text = `🔗 جاء عبر: ${msg.referral?.source_url || msg.referral?.headline || 'رابط'}`;
                         } else if (msg.type === "unsupported") {
-                            text = "⚠️ رسالة غير مدعومة";
+                            const errCode = msg.errors?.[0]?.code;
+                            const errTitle = msg.errors?.[0]?.title || '';
+                            if (errCode === 131051 || errTitle.toLowerCase().includes('poll'))
+                                text = "📊 أرسل استطلاعاً (غير مدعوم في API)";
+                            else if (errTitle.toLowerCase().includes('call') || errCode === 131052)
+                                text = "📞 مكالمة واتساب فائتة";
+                            else if (errTitle.toLowerCase().includes('view once') || errCode === 131053)
+                                text = "🔒 صورة/فيديو للمشاهدة مرة واحدة";
+                            else
+                                text = `⚠️ رسالة غير مدعومة${errTitle ? ': ' + errTitle : ''}`;
                         } else if (!text) {
                             console.warn(`[Webhook] Unknown msg.type: "${msg.type}" — raw:`, JSON.stringify(msg).slice(0, 300));
                             text = `📨 رسالة (${msg.type})`;
