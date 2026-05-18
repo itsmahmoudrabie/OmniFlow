@@ -1118,33 +1118,44 @@ app.get('/api/customers', async (req, res) => {
             });
         }
 
-        // 3. من شوبيفاي (تاريخ الطلبات)
+        // 3. من شوبيفاي (طلبات + كل العملاء)
         try {
             const { shopify_url: _sUrl, shopify_access_token: _sToken } = await getActiveShopify();
-            const url = `https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`;
-            const response = await axios.get(url, {
-                headers: { 'X-Shopify-Access-Token': _sToken }
-            });
-            response.data.orders.forEach(o => {
-                const phone = o.shipping_address?.phone || o.customer?.phone || "";
-                if (!phone) return;
-                const cleanPhone = phone.replace(/[^\d]/g, "");
-                const name = o.shipping_address?.first_name || o.customer?.first_name || "عميل شوبيفاي";
-                let tag = o.tags ? `شوبيفاي: ${o.tags}` : "عميل شوبيفاي 🌐";
-                if (parseFloat(o.total_price || 0) > 2000) tag = "VIP 👑";
-                
-                if (cleanPhone && !uniqueCustomers.has(cleanPhone)) {
-                    uniqueCustomers.set(cleanPhone, {
-                        phone: cleanPhone,
-                        name: name,
-                        source: 'شوبيفاي',
-                        tag
-                    });
-                } else if (cleanPhone && uniqueCustomers.has(cleanPhone)) {
-                    const existing = uniqueCustomers.get(cleanPhone);
-                    if (tag.includes("VIP")) existing.tag = tag;
-                }
-            });
+            if (_sUrl && _sToken) {
+                // 3a. من الطلبات (مشترين فعليين)
+                const ordersRes = await axios.get(
+                    `https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`,
+                    { headers: { 'X-Shopify-Access-Token': _sToken } }
+                );
+                ordersRes.data.orders?.forEach(o => {
+                    const phone = o.shipping_address?.phone || o.customer?.phone || "";
+                    if (!phone) return;
+                    const cleanPhone = phone.replace(/[^\d]/g, "");
+                    const name = o.shipping_address?.first_name || o.customer?.first_name || "عميل شوبيفاي";
+                    let tag = o.tags ? `شوبيفاي: ${o.tags}` : "مشتري شوبيفاي 🛍️";
+                    if (parseFloat(o.total_price || 0) > 2000) tag = "VIP 👑";
+                    if (cleanPhone && !uniqueCustomers.has(cleanPhone)) {
+                        uniqueCustomers.set(cleanPhone, { phone: cleanPhone, name, source: 'شوبيفاي', tag });
+                    } else if (cleanPhone) {
+                        const ex = uniqueCustomers.get(cleanPhone);
+                        if (tag.includes("VIP")) ex.tag = tag;
+                    }
+                });
+
+                // 3b. من قاعدة عملاء شوبيفاي (كل العملاء بما فيهم بدون طلبات)
+                const custRes = await axios.get(
+                    `https://${_sUrl}/admin/api/2024-04/customers.json?limit=250`,
+                    { headers: { 'X-Shopify-Access-Token': _sToken } }
+                );
+                custRes.data.customers?.forEach(c => {
+                    const phone = c.phone || c.default_address?.phone || "";
+                    if (!phone) return;
+                    const cleanPhone = phone.replace(/[^\d]/g, "");
+                    if (!cleanPhone || uniqueCustomers.has(cleanPhone)) return;
+                    const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || "عميل شوبيفاي";
+                    uniqueCustomers.set(cleanPhone, { phone: cleanPhone, name, source: 'شوبيفاي', tag: 'عميل شوبيفاي 🌐' });
+                });
+            }
         } catch(e) {
             console.error("Failed to fetch shopify customers for broadcast:", e.message);
         }
@@ -2556,47 +2567,95 @@ const processBroadcasts = async () => {
     const due = list.filter(b => b.status === 'pending' && new Date(b.scheduled_at) <= now);
     if (!due.length) return;
 
+    // ── جمع أرقام الهواتف من كل المصادر ─────────────────────────────────────
+    const phoneMap = new Map(); // phone → customerName
+
+    // 1. من الطلبات المحلية
     let localOrders = loadJSON(DB_FILE);
     if (Array.isArray(localOrders)) localOrders = {};
-    const inbox = loadJSON(INBOX_FILE);
-    const phoneSet = new Set();
     for (const key in localOrders) {
-        if (localOrders[key]?.phone) phoneSet.add(localOrders[key].phone);
+        const o = localOrders[key];
+        if (o?.phone) phoneMap.set(o.phone, o.name || 'عميل');
     }
-    if (Array.isArray(inbox)) inbox.forEach(c => { if (c.phone) phoneSet.add(normalizePhone(c.phone)); });
+
+    // 2. من المحادثات (صندوق الوارد)
+    const inbox = loadJSON(INBOX_FILE);
+    if (Array.isArray(inbox)) {
+        inbox.forEach(c => { if (c.phone) phoneMap.set(normalizePhone(c.phone), c.name || 'عميل'); });
+    }
+
+    // 3. من شوبيفاي (طلبات + كل العملاء)
+    try {
+        const { shopify_url: _sUrl, shopify_access_token: _sToken } = await getActiveShopify();
+        if (_sUrl && _sToken) {
+            const [ordersRes, custRes] = await Promise.all([
+                axios.get(`https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`,
+                    { headers: { 'X-Shopify-Access-Token': _sToken } }),
+                axios.get(`https://${_sUrl}/admin/api/2024-04/customers.json?limit=250`,
+                    { headers: { 'X-Shopify-Access-Token': _sToken } }),
+            ]);
+            ordersRes.data.orders?.forEach(o => {
+                const phone = (o.shipping_address?.phone || o.customer?.phone || '').replace(/[^\d]/g, '');
+                const name = o.shipping_address?.first_name || o.customer?.first_name || 'عميل';
+                if (phone) phoneMap.set(phone, name);
+            });
+            custRes.data.customers?.forEach(c => {
+                const phone = (c.phone || c.default_address?.phone || '').replace(/[^\d]/g, '');
+                const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'عميل';
+                if (phone && !phoneMap.has(phone)) phoneMap.set(phone, name);
+            });
+        }
+    } catch (e) {
+        console.error('[Broadcasts] Shopify fetch error:', e.message);
+    }
 
     const templates = loadJSON(TEMPLATES_FILE);
-    const msgUrl = `https://graph.facebook.com/${CONFIG.api_version}/${CONFIG.phone_number_id}/messages`;
 
+    // ── تنفيذ كل broadcast مستحق ───────────────────────────────────────────────
     for (const broadcast of due) {
-        console.log(`[Broadcasts] Firing: ${broadcast.name}`);
+        console.log(`[Broadcasts] Firing "${broadcast.name}" → ${phoneMap.size} recipients`);
         broadcast.status = 'running';
         saveJSON(BROADCASTS_FILE, list);
 
         let success = 0, fail = 0;
-        for (const phone of phoneSet) {
+
+        for (const [phone, customerName] of phoneMap) {
             try {
+                let msgObj;
+
                 if (broadcast.campaign_type === 'template' && broadcast.template_id) {
+                    // القوالب: استبدال المتغيرات وإرسال نصاً عادياً عبر WasenderAPI
                     const tpl = templates[broadcast.template_id];
                     if (!tpl) { fail++; continue; }
-                    const components = [];
-                    if (tpl.has_header_image && broadcast.template_image_url) {
-                        components.push({ type: 'header', parameters: [{ type: 'image', image: { link: broadcast.template_image_url } }] });
+                    let body = tpl.body || tpl.content || '';
+                    // استبدال {{1}} و{{name}} باسم العميل
+                    body = body
+                        .replace(/\{\{1\}\}/g, customerName)
+                        .replace(/\{\{name\}\}/gi, customerName);
+                    if (broadcast.template_image_url) {
+                        msgObj = { messageType: 'image', imageUrl: broadcast.template_image_url, caption: body };
+                    } else {
+                        msgObj = { messageType: 'text', text: body };
                     }
-                    await axios.post(msgUrl, {
-                        messaging_product: 'whatsapp', to: phone, type: 'template',
-                        template: { name: tpl.meta_name, language: { code: tpl.language || 'en' }, components }
-                    }, { headers: { Authorization: `Bearer ${CONFIG.access_token}` } });
                 } else if (broadcast.message_text) {
-                    await axios.post(msgUrl, {
-                        messaging_product: 'whatsapp', to: phone, type: 'text',
-                        text: { body: broadcast.message_text }
-                    }, { headers: { Authorization: `Bearer ${CONFIG.access_token}` } });
+                    // رسالة نصية حرة مع استبدال [Name]
+                    const text = broadcast.message_text
+                        .replace(/\[Name\]/gi, customerName)
+                        .replace(/\{\{name\}\}/gi, customerName);
+                    msgObj = { messageType: 'text', text };
+                } else {
+                    fail++; continue;
                 }
+
+                await sendViaWasender(phone, msgObj);
                 success++;
-            } catch (e) { fail++; }
-            await new Promise(r => setTimeout(r, 1500));
+            } catch (e) {
+                console.error(`[Broadcasts] Failed → ${phone}:`, e.message);
+                fail++;
+            }
+            await new Promise(r => setTimeout(r, 1500)); // تأخير بين الرسائل لتجنب الحظر
         }
+
         broadcast.status = 'done';
         broadcast.sent = success;
         broadcast.failed = fail;
