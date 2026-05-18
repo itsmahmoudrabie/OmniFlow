@@ -1458,6 +1458,8 @@ app.post('/webhook', (req, res) => {
                             text = msg.document?.filename || "📄 مستند";
                         } else if (msg.type === "audio") {
                             text = "🎤 مقطع صوتي";
+                        } else if (msg.type === "system") {
+                            text = msg.system?.body || "🔔 رسالة نظام";
                         } else if (msg.type === "unsupported") {
                             text = "⚠️ رسالة غير مدعومة";
                         } else if (!text) {
