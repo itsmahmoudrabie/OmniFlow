@@ -1449,15 +1449,19 @@ app.post('/webhook', (req, res) => {
                             const c = msg.contacts?.[0];
                             text = `👤 ${c?.name?.formatted_name || ''} ${c?.phones?.[0]?.phone || ''}`.trim() || "👤 جهة اتصال";
                         } else if (msg.type === "sticker") {
-                            text = "";
+                            text = "🎭 ملصق";
                         } else if (msg.type === "image") {
-                            text = msg.image?.caption || "";
+                            text = msg.image?.caption || "📷 صورة";
                         } else if (msg.type === "video") {
-                            text = msg.video?.caption || "";
+                            text = msg.video?.caption || "🎬 فيديو";
                         } else if (msg.type === "document") {
-                            text = msg.document?.filename || "مستند";
+                            text = msg.document?.filename || "📄 مستند";
                         } else if (msg.type === "audio") {
-                            text = "";
+                            text = "🎤 مقطع صوتي";
+                        } else if (msg.type === "unsupported") {
+                            text = "⚠️ رسالة غير مدعومة";
+                        } else if (!text) {
+                            text = `[${msg.type}]`;
                         }
 
                         console.log(`[Webhook] Incoming type: ${msg.type}, From: ${phone}`);
