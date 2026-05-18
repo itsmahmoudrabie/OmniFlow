@@ -117,9 +117,9 @@ const NotificationCenter = ({ notifications, onRead, onClear, onNavigate, lang }
     };
 
     return (
-        <div className="absolute top-full mt-2 right-0 w-80 glass rounded-2xl shadow-2xl z-50 overflow-hidden border border-brand-border/20 animate-in slide-in-from-top-2 fade-in duration-200">
+        <div className={`absolute top-full mt-2 ${isEn ? 'right-0' : 'left-0'} w-80 glass rounded-2xl shadow-2xl z-50 overflow-hidden border border-brand-border/20 animate-in slide-in-from-top-2 fade-in duration-200`}>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border/15">
+            <div className={`flex items-center justify-between px-4 py-3 border-b border-brand-border/15 ${isEn ? '' : 'flex-row-reverse'}`}>
                 <div className="flex items-center gap-2">
                     <Bell size={14} className="text-brand-accent" />
                     <span className="text-[12px] font-black text-brand-egg">{isEn ? 'Notifications' : 'الإشعارات'}</span>
@@ -141,7 +141,7 @@ const NotificationCenter = ({ notifications, onRead, onClear, onNavigate, lang }
                     </div>
                 ) : notifications.map(n => (
                     <div key={n.id} onClick={() => { onRead(n.id); onNavigate(n.tab); }}
-                        className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.04] transition-colors ${!n.read ? 'bg-brand-accent/5' : ''}`}>
+                        className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.04] transition-colors ${!n.read ? 'bg-brand-accent/5' : ''} ${isEn ? '' : 'flex-row-reverse'}`}>
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${!n.read ? 'bg-brand-accent/15' : 'bg-brand-border/20'}`}>
                             {iconFor(n.type)}
                         </div>
@@ -928,7 +928,7 @@ const App = () => {
                                 className="relative flex items-center justify-center w-9 h-9 rounded-xl glass-subtle border border-brand-border/30 hover:border-brand-accent/30 transition-all">
                                 <Bell size={15} className={notifications.some(n=>!n.read) ? 'text-brand-accent' : 'text-brand-muted'} />
                                 {notifications.filter(n=>!n.read).length > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-accent text-[9px] font-black text-brand-bg flex items-center justify-center">
+                                    <span className={`absolute -top-1 ${lang === 'en' ? '-right-1' : '-left-1'} w-4 h-4 rounded-full bg-brand-accent text-[9px] font-black text-brand-bg flex items-center justify-center`}>
                                         {Math.min(notifications.filter(n=>!n.read).length, 9)}
                                     </span>
                                 )}
