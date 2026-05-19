@@ -382,27 +382,34 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         woo_consumer_secret:  (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
         webhook_url:          CONFIG.webhook_url  || sc.webhook_url  || '',
         loyalty_points:       CONFIG.loyalty_points || sc.loyalty_points || 10,
-        // WasenderAPI credentials are server-only (env vars) — expose only a boolean
-        wa_configured:        !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
+        // WasenderAPI credentials
+        wasender_session_id:     (CONFIG.wasender_session_id     || sc.wasender_session_id)     ? mask(CONFIG.wasender_session_id     || sc.wasender_session_id)     : '',
+        wasender_session_key:    (CONFIG.wasender_session_key    || sc.wasender_session_key)    ? mask(CONFIG.wasender_session_key    || sc.wasender_session_key)    : '',
+        wasender_webhook_secret: (CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) ? mask(CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) : '',
+        wa_configured:           !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
+        is_configured:           !!(sc.is_configured || sc.business_name),
     });
 });
 
 // حفظ الإعدادات في .env وتحديث CONFIG
 app.post('/api/config/setup', authMiddleware, async (req, res) => {
     const fields = {
-        BUSINESS_NAME:           'business_name',
-        SHOPIFY_URL:             'shopify_url',
-        SHOPIFY_ACCESS_TOKEN:    'shopify_access_token',
-        GEMINI_API_KEY:          'gemini_api_key',
-        GROQ_API_KEY:            'groq_api_key',
-        GROQ_MODEL:              'groq_model',
-        CATALOG_ID:              'catalog_id',
-        SERVER_URL:              'server_url',
-        WOO_URL:                 'woo_url',
-        WOO_CONSUMER_KEY:        'woo_consumer_key',
-        WOO_CONSUMER_SECRET:     'woo_consumer_secret',
-        WEBHOOK_URL:             'webhook_url',
-        LOYALTY_POINTS:          'loyalty_points',
+        BUSINESS_NAME:              'business_name',
+        SHOPIFY_URL:                'shopify_url',
+        SHOPIFY_ACCESS_TOKEN:       'shopify_access_token',
+        GEMINI_API_KEY:             'gemini_api_key',
+        GROQ_API_KEY:               'groq_api_key',
+        GROQ_MODEL:                 'groq_model',
+        CATALOG_ID:                 'catalog_id',
+        SERVER_URL:                 'server_url',
+        WOO_URL:                    'woo_url',
+        WOO_CONSUMER_KEY:           'woo_consumer_key',
+        WOO_CONSUMER_SECRET:        'woo_consumer_secret',
+        WEBHOOK_URL:                'webhook_url',
+        LOYALTY_POINTS:             'loyalty_points',
+        WASENDER_SESSION_ID:        'wasender_session_id',
+        WASENDER_SESSION_KEY:       'wasender_session_key',
+        WASENDER_WEBHOOK_SECRET:    'wasender_webhook_secret',
     };
 
     const envPath = path.join(__dirname, '.env');
@@ -431,6 +438,7 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
             'business_name','catalog_id','server_url','groq_api_key','gemini_api_key',
             'groq_model','woo_url','woo_consumer_key','woo_consumer_secret','webhook_url',
             'loyalty_points',
+            'wasender_session_id','wasender_session_key','wasender_webhook_secret',
         ];
         for (const key of scFields) {
             const v = req.body[key];
@@ -445,6 +453,7 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
         const st = req.body.shopify_access_token;
         if (st && !String(st).includes('••••'))
             updates.shopify_access_token = st;
+        if (req.body.is_configured === true) updates.is_configured = true;
         if (Object.keys(updates).length)
             await SystemConfig.findByIdAndUpdate('main', { $set: updates }, { upsert: true });
     } catch (e) {

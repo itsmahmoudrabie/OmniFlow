@@ -57,6 +57,8 @@ import {
     Copy,
     ExternalLink,
     LogOut,
+    Building,
+    Loader2,
 } from 'lucide-react';
 import { PricingPage as AuthPricingPage, RegisterPage, LoginPage } from './Auth';
 import { PricingPage } from './PricingPage';
@@ -4468,6 +4470,46 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
     const isEn = lang === 'en';
+    const [step, setStep] = React.useState(1); // 1 = business info, 2 = whatsapp, 3 = done
+    const [saving, setSaving] = React.useState(false);
+    const [testing, setTesting] = React.useState(false);
+    const [waStatus, setWaStatus] = React.useState(null); // null | 'ok' | 'error'
+    const [form, setForm] = React.useState({
+        business_name: '',
+        wasender_session_id: '',
+        wasender_session_key: '',
+        wasender_webhook_secret: '',
+    });
+    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    const testWa = async () => {
+        setTesting(true); setWaStatus(null);
+        try {
+            const r = await axios.post(`${API_URL}/config/test-whatsapp`, {
+                wasender_session_id: form.wasender_session_id,
+                wasender_session_key: form.wasender_session_key,
+            });
+            setWaStatus(r.data?.connected ? 'ok' : 'error');
+        } catch { setWaStatus('error'); }
+        setTesting(false);
+    };
+
+    const finish = async () => {
+        setSaving(true);
+        try {
+            await axios.post(`${API_URL}/config/setup`, { ...form, is_configured: true });
+            setStep(3);
+        } catch { }
+        setSaving(false);
+    };
+
+    const labelCls = 'text-[10px] font-bold text-brand-muted tracking-wider uppercase block mb-1.5';
+    const inputCls = 'w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-sm focus:border-brand-accent outline-none text-brand-egg';
+
+    // Step indicators
+    const steps = isEn
+        ? ['Business', 'WhatsApp', 'Done']
+        : ['معلومات المشروع', 'واتساب', 'جاهز'];
 
     return (
         <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4" dir={isEn ? 'ltr' : 'rtl'}>
@@ -4483,35 +4525,140 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                         <OmniFlowMark size={36} />
                         <h1 className="text-2xl font-bold text-brand-egg">Omni<span className="font-light">Flow</span></h1>
                     </div>
+                    {/* Step dots */}
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                        {steps.map((s, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${step > i + 1 ? 'bg-brand-accent text-brand-bg' : step === i + 1 ? 'bg-brand-accent text-brand-bg ring-2 ring-brand-accent/30' : 'bg-brand-input text-brand-muted'}`}>
+                                    {step > i + 1 ? '✓' : i + 1}
+                                </div>
+                                <span className={`text-[10px] font-bold ${step === i + 1 ? 'text-brand-accent' : 'text-brand-muted'}`}>{s}</span>
+                                {i < steps.length - 1 && <div className={`w-6 h-px mx-1 ${step > i + 1 ? 'bg-brand-accent' : 'bg-brand-border/30'}`} />}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Card */}
                 <div className="glass rounded-2xl overflow-hidden border border-brand-border/20">
-                    <div className="p-8 space-y-6">
-                            <div className="text-center space-y-2">
-                                <div className="w-14 h-14 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20">
-                                    <ShieldCheck size={28} className="text-brand-accent" />
+                    <div className="p-7 space-y-5">
+
+                        {/* ── Step 1: Business Info ── */}
+                        {step === 1 && <>
+                            <div className="text-center space-y-1">
+                                <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20 mb-3">
+                                    <Building size={22} className="text-brand-accent" />
                                 </div>
-                                <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Welcome to OmniFlow!' : 'أهلاً بك في OmniFlow!'}</h2>
-                                <p className="text-sm text-brand-muted">{isEn ? 'Your Shopify store is connected. You\'re ready to go.' : 'تم ربط متجر Shopify بنجاح. أنت جاهز للبدء.'}</p>
+                                <h2 className="text-lg font-black text-brand-egg">{isEn ? 'Your Business' : 'معلومات المشروع'}</h2>
+                                <p className="text-xs text-brand-muted">{isEn ? 'How should we call your business?' : 'ما اسم مشروعك أو متجرك؟'}</p>
+                            </div>
+                            <div>
+                                <label className={labelCls}>{isEn ? 'Business Name' : 'اسم المشروع'}</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder={isEn ? 'e.g. My Store' : 'مثال: متجري'}
+                                    value={form.business_name}
+                                    onChange={e => set('business_name', e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                            <button
+                                disabled={!form.business_name.trim()}
+                                onClick={() => setStep(2)}
+                                className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40">
+                                {isEn ? 'Next →' : 'التالي ←'}
+                            </button>
+                        </>}
+
+                        {/* ── Step 2: WhatsApp / WasenderAPI ── */}
+                        {step === 2 && <>
+                            <div className="text-center space-y-1">
+                                <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20 mb-3">
+                                    <MessageCircle size={22} className="text-brand-accent" />
+                                </div>
+                                <h2 className="text-lg font-black text-brand-egg">{isEn ? 'WhatsApp Connection' : 'ربط واتساب'}</h2>
+                                <p className="text-xs text-brand-muted">{isEn ? 'Enter your WasenderAPI credentials' : 'أدخل بيانات WasenderAPI الخاصة بك'}</p>
                             </div>
                             <div className="space-y-3">
-                                {[
-                                    { icon: '✅', text: isEn ? 'Shopify store connected' : 'تم ربط متجر Shopify' },
-                                    { icon: '💬', text: isEn ? 'WhatsApp configured by our team' : 'تم إعداد واتساب من قِبَل فريقنا' },
-                                    { icon: '🚀', text: isEn ? 'Ready to receive orders & messages' : 'جاهز لاستقبال الطلبات والرسائل' },
-                                ].map((item, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/15">
-                                        <span className="text-lg">{item.icon}</span>
-                                        <p className="text-sm font-bold text-brand-egg">{item.text}</p>
-                                    </div>
-                                ))}
+                                <div>
+                                    <label className={labelCls}>Session ID</label>
+                                    <input className={inputCls} dir="ltr" placeholder="session_xxxx"
+                                        value={form.wasender_session_id}
+                                        onChange={e => { set('wasender_session_id', e.target.value); setWaStatus(null); }} />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Session Key / API Key</label>
+                                    <input className={inputCls} dir="ltr" placeholder="wsk_xxxx" type="password"
+                                        value={form.wasender_session_key}
+                                        onChange={e => { set('wasender_session_key', e.target.value); setWaStatus(null); }} />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>{isEn ? 'Webhook Secret (optional)' : 'Webhook Secret (اختياري)'}</label>
+                                    <input className={inputCls} dir="ltr" placeholder="whsec_xxxx" type="password"
+                                        value={form.wasender_webhook_secret}
+                                        onChange={e => set('wasender_webhook_secret', e.target.value)} />
+                                </div>
+                                {/* Test button */}
+                                {form.wasender_session_id && form.wasender_session_key && (
+                                    <button onClick={testWa} disabled={testing}
+                                        className="flex items-center gap-2 text-xs font-bold text-brand-accent hover:opacity-80 transition-all disabled:opacity-50">
+                                        {testing ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                                        {isEn ? 'Test connection' : 'اختبر الاتصال'}
+                                        {waStatus === 'ok' && <span className="text-green-400">✓ {isEn ? 'Connected' : 'متصل'}</span>}
+                                        {waStatus === 'error' && <span className="text-red-400">✗ {isEn ? 'Failed' : 'فشل'}</span>}
+                                    </button>
+                                )}
                             </div>
-                            <button onClick={() => onComplete('')}
+                            <div className="flex gap-3">
+                                <button onClick={() => setStep(1)}
+                                    className="flex-1 border border-brand-border/30 text-brand-muted py-3 rounded-xl font-bold hover:text-brand-egg transition-all text-sm">
+                                    {isEn ? '← Back' : '→ رجوع'}
+                                </button>
+                                <button onClick={finish} disabled={saving || !form.wasender_session_id || !form.wasender_session_key}
+                                    className="flex-2 flex-grow bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40 flex items-center justify-center gap-2">
+                                    {saving && <Loader2 size={14} className="animate-spin" />}
+                                    {isEn ? 'Save & Start' : 'حفظ والبدء'}
+                                </button>
+                            </div>
+                            <p className="text-center text-[11px] text-brand-muted">
+                                <button onClick={finish} disabled={saving} className="underline hover:text-brand-egg transition-colors">
+                                    {isEn ? 'Skip for now' : 'تخطي الآن'}
+                                </button>
+                            </p>
+                        </>}
+
+                        {/* ── Step 3: Done ── */}
+                        {step === 3 && <>
+                            <div className="text-center space-y-4 py-2">
+                                <div className="w-16 h-16 bg-brand-accent/10 rounded-full flex items-center justify-center mx-auto border-2 border-brand-accent/30">
+                                    <CheckCircle size={32} className="text-brand-accent" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-brand-egg">{isEn ? 'All set!' : 'كل شيء جاهز!'}</h2>
+                                    <p className="text-sm text-brand-muted mt-1">
+                                        {isEn ? 'Your setup is saved. You\'ll go straight to the dashboard next time.' : 'تم حفظ إعداداتك. في المرة القادمة ستنتقل مباشرة للوحة التحكم.'}
+                                    </p>
+                                </div>
+                                <div className="space-y-2 text-start">
+                                    {[
+                                        { icon: '🏪', text: isEn ? `Business: ${form.business_name}` : `المشروع: ${form.business_name}` },
+                                        { icon: '🛍️', text: isEn ? 'Shopify store connected' : 'تم ربط متجر Shopify' },
+                                        { icon: '💬', text: form.wasender_session_id ? (isEn ? 'WhatsApp configured' : 'تم إعداد واتساب') : (isEn ? 'WhatsApp: configure later in Settings' : 'واتساب: أكمل الإعداد لاحقاً') },
+                                    ].map((item, i) => (
+                                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/15">
+                                            <span>{item.icon}</span>
+                                            <p className="text-xs font-bold text-brand-egg">{item.text}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={() => onComplete(form.business_name)}
                                 className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm">
                                 {isEn ? 'Go to Dashboard →' : 'الذهاب للوحة التحكم ←'}
                             </button>
-                        </div>
+                        </>}
+
+                    </div>
                 </div>
             </div>
         </div>
