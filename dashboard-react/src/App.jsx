@@ -411,6 +411,11 @@ const App = () => {
         try { return JSON.parse(localStorage.getItem('omni_tenant') || 'null'); } catch { return null; }
     });
     const [showPricing, setShowPricing] = useState(false);
+    const [isConfigured, setIsConfigured] = useState(() => {
+        const cached = localStorage.getItem('omni_configured');
+        if (cached !== null) return cached === 'true';
+        return true;
+    });
 
     // ── Loading screen state ─────────────────────────────────────────────────
     const [loadingScreen, setLoadingScreen] = useState(() => {
@@ -428,13 +433,17 @@ const App = () => {
     const handleLogin = (token, tenant, shopDomain = null) => {
         localStorage.setItem('omni_token', token);
         localStorage.setItem('omni_tenant', JSON.stringify(tenant));
+        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name);
+        localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         if (shopDomain) localStorage.setItem('omni_shop', shopDomain);
         setAuthTenant(tenant);
+        setIsConfigured(isConf);
         setAuthScreen(null);
     };
     const handleLogout = () => {
         localStorage.removeItem('omni_token');
         localStorage.removeItem('omni_tenant');
+        localStorage.removeItem('omni_configured');
         localStorage.removeItem('omni_shop');
         localStorage.removeItem('omni_tab');
         setAuthTenant(null);
@@ -503,7 +512,10 @@ const App = () => {
                 persistShop(tenant?.config?.shopify_url || shop);
                 localStorage.setItem('omni_token', token);
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
+                const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name);
+                localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
                 setAuthTenant(tenant);
+                setIsConfigured(isConf);
                 setAuthScreen(null);
                 
                 // Check Shopify connection in the background so it doesn't block the UI
@@ -535,6 +547,11 @@ const App = () => {
                     persistShop(r.data?.config?.shopify_url);
                     setLoadingStep(2);
                     setAuthTenant(r.data);
+                    
+                    const isConf = !!(r.data?.config?.is_configured || r.data?.config?.business_name);
+                    setIsConfigured(isConf);
+                    localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
+                    
                     setAuthScreen(null);
                     
                     // Check Shopify connection in the background so it doesn't block the UI
@@ -546,6 +563,9 @@ const App = () => {
                     setShowWelcome(true);
                 } catch {
                     localStorage.removeItem('omni_token');
+                    localStorage.removeItem('omni_tenant');
+                    localStorage.removeItem('omni_configured');
+                    setAuthTenant(null);
                     if (shop) {
                         await tryAutoReconnect(shop);
                     } else {
@@ -574,7 +594,6 @@ const App = () => {
     const [abandonedCarts, setAbandonedCarts] = useState([]);
     const [catalogId, setCatalogId] = useState('');
     const [businessName, setBusinessName] = useState('');
-    const [isConfigured, setIsConfigured] = useState(true);
 
     // ── Notifications + Search state ────────────────────────────────────────
     const [notifications, setNotifications] = React.useState([]);
@@ -804,7 +823,7 @@ const App = () => {
     if (needsPlan || showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={showPricing ? () => setShowPricing(false) : null} />;
 
     if (!isConfigured) {
-        return <OnboardingScreen lang={lang} onLangChange={setLang} tenant={authTenant} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
+        return <OnboardingScreen lang={lang} onLangChange={setLang} tenant={authTenant} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); localStorage.setItem('omni_configured', 'true'); }} />;
     }
 
     return (
