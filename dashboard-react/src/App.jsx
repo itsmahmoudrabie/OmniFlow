@@ -413,9 +413,8 @@ const App = () => {
     const [showPricing, setShowPricing] = useState(false);
     const [isConfigured, setIsConfigured] = useState(() => {
         const cached = localStorage.getItem('omni_configured');
-        if (cached === 'true') return true;
-        if (localStorage.getItem('omni_shop')) return true;
-        return cached === 'null' ? true : cached === 'true';
+        if (cached !== null) return cached === 'true';
+        return true;
     });
 
     // ── Loading screen state ─────────────────────────────────────────────────
@@ -434,7 +433,7 @@ const App = () => {
     const handleLogin = (token, tenant, shopDomain = null) => {
         localStorage.setItem('omni_token', token);
         localStorage.setItem('omni_tenant', JSON.stringify(tenant));
-        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url || shopDomain);
+        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url);
         localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         if (shopDomain) localStorage.setItem('omni_shop', shopDomain);
         setAuthTenant(tenant);
@@ -721,7 +720,9 @@ const App = () => {
         try {
             const res = await axios.get(`${API_URL}/config/setup`);
             if (res.data?.business_name) setBusinessName(res.data.business_name);
-            setIsConfigured(res.data?.is_configured ?? true);
+            const isConf = !!(res.data?.is_configured || res.data?.business_name || res.data?.shopify_url);
+            setIsConfigured(isConf);
+            localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         } catch (e) { console.error(e); }
     };
 
