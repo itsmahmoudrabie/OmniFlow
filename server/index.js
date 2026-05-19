@@ -1305,14 +1305,16 @@ app.post('/webhook/wasender', async (req, res) => {
 
     if (CONFIG.wasender_webhook_secret) {
         const signature = req.get('X-Webhook-Signature') || req.get('X-Wasender-Signature') || req.get('X-Hub-Signature-256') || '';
-        const expected  = `sha256=${crypto.createHmac('sha256', CONFIG.wasender_webhook_secret).update(rawBody).digest('hex')}`;
-        try {
-            if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-                console.warn('[WasenderWebhook] Invalid signature received. Continuing anyway for debug purposes.');
-                // return res.status(401).send('Invalid signature'); // Disabled temporarily to debug
-            }
-        } catch { 
-            console.warn('[WasenderWebhook] Signature check crashed. Continuing anyway for debug purposes.');
+        
+        // WasenderAPI sends the raw secret string in the header (or sometimes a hash, we check both just in case)
+        const expectedHash = `sha256=${crypto.createHmac('sha256', CONFIG.wasender_webhook_secret).update(rawBody).digest('hex')}`;
+        
+        const isRawMatch = signature === CONFIG.wasender_webhook_secret;
+        const isHashMatch = signature === expectedHash;
+
+        if (!isRawMatch && !isHashMatch) {
+            console.warn('[WasenderWebhook] Invalid signature received! Expected:', CONFIG.wasender_webhook_secret, 'Got:', signature);
+            return res.status(401).send('Invalid signature');
         }
     }
 
