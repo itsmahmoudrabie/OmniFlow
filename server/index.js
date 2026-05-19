@@ -187,6 +187,18 @@ const CONFIG = {
     loyalty_points: parseInt(process.env.LOYALTY_POINTS || '10')
 };
 
+// Auto-detect server URL dynamically if not configured
+app.use((req, res, next) => {
+    if (!CONFIG.server_url) {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        if (host) {
+            CONFIG.server_url = `${protocol}://${host}`;
+        }
+    }
+    next();
+});
+
 // Mount Shopify OAuth routes synchronously now that CONFIG exists.
 mountShopifyOAuth(app, CONFIG);
 

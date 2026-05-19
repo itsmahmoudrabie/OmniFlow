@@ -4478,8 +4478,15 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
     });
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-    const [shopUrl, setShopUrl] = React.useState(tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '');
-    const [shopifyConnected, setShopifyConnected] = React.useState(!!tenant?.config?.shopify_url);
+    const [shopUrl, setShopUrl] = React.useState(() => {
+        const queryParams = new URLSearchParams(window.location.search);
+        const urlShop = queryParams.get('shop');
+        if (urlShop) {
+            return urlShop.replace(/https?:\/\//i, '').replace(/\/$/, '');
+        }
+        return tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '';
+    });
+    const [shopifyConnected, setShopifyConnected] = React.useState(!!tenant?.config?.shopify_url || !!(new URLSearchParams(window.location.search).get('shop')));
     const [connectingShop, setConnectingShop] = React.useState(false);
 
     const connectShopify = async () => {
