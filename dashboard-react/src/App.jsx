@@ -538,7 +538,7 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     setAuthScreen(null);
-                    try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { timeout: 8000 }); } catch (_) {}
+                    try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }); } catch (_) {}
                     await delay(350);
                     setLoadingStep(3);
                     await delay(500);
