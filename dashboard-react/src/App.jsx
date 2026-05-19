@@ -413,7 +413,16 @@ const App = () => {
     const [showPricing, setShowPricing] = useState(false);
     const [isConfigured, setIsConfigured] = useState(() => {
         const cached = localStorage.getItem('omni_configured');
-        if (cached !== null) return cached === 'true';
+        if (cached === 'true') return true;
+        
+        try {
+            const tenant = JSON.parse(localStorage.getItem('omni_tenant') || 'null');
+            if (tenant?.config?.shopify_url || localStorage.getItem('omni_shop')) {
+                return true;
+            }
+        } catch (e) {}
+
+        if (cached === 'false') return false;
         return true;
     });
 
@@ -4503,7 +4512,9 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
         if (cached) return cached;
         return tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '';
     });
-    const [shopifyConnected, setShopifyConnected] = React.useState(false);
+    const [shopifyConnected, setShopifyConnected] = React.useState(() => {
+        return !!(tenant?.config?.shopify_url || localStorage.getItem('omni_shop'));
+    });
     const [connectingShop, setConnectingShop] = React.useState(false);
 
     const connectShopify = async () => {
