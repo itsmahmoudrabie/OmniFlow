@@ -49,6 +49,7 @@ const tenantSchema = new mongoose.Schema({
         ai_auto_reply:       { type: Boolean, default: true },
         ai_instruction:      { type: String, default: '' },
         language:            { type: String, default: 'ar' },
+        is_configured:       { type: Boolean, default: false },
     },
 
     // Limits per plan
