@@ -2402,19 +2402,24 @@ app.delete('/api/quick-replies/:id', (req, res) => {
 // ─────────────────────────────────────────────
 //  البث المجدول (Scheduled Broadcasts)
 // ─────────────────────────────────────────────
-app.get('/api/broadcasts', (_req, res) => {
+// ─────────────────────────────────────────────
+//  البث المجدول (Scheduled Broadcasts)
+// ─────────────────────────────────────────────
+app.get('/api/broadcasts', authMiddleware, (req, res) => {
     let list = loadJSON(BROADCASTS_FILE);
     if (!Array.isArray(list)) list = [];
-    res.json(list);
+    const tenantId = req.tenant?._id;
+    res.json(list.filter(b => b.tenant_id === tenantId || !b.tenant_id));
 });
 
-app.post('/api/broadcasts', (req, res) => {
+app.post('/api/broadcasts', authMiddleware, (req, res) => {
     const { name, scheduled_at, campaign_type, template_id, message_text, template_image_url, target_tag } = req.body;
     if (!scheduled_at) return res.status(400).json({ error: 'scheduled_at is required' });
     let list = loadJSON(BROADCASTS_FILE);
     if (!Array.isArray(list)) list = [];
     const item = {
         id: `bc_${Date.now()}`,
+        tenant_id: req.tenant?._id || 'global',
         name: name || 'Scheduled Broadcast',
         scheduled_at,
         campaign_type: campaign_type || 'template',
@@ -2430,10 +2435,11 @@ app.post('/api/broadcasts', (req, res) => {
     res.json(item);
 });
 
-app.delete('/api/broadcasts/:id', (req, res) => {
+app.delete('/api/broadcasts/:id', authMiddleware, (req, res) => {
     let list = loadJSON(BROADCASTS_FILE);
     if (!Array.isArray(list)) list = [];
-    const item = list.find(b => b.id === req.params.id);
+    const tenantId = req.tenant?._id;
+    const item = list.find(b => b.id === req.params.id && (b.tenant_id === tenantId || !b.tenant_id));
     if (item && item.status === 'pending') item.status = 'cancelled';
     saveJSON(BROADCASTS_FILE, list);
     res.json({ success: true });
@@ -2446,53 +2452,63 @@ const processBroadcasts = async () => {
     const due = list.filter(b => b.status === 'pending' && new Date(b.scheduled_at) <= now);
     if (!due.length) return;
 
-    // ── جمع أرقام الهواتف من كل المصادر ─────────────────────────────────────
-    const phoneMap = new Map(); // phone → customerName
-
-    // 1. من الطلبات المحلية
-    let localOrders = loadJSON(DB_FILE);
-    if (Array.isArray(localOrders)) localOrders = {};
-    for (const key in localOrders) {
-        const o = localOrders[key];
-        if (o?.phone) phoneMap.set(o.phone, o.name || 'عميل');
-    }
-
-    // 2. من المحادثات (صندوق الوارد)
-    const inbox = loadJSON(INBOX_FILE);
-    if (Array.isArray(inbox)) {
-        inbox.forEach(c => { if (c.phone) phoneMap.set(normalizePhone(c.phone), c.name || 'عميل'); });
-    }
-
-    // 3. من شوبيفاي (طلبات + كل العملاء)
-    try {
-        const _sUrl   = CONFIG.shopify_url   || '';
-        const _sToken = CONFIG.shopify_access_token || '';
-        if (_sUrl && _sToken) {
-            const [ordersRes, custRes] = await Promise.all([
-                axios.get(`https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`,
-                    { headers: { 'X-Shopify-Access-Token': _sToken } }),
-                axios.get(`https://${_sUrl}/admin/api/2024-04/customers.json?limit=250`,
-                    { headers: { 'X-Shopify-Access-Token': _sToken } }),
-            ]);
-            ordersRes.data.orders?.forEach(o => {
-                const phone = (o.shipping_address?.phone || o.customer?.phone || '').replace(/[^\d]/g, '');
-                const name = o.shipping_address?.first_name || o.customer?.first_name || 'عميل';
-                if (phone) phoneMap.set(phone, name);
-            });
-            custRes.data.customers?.forEach(c => {
-                const phone = (c.phone || c.default_address?.phone || '').replace(/[^\d]/g, '');
-                const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'عميل';
-                if (phone && !phoneMap.has(phone)) phoneMap.set(phone, name);
-            });
-        }
-    } catch (e) {
-        console.error('[Broadcasts] Shopify fetch error:', e.message);
-    }
-
     const templates = loadJSON(TEMPLATES_FILE);
 
     // ── تنفيذ كل broadcast مستحق ───────────────────────────────────────────────
     for (const broadcast of due) {
+        // Build isolated phoneMap for this broadcast's tenant
+        const phoneMap = new Map();
+
+        try {
+            const tenantId = broadcast.tenant_id;
+            let _sUrl = '';
+            let _sToken = '';
+            if (tenantId && tenantId !== 'global') {
+                const Tenant = require('./models/Tenant');
+                const tenant = await Tenant.findById(tenantId);
+                const credentials = getShopifyForTenant(tenant);
+                _sUrl = credentials.shopify_url;
+                _sToken = credentials.shopify_access_token;
+            }
+            if (!_sUrl) _sUrl = CONFIG.shopify_url || '';
+            if (!_sToken) _sToken = CONFIG.shopify_access_token || '';
+
+            if (_sUrl && _sToken) {
+                const [ordersRes, custRes] = await Promise.all([
+                    axios.get(`https://${_sUrl}/admin/api/2024-04/orders.json?status=any&limit=250`,
+                        { headers: { 'X-Shopify-Access-Token': _sToken } }),
+                    axios.get(`https://${_sUrl}/admin/api/2024-04/customers.json?limit=250`,
+                        { headers: { 'X-Shopify-Access-Token': _sToken } }),
+                ]);
+                ordersRes.data.orders?.forEach(o => {
+                    const phone = (o.shipping_address?.phone || o.customer?.phone || '').replace(/[^\d]/g, '');
+                    const name = o.shipping_address?.first_name || o.customer?.first_name || 'عميل';
+                    if (phone) phoneMap.set(phone, name);
+                });
+                custRes.data.customers?.forEach(c => {
+                    const phone = (c.phone || c.default_address?.phone || '').replace(/[^\d]/g, '');
+                    const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'عميل';
+                    if (phone && !phoneMap.has(phone)) phoneMap.set(phone, name);
+                });
+            }
+        } catch (e) {
+            console.error(`[Broadcasts] Shopify fetch error for campaign ${broadcast.name}:`, e.message);
+        }
+
+        // Fallback to local files if no Shopify customers fetched for this tenant/global
+        if (phoneMap.size === 0) {
+            let localOrders = loadJSON(DB_FILE);
+            if (Array.isArray(localOrders)) localOrders = {};
+            for (const key in localOrders) {
+                const o = localOrders[key];
+                if (o?.phone) phoneMap.set(o.phone, o.name || 'عميل');
+            }
+            const inbox = loadJSON(INBOX_FILE);
+            if (Array.isArray(inbox)) {
+                inbox.forEach(c => { if (c.phone) phoneMap.set(normalizePhone(c.phone), c.name || 'عميل'); });
+            }
+        }
+
         console.log(`[Broadcasts] Firing "${broadcast.name}" → ${phoneMap.size} recipients`);
         broadcast.status = 'running';
         saveJSON(BROADCASTS_FILE, list);
@@ -2504,11 +2520,9 @@ const processBroadcasts = async () => {
                 let msgObj;
 
                 if (broadcast.campaign_type === 'template' && broadcast.template_id) {
-                    // القوالب: استبدال المتغيرات وإرسال نصاً عادياً عبر WasenderAPI
                     const tpl = templates[broadcast.template_id];
                     if (!tpl) { fail++; continue; }
                     let body = tpl.body || tpl.content || '';
-                    // استبدال {{1}} و{{name}} باسم العميل
                     body = body
                         .replace(/\{\{1\}\}/g, customerName)
                         .replace(/\{\{name\}\}/gi, customerName);
@@ -2518,7 +2532,6 @@ const processBroadcasts = async () => {
                         msgObj = { messageType: 'text', text: body };
                     }
                 } else if (broadcast.message_text) {
-                    // رسالة نصية حرة مع استبدال [Name]
                     const text = broadcast.message_text
                         .replace(/\[Name\]/gi, customerName)
                         .replace(/\{\{name\}\}/gi, customerName);
@@ -2533,7 +2546,7 @@ const processBroadcasts = async () => {
                 console.error(`[Broadcasts] Failed → ${phone}:`, e.message);
                 fail++;
             }
-            await new Promise(r => setTimeout(r, 1500)); // تأخير بين الرسائل لتجنب الحظر
+            await new Promise(r => setTimeout(r, 1500)); // Delay to avoid ban
         }
 
         broadcast.status = 'done';
