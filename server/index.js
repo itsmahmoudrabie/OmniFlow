@@ -8,7 +8,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 const FormData = require('form-data');
 const mongoose = require('mongoose');
-const { authMiddleware } = require('./middleware/auth');
+const { authMiddleware, DEV_TENANT } = require('./middleware/auth');
+const { tenantStorage, getTenantId } = require('./tenantStorage');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/omniflow';
 
@@ -225,16 +226,27 @@ if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR);
 // ─────────────────────────────────────────────
 //  قواعد البيانات المحلية (JSON)
 // ─────────────────────────────────────────────
+const getTenantFile = (file) => {
+    const tid = getTenantId();
+    if (tid === 'global') return file;
+    const basename = path.basename(file);
+    const tenantDir = path.join(__dirname, 'data', 'tenants', String(tid));
+    if (!fs.existsSync(tenantDir)) fs.mkdirSync(tenantDir, { recursive: true });
+    return path.join(tenantDir, basename);
+};
+
 const loadJSON = (file) => {
-    if (!fs.existsSync(file)) return [];
+    const targetFile = getTenantFile(file);
+    if (!fs.existsSync(targetFile)) return [];
     try {
-        const data = fs.readFileSync(file, 'utf8');
+        const data = fs.readFileSync(targetFile, 'utf8');
         return data ? JSON.parse(data) : [];
     } catch (e) { return []; }
 };
 
 const saveJSON = (file, data) => {
-    fs.writeFileSync(file, JSON.stringify(data, null, 4), 'utf8');
+    const targetFile = getTenantFile(file);
+    fs.writeFileSync(targetFile, JSON.stringify(data, null, 4), 'utf8');
 };
 
 const fireWebhook = (event, data) => {
@@ -1864,7 +1876,7 @@ const sendAutoMessage = async (phone, step, customerName, eventPayload) => {
     saveJSON(INBOX_FILE, inbox.slice(0, 100));
 };
 
-const runQueueCycle = async () => {
+const _runQueueCycleCore = async () => {
     try {
         let queue = loadJSON(AUTOMATION_QUEUE_FILE);
         if (!Array.isArray(queue) || queue.length === 0) return;
@@ -1923,12 +1935,21 @@ const runQueueCycle = async () => {
     }
 };
 
-const processAutomationQueue = () => {
-    runQueueCycle();
-    setInterval(runQueueCycle, 60 * 1000);
+
+const runQueueCycle = async () => {
+    try {
+        const Tenant = mongoose.model('Tenant');
+        const tenants = await Tenant.find({});
+        for (const t of tenants) {
+            await new Promise(resolve => tenantStorage.run({ tenantId: t._id.toString() }, async () => {
+                await _runQueueCycleCore();
+                resolve();
+            }));
+        }
+    } catch (e) { console.error('[QueueCycle] Error:', e.message); }
 };
 
-processAutomationQueue();
+setInterval(runQueueCycle, 60 * 1000);
 
 // ─────────────────────────────────────────────
 //  AI Helper — Groq first, Gemini fallback
@@ -2224,10 +2245,8 @@ app.get('/api/shipping/track/:provider/:awb', async (req, res) => {
     }
 });
 
-const startAutomatedDripCampaigns = () => {
-    setInterval(async () => {
+const _processDripCampaignsCore = async () => {
         try {
-            console.log("[Automated Campaigns] Checking for abandoned carts and unconfirmed orders...");
             let localOrders = loadJSON(DB_FILE);
             if (Array.isArray(localOrders)) localOrders = {};
             
@@ -2279,12 +2298,23 @@ const startAutomatedDripCampaigns = () => {
             if (updated) {
                 saveJSON(DB_FILE, localOrders);
             }
-        } catch (e) {
-            console.error("[Automated Campaigns] Error executing drip schedule:", e.message);
-        }
+    } catch (e) {
+        console.error("[Automated Campaigns] Error executing drip schedule:", e.message);
+    }
+};
 
-
-
+const startAutomatedDripCampaigns = () => {
+    setInterval(async () => {
+        try {
+            const Tenant = mongoose.model('Tenant');
+            const tenants = await Tenant.find({});
+            for (const t of tenants) {
+                await new Promise(resolve => tenantStorage.run({ tenantId: t._id.toString() }, async () => {
+                    await _processDripCampaignsCore();
+                    resolve();
+                }));
+            }
+        } catch (e) { console.error('[DripCampaigns] Tenant loop error:', e.message); }
     }, 60 * 60 * 1000);
 };
 
@@ -2499,7 +2529,7 @@ app.delete('/api/broadcasts/:id', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
-const processBroadcasts = async () => {
+const _processBroadcastsCore = async () => {
     let list = loadJSON(BROADCASTS_FILE);
     if (!Array.isArray(list)) list = [];
     const now = new Date();
@@ -2610,6 +2640,19 @@ const processBroadcasts = async () => {
         console.log(`[Broadcasts] Done: ${success} sent, ${fail} failed`);
     }
     saveJSON(BROADCASTS_FILE, list);
+};
+
+const processBroadcasts = async () => {
+    try {
+        const Tenant = mongoose.model('Tenant');
+        const tenants = await Tenant.find({});
+        for (const t of tenants) {
+            await new Promise(resolve => tenantStorage.run({ tenantId: t._id.toString() }, async () => {
+                await _processBroadcastsCore();
+                resolve();
+            }));
+        }
+    } catch (e) { console.error('[Broadcasts] Error:', e.message); }
 };
 
 setInterval(processBroadcasts, 60 * 1000);

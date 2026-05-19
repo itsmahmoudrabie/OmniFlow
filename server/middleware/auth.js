@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { tenantStorage } = require('../tenantStorage');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'omniflow-secret-change-in-prod';
 const DEV_MODE = process.env.DEV_MODE === 'true' || process.env.NODE_ENV !== 'production';
@@ -36,7 +37,7 @@ const authMiddleware = async (req, res, next) => {
         // Admin bypass: always works regardless of DEV_MODE
         if (decoded.id === 'dev-admin-001') {
             req.tenant = DEV_TENANT;
-            return next();
+            return tenantStorage.run({ tenantId: DEV_TENANT._id.toString() }, () => next());
         }
 
         // Production: look up in MongoDB
@@ -52,7 +53,7 @@ const authMiddleware = async (req, res, next) => {
         }
 
         req.tenant = tenant;
-        next();
+        tenantStorage.run({ tenantId: tenant._id.toString() }, () => next());
     } catch (e) {
         res.status(401).json({ error: 'Invalid token' });
     }
