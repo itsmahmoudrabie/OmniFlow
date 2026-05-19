@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const { authMiddleware, DEV_TENANT } = require('../middleware/auth');
-const { getShopToken, loadShops } = require('../shopify-oauth');
 
 let Tenant = null;
 try { Tenant = require('../models/Tenant'); } catch (_) {}
@@ -38,16 +37,11 @@ router.post('/create-charge', authMiddleware, async (req, res) => {
     if (!PLAN_PRICES[plan]) return res.status(400).json({ error: 'Invalid plan' });
 
     const t = req.tenant;
-    // Get shop from tenant or from shops.json
-    let shop = t.shopifyShop || t.config?.shopify_url?.replace('https://', '');
-    if (!shop) {
-        // Try to find from shops.json — pick first installed shop
-        const shops = loadShops();
-        shop = Object.keys(shops)[0];
-    }
+    const shop = (t.shopifyShop || t.config?.shopify_url || '')
+        .replace(/https?:\/\//i, '').replace(/\/$/, '').trim();
     if (!shop) return res.status(400).json({ error: 'No Shopify store connected' });
 
-    const accessToken = getShopToken(shop);
+    const accessToken = t.config?.shopify_access_token || '';
     if (!accessToken) return res.status(400).json({ error: 'Shop not authenticated' });
 
     const returnUrl = `${APP_URL()}/api/billing/callback?tenant_id=${t._id}&plan=${plan}`;
@@ -92,15 +86,11 @@ router.get('/callback', async (req, res) => {
         tenant = await Tenant.findById(tenant_id).catch(() => null);
     }
 
-    // Get shop
-    let shop = tenant?.shopifyShop;
-    if (!shop) {
-        const shops = loadShops();
-        shop = Object.keys(shops)[0];
-    }
+    const shop = (tenant?.shopifyShop || tenant?.config?.shopify_url || '')
+        .replace(/https?:\/\//i, '').replace(/\/$/, '').trim();
     if (!shop) return res.status(400).send('No shop found');
 
-    const accessToken = getShopToken(shop);
+    const accessToken = tenant?.config?.shopify_access_token || '';
     if (!accessToken) return res.status(400).send('Shop not authenticated');
 
     try {
