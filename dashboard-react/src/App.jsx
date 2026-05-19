@@ -435,7 +435,7 @@ const App = () => {
     const handleLogin = (token, tenant, shopDomain = null) => {
         localStorage.setItem('omni_token', token);
         localStorage.setItem('omni_tenant', JSON.stringify(tenant));
-        const isConf = !!(tenant?.config?.shopify_url);
+        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url);
         localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         if (shopDomain) localStorage.setItem('omni_shop', shopDomain);
         setAuthTenant(tenant);
@@ -514,7 +514,7 @@ const App = () => {
                 persistShop(tenant?.config?.shopify_url || shop);
                 localStorage.setItem('omni_token', token);
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
-                const isConf = !!(tenant?.config?.shopify_url);
+                const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url);
                 localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
                 setAuthTenant(tenant);
                 setIsConfigured(isConf);
@@ -550,7 +550,7 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     
-                    const isConf = !!(r.data?.config?.shopify_url);
+                    const isConf = !!(r.data?.config?.is_configured || r.data?.config?.business_name || r.data?.config?.shopify_url);
                     setIsConfigured(isConf);
                     localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
                     
@@ -722,7 +722,7 @@ const App = () => {
         try {
             const res = await axios.get(`${API_URL}/config/setup`);
             if (res.data?.business_name) setBusinessName(res.data.business_name);
-            const isConf = !!(res.data?.shopify_url);
+            const isConf = !!(res.data?.is_configured || res.data?.business_name || res.data?.shopify_url);
             setIsConfigured(isConf);
             localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         } catch (e) { console.error(e); }
@@ -5078,10 +5078,24 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     const [showSecrets, setShowSecrets] = React.useState({});
     const logoRef = React.useRef(null);
 
-    // Shopify token generation flow
-    const [shopifyAuthUrl, setShopifyAuthUrl] = React.useState('');
-    const [shopifyRedirectUrl, setShopifyRedirectUrl] = React.useState('');
-    const [shopifyExchanging, setShopifyExchanging] = React.useState(false);
+    const [connectingShop, setConnectingShop] = React.useState(false);
+    const [connectUrlInput, setConnectUrlInput] = React.useState('');
+
+    const connectShopify = async () => {
+        const cleanUrl = connectUrlInput.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+        if (!cleanUrl) return alert(isEn ? 'Enter domain first' : 'أدخل الدومين أولاً');
+        if (!cleanUrl.includes('.myshopify.com')) return alert(isEn ? 'Invalid domain' : 'الدومين غير صحيح، يجب أن ينتهي بـ .myshopify.com');
+        setConnectingShop(true);
+        try {
+            const r = await axios.post(`${API_URL}/shopify/fetch-token`, { shop: cleanUrl });
+            setWs(p => ({ ...p, shopify_store: cleanUrl, shopify_key: 'connected' }));
+            showToast(isEn ? 'Connected successfully!' : 'تم الربط بنجاح!', 'success');
+        } catch (e) {
+            const err = e.response?.data?.error || e.message;
+            alert(isEn ? `Connection failed: ${err}` : `فشل الربط: ${err}`);
+        }
+        setConnectingShop(false);
+    };
 
     // ── Load ────────────────────────────────────────────────────────────────
     React.useEffect(() => {
@@ -5394,6 +5408,24 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                             </span>
                         </div>
                     </div>
+                    
+                    {!shopConnected && (
+                        <div className="flex gap-2 mt-4">
+                            <input
+                                className="flex-grow bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2.5 text-sm focus:border-brand-accent outline-none text-brand-egg font-mono"
+                                dir="ltr"
+                                placeholder="my-store.myshopify.com"
+                                value={connectUrlInput}
+                                onChange={e => setConnectUrlInput(e.target.value)}
+                            />
+                            <button
+                                onClick={connectShopify}
+                                disabled={connectingShop || !connectUrlInput.trim()}
+                                className="px-4 py-2.5 bg-brand-accent text-brand-bg font-bold text-xs rounded-xl hover:opacity-90 disabled:opacity-40 transition-all flex items-center justify-center shrink-0">
+                                {connectingShop ? <Loader2 size={14} className="animate-spin" /> : (isEn ? 'Connect' : 'ربط')}
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {shopConnected && integrations.shopify && (

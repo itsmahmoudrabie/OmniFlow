@@ -384,8 +384,8 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
     const shopifyToken = tenantShopToken || CONFIG.shopify_access_token || sc.shopify_access_token || '';
     
     const isConfigured = isNormalTenant 
-        ? !!(req.tenant.config?.shopify_url) 
-        : !!(sc.shopify_url);
+        ? !!(req.tenant.config?.is_configured || req.tenant.config?.business_name || req.tenant.config?.shopify_url) 
+        : !!(sc.is_configured || sc.business_name || sc.shopify_url);
 
     res.json({
         business_name:        businessName,
