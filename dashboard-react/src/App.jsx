@@ -483,8 +483,6 @@ const App = () => {
     useEffect(() => {
         if (!loadingScreen || window.location.hash.includes('shopify_token=')) return;
 
-        const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
         // Extract clean shop domain from a URL and save to localStorage
         const persistShop = (shopUrl) => {
             if (!shopUrl) return;
@@ -495,7 +493,6 @@ const App = () => {
         const tryAutoReconnect = async (shop) => {
             try {
                 setLoadingStep(1);
-                await delay(500);
                 const r = await axios.post(`${API_URL}/auth/auto-reconnect`, { shop });
                 setLoadingStep(2);
                 const { token, tenant } = r.data;
@@ -504,20 +501,18 @@ const App = () => {
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
                 setAuthTenant(tenant);
                 setAuthScreen(null);
-                try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }); } catch (_) {}
-                await delay(350);
+                
+                // Check Shopify connection in the background so it doesn't block the UI
+                axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }).catch(() => {});
+                
                 setLoadingStep(3);
-                await delay(500);
-                setLoadingFading(true);
-                setTimeout(() => {
-                    setLoadingScreen(false);
-                    setWelcomeName(tenant.name || '');
-                    setShowWelcome(true);
-                }, 600);
+                setLoadingScreen(false);
+                setWelcomeName(tenant.name || '');
+                setShowWelcome(true);
             } catch {
                 localStorage.removeItem('omni_shop');
-                setLoadingFading(true);
-                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+                setLoadingScreen(false);
+                setAuthScreen('login');
             }
         };
 
@@ -528,7 +523,6 @@ const App = () => {
 
             if (token) {
                 setLoadingStep(1);
-                await delay(600); // keep step 1 visible
                 try {
                     const r = await axios.get(`${API_URL}/auth/me`, {
                         headers: { Authorization: `Bearer ${token}` }
@@ -538,32 +532,28 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     setAuthScreen(null);
-                    try { await axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }); } catch (_) {}
-                    await delay(350);
+                    
+                    // Check Shopify connection in the background so it doesn't block the UI
+                    axios.post(`${API_URL}/shopify/ensure-connected`, {}, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }).catch(() => {});
+                    
                     setLoadingStep(3);
-                    await delay(500);
-                    setLoadingFading(true);
-                    setTimeout(() => {
-                        setLoadingScreen(false);
-                        setWelcomeName(r.data.name || '');
-                        setShowWelcome(true);
-                    }, 600);
+                    setLoadingScreen(false);
+                    setWelcomeName(r.data.name || '');
+                    setShowWelcome(true);
                 } catch {
                     localStorage.removeItem('omni_token');
                     if (shop) {
                         await tryAutoReconnect(shop);
                     } else {
-                        setLoadingFading(true);
-                        setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+                        setLoadingScreen(false);
+                        setAuthScreen('login');
                     }
                 }
             } else if (shop) {
                 await tryAutoReconnect(shop);
             } else {
-                setLoadingStep(1);
-                await delay(700);
-                setLoadingFading(true);
-                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+                setLoadingScreen(false);
+                setAuthScreen('login');
             }
         };
 
