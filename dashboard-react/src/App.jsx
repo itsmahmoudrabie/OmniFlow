@@ -1055,7 +1055,7 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
         return Object.entries(templates).map(([key, t]) => {
             const hasAr = isArabic(t.preview || '') || isArabic(t.title || '');
             const langBadge = hasAr ? (t.preview && !isArabic(t.preview) ? 'AR + EN' : 'AR') : 'EN';
-            const status = t.meta_name ? 'approved' : (t.under_review ? 'review' : 'draft');
+            const status = 'approved'; // WaSender templates are always active immediately
             return {
                 key,
                 name: t.meta_name || key,
@@ -1084,9 +1084,9 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
 
     const counts = React.useMemo(() => ({
         all: tplArray.length,
-        approved: tplArray.filter(t => t.status === 'approved').length,
-        review: tplArray.filter(t => t.status === 'review').length,
-        draft: tplArray.filter(t => t.status === 'draft').length,
+        approved: tplArray.length, // All are approved/active with WaSender
+        review: 0,
+        draft: 0,
     }), [tplArray]);
 
     const filtered = filter === 'all' ? tplArray
@@ -1099,14 +1099,7 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
         if (!selected && tplArray.length) setSelected(tplArray[0].key);
     }, [tplArray]);
 
-    const handleSyncMeta = async () => {
-        showToast(isEn ? 'Syncing from Meta...' : 'جاري المزامنة مع Meta...', 'info');
-        try {
-            await axios.post(`${API_URL}/templates/sync`);
-            await fetchTemplates();
-            showToast(isEn ? 'Synced!' : 'تمت المزامنة!');
-        } catch { showToast(isEn ? 'Sync failed' : 'فشلت المزامنة', 'error'); }
-    };
+
 
     const handleNewTemplate = async () => {
         if (!newForm.name.trim()) return showToast(isEn ? 'Name required' : 'الاسم مطلوب', 'error');
@@ -1121,9 +1114,7 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
     };
 
     const statusBadge = (status) => {
-        if (status === 'approved') return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(140,200,80,0.12)',color:'#8CC850',borderColor:'rgba(140,200,80,0.3)'}}>✓ {isEn ? 'Approved' : 'معتمد'}</span>;
-        if (status === 'review')   return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(255,107,53,0.12)',color:'#FF6B35',borderColor:'rgba(255,107,53,0.3)'}}>⊙ {isEn ? 'Under review' : 'قيد المراجعة'}</span>;
-        return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(100,100,100,0.12)',color:'#9CA3AF',borderColor:'rgba(100,100,100,0.3)'}}>○ {isEn ? 'Draft' : 'مسودة'}</span>;
+        return <span className="flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full border" style={{background:'rgba(140,200,80,0.12)',color:'#8CC850',borderColor:'rgba(140,200,80,0.3)'}}>✓ {isEn ? 'Active' : 'نشط'}</span>;
     };
 
     return (
@@ -1134,15 +1125,11 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
                     <h2 className="text-xl font-black text-brand-egg">{isEn ? 'Templates' : 'القوالب'}</h2>
                     <p className="text-[11px] font-bold text-brand-muted tracking-wider mt-0.5 uppercase">
                         {isEn
-                            ? `META BUSINESS TEMPLATES · ${counts.approved} ACTIVE · ${counts.review} UNDER REVIEW`
-                            : `قوالب Meta · ${counts.approved} نشط · ${counts.review} قيد المراجعة`}
+                            ? `WHATSAPP TEMPLATES · ${counts.all} ACTIVE`
+                            : `قوالب واتساب · ${counts.all} قالب نشط`}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={handleSyncMeta}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold glass border border-brand-border/30 text-brand-muted hover:text-brand-egg transition-all">
-                        <RefreshCcw size={12} /> {isEn ? 'Sync from Meta' : 'مزامنة Meta'}
-                    </button>
                     <button onClick={() => setShowNew(true)}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold transition-all"
                         style={{background:'#FF6B35',color:'#fff'}}>
@@ -1151,29 +1138,7 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
                 </div>
             </div>
 
-            {/* 4 stat cards */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
-                <div className="glass rounded-2xl p-4">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Approved' : 'معتمد'}</p>
-                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.approved}</p>
-                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'ready to send' : 'جاهز للإرسال'}</p>
-                </div>
-                <div className="glass rounded-2xl p-4">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Under Review' : 'قيد المراجعة'}</p>
-                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.review}</p>
-                    <p className="text-[11px] text-brand-muted mt-1">{counts.review > 0 ? '~24h ETA' : (isEn ? 'none pending' : 'لا يوجد')}</p>
-                </div>
-                <div className="glass rounded-2xl p-4">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Drafts' : 'مسودات'}</p>
-                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.draft}</p>
-                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'not submitted' : 'لم ترسل بعد'}</p>
-                </div>
-                <div className="glass rounded-2xl p-4">
-                    <p className="text-[10px] font-bold text-brand-muted tracking-wider uppercase">{isEn ? 'Total' : 'الإجمالي'}</p>
-                    <p className="text-2xl font-black text-brand-egg mt-1">{counts.all}</p>
-                    <p className="text-[11px] text-brand-muted mt-1">{isEn ? 'in library' : 'في المكتبة'}</p>
-                </div>
-            </div>
+            {/* Removed the 4 stat cards for simplicity since there is only one status */}
 
             {/* Main 2-column */}
             <div className="grid gap-3" style={{gridTemplateColumns:'1fr 340px'}}>
@@ -1184,19 +1149,6 @@ const TemplatesManager = ({ templates, fetchTemplates, showToast, lang }) => {
                         <div className="flex items-center gap-1.5">
                             <span className="text-[13px] font-black text-brand-egg">{isEn ? 'Library' : 'المكتبة'}</span>
                             <span className="text-[10px] text-brand-muted font-bold uppercase ml-2">{isEn ? 'ALL TEMPLATES' : 'كل القوالب'}</span>
-                        </div>
-                        <div className="flex items-center gap-1 glass-subtle rounded-xl p-1 border border-brand-border/20">
-                            {[
-                                ['all',      `${isEn?'All':'الكل'}·${counts.all}`],
-                                ['approved', `${isEn?'Approved':'معتمد'}·${counts.approved}`],
-                                ['review',   `${isEn?'Review':'مراجعة'}·${counts.review}`],
-                                ['draft',    `${isEn?'Draft':'مسودة'}·${counts.draft}`],
-                            ].map(([v, label]) => (
-                                <button key={v} onClick={() => setFilter(v)}
-                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap ${filter === v ? 'bg-brand-accent text-brand-bg' : 'text-brand-muted hover:text-brand-egg'}`}>
-                                    {label}
-                                </button>
-                            ))}
                         </div>
                     </div>
 
