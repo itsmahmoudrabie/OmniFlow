@@ -86,12 +86,11 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
 const { mountShopifyOAuth, isValidShopDomain } = require('./shopify-oauth');
 
-// Helper: get Shopify credentials directly from tenant config (single source of truth)
-// shpat_ (offline) tokens never expire — no refresh loop needed
 const getShopifyForTenant = (tenant) => {
+    const { decrypt } = require('./utils/crypto');
     const raw   = tenant?.config?.shopify_url || '';
     const shop  = raw.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
-    const token = tenant?.config?.shopify_access_token || '';
+    const token = decrypt(tenant?.config?.shopify_access_token || '');
     return { shopify_url: shop, shopify_access_token: token };
 };
 
@@ -525,15 +524,17 @@ app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
         // Persist to Tenant.config (source of truth)
         try {
             const Tenant = require('./models/Tenant');
+            const { encrypt } = require('./utils/crypto');
+            const encryptedToken = encrypt(access_token);
             const filter = req.tenant?._id && req.tenant._id !== 'dev-admin-001'
                 ? { _id: req.tenant._id }
                 : {};
             await Tenant.findOneAndUpdate(
                 filter,
-                { $set: { 'config.shopify_url': `https://${domain}`, 'config.shopify_access_token': access_token } },
+                { $set: { 'config.shopify_url': `https://${domain}`, 'config.shopify_access_token': encryptedToken } },
                 { sort: { createdAt: -1 }, upsert: false }
             );
-            console.log(`[fetch-token] Saved to Tenant for ${domain}`);
+            console.log(`[fetch-token] Saved encrypted token to Tenant for ${domain}`);
         } catch (dbErr) {
             console.warn('[fetch-token] Tenant save failed:', dbErr.message);
         }
@@ -642,15 +643,17 @@ app.post('/api/shopify/exchange-code', authMiddleware, async (req, res) => {
         // MongoDB — find any tenant or the authenticated one
         try {
             const Tenant = require('./models/Tenant');
+            const { encrypt } = require('./utils/crypto');
+            const encryptedToken = encrypt(access_token);
             const filter = req.tenant?._id && req.tenant._id !== 'dev-admin-001'
                 ? { _id: req.tenant._id }
                 : {};
             await Tenant.findOneAndUpdate(
                 filter,
-                { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': access_token } },
+                { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': encryptedToken } },
                 { sort: { createdAt: -1 }, upsert: false }
             );
-            console.log(`[exchange-code] Token saved to MongoDB for ${shop}`);
+            console.log(`[exchange-code] Encrypted token saved to MongoDB for ${shop}`);
         } catch (e) {
             console.warn('[exchange-code] MongoDB save failed (token still in CONFIG):', e.message);
         }
