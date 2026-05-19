@@ -372,39 +372,81 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         if (!CONFIG.loyalty_points && sc.loyalty_points) CONFIG.loyalty_points = sc.loyalty_points;
     } catch (_) {}
 
+    // Determine if we are a normal tenant (multi-tenant context)
+    const isNormalTenant = req.tenant && req.tenant._id !== 'dev-admin-001';
+
     // Shopify credentials from Tenant.config (source of truth)
     const { shopify_url: tenantShopUrl, shopify_access_token: tenantShopToken } = getShopifyForTenant(req.tenant);
-    if (tenantShopUrl && !CONFIG.shopify_url) CONFIG.shopify_url = tenantShopUrl;
-    if (tenantShopToken && !CONFIG.shopify_access_token) CONFIG.shopify_access_token = tenantShopToken;
-
-    const envStore = (process.env.SHOPIFY_STORE || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
+    
+    // Choose source based on tenant mode
+    const businessName = isNormalTenant ? (req.tenant.config?.business_name || '') : (CONFIG.business_name || sc.business_name || '');
+    const shopifyUrl = tenantShopUrl || CONFIG.shopify_url || sc.shopify_url || '';
     const shopifyToken = tenantShopToken || CONFIG.shopify_access_token || sc.shopify_access_token || '';
+    
+    const isConfigured = isNormalTenant 
+        ? !!(req.tenant.config?.is_configured || req.tenant.config?.business_name) 
+        : !!(sc.is_configured || sc.business_name);
 
     res.json({
-        business_name:        CONFIG.business_name || sc.business_name || '',
-        shopify_url:          CONFIG.shopify_url || shopifyCfg.shopify_url || sc.shopify_url || envStore || '',
-        catalog_id:           CONFIG.catalog_id  || sc.catalog_id  || '',
-        server_url:           CONFIG.server_url  || sc.server_url  || '',
-        gemini_api_key:       (CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : '',
-        groq_api_key:         (CONFIG.groq_api_key   || sc.groq_api_key)   ? mask(CONFIG.groq_api_key   || sc.groq_api_key)   : '',
-        groq_model:           CONFIG.groq_model  || sc.groq_model  || 'llama-3.3-70b-versatile',
+        business_name:        businessName,
+        shopify_url:          shopifyUrl,
+        catalog_id:           isNormalTenant ? (req.tenant.config?.catalog_id || '') : (CONFIG.catalog_id || sc.catalog_id || ''),
+        server_url:           isNormalTenant ? (req.tenant.config?.server_url || '') : (CONFIG.server_url || sc.server_url || ''),
+        gemini_api_key:       isNormalTenant ? (req.tenant.config?.gemini_api_key ? mask(req.tenant.config.gemini_api_key) : '') : ((CONFIG.gemini_api_key || sc.gemini_api_key) ? mask(CONFIG.gemini_api_key || sc.gemini_api_key) : ''),
+        groq_api_key:         isNormalTenant ? (req.tenant.config?.groq_api_key ? mask(req.tenant.config.groq_api_key) : '') : ((CONFIG.groq_api_key || sc.groq_api_key) ? mask(CONFIG.groq_api_key || sc.groq_api_key) : ''),
+        groq_model:           isNormalTenant ? (req.tenant.config?.groq_model || 'llama-3.3-70b-versatile') : (CONFIG.groq_model || sc.groq_model || 'llama-3.3-70b-versatile'),
         shopify_access_token: shopifyToken ? mask(shopifyToken) : '',
-        woo_url:              CONFIG.woo_url     || sc.woo_url     || '',
-        woo_consumer_key:     (CONFIG.woo_consumer_key    || sc.woo_consumer_key)    ? mask(CONFIG.woo_consumer_key    || sc.woo_consumer_key)    : '',
-        woo_consumer_secret:  (CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : '',
-        webhook_url:          CONFIG.webhook_url  || sc.webhook_url  || '',
-        loyalty_points:       CONFIG.loyalty_points || sc.loyalty_points || 10,
+        woo_url:              isNormalTenant ? (req.tenant.config?.woo_url || '') : (CONFIG.woo_url || sc.woo_url || ''),
+        woo_consumer_key:     isNormalTenant ? (req.tenant.config?.woo_consumer_key ? mask(req.tenant.config.woo_consumer_key) : '') : ((CONFIG.woo_consumer_key || sc.woo_consumer_key) ? mask(CONFIG.woo_consumer_key || sc.woo_consumer_key) : ''),
+        woo_consumer_secret:  isNormalTenant ? (req.tenant.config?.woo_consumer_secret ? mask(req.tenant.config.woo_consumer_secret) : '') : ((CONFIG.woo_consumer_secret || sc.woo_consumer_secret) ? mask(CONFIG.woo_consumer_secret || sc.woo_consumer_secret) : ''),
+        webhook_url:          isNormalTenant ? (req.tenant.config?.webhook_url || '') : (CONFIG.webhook_url || sc.webhook_url || ''),
+        loyalty_points:       isNormalTenant ? (req.tenant.config?.loyalty_points || 10) : (CONFIG.loyalty_points || sc.loyalty_points || 10),
         // WasenderAPI credentials
         wasender_session_id:     (CONFIG.wasender_session_id     || sc.wasender_session_id)     ? mask(CONFIG.wasender_session_id     || sc.wasender_session_id)     : '',
         wasender_session_key:    (CONFIG.wasender_session_key    || sc.wasender_session_key)    ? mask(CONFIG.wasender_session_key    || sc.wasender_session_key)    : '',
         wasender_webhook_secret: (CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) ? mask(CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) : '',
         wa_configured:           !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
-        is_configured:           !!(sc.is_configured || sc.business_name),
+        is_configured:           isConfigured,
     });
 });
 
 // حفظ الإعدادات في .env وتحديث CONFIG
 app.post('/api/config/setup', authMiddleware, async (req, res) => {
+    const isNormalTenant = req.tenant && req.tenant._id !== 'dev-admin-001';
+
+    if (isNormalTenant) {
+        try {
+            const Tenant = require('./models/Tenant');
+            const updates = {};
+            
+            if (req.body.business_name !== undefined) updates['config.business_name'] = req.body.business_name;
+            if (req.body.shopify_url !== undefined) {
+                const su = req.body.shopify_url.replace(/https?:\/\//, '').replace(/\/$/, '');
+                updates['config.shopify_url'] = `https://${su}`;
+            }
+            if (req.body.is_configured === true) updates['config.is_configured'] = true;
+
+            const scFields = [
+                'catalog_id', 'server_url', 'groq_api_key', 'gemini_api_key',
+                'groq_model', 'woo_url', 'woo_consumer_key', 'woo_consumer_secret', 'webhook_url',
+                'loyalty_points', 'language'
+            ];
+            for (const key of scFields) {
+                const v = req.body[key];
+                if (v === undefined) continue;
+                if (typeof v === 'string' && v.includes('••••')) continue;
+                updates[`config.${key}`] = v;
+            }
+
+            await Tenant.findByIdAndUpdate(req.tenant._id, { $set: updates });
+            console.log(`[config/setup POST] Updated Tenant config for ${req.tenant._id}`);
+            return res.json({ success: true, business_name: req.body.business_name || req.tenant.config.business_name });
+        } catch (e) {
+            console.warn('[config/setup POST] Tenant save failed:', e.message);
+            return res.status(500).json({ error: 'Failed to save configuration' });
+        }
+    }
+
     const fields = {
         BUSINESS_NAME:              'business_name',
         SHOPIFY_URL:                'shopify_url',
