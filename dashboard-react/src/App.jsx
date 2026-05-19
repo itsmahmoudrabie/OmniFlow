@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
     LayoutDashboard,
@@ -1363,7 +1363,8 @@ const ShopifyConnectPrompt = ({ isEn, onConnected }) => {
         const domain = shop.trim().replace(/https?:\/\//, '').replace(/\/$/, '');
         if (!domain) return;
         const d = domain.includes('.myshopify.com') ? domain : `${domain}.myshopify.com`;
-        window.location.href = `/auth?shop=${d}`;
+        const backendOrigin = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+        window.location.href = `${backendOrigin}/auth?shop=${d}`;
     };
 
     return (
