@@ -1,0 +1,22 @@
+# Railway / Nixpacks build configuration for OmniFlow
+# https://nixpacks.com/docs/configuration/file
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-9_x"]
+
+[phases.install]
+cmds = [
+    "npm install --omit=dev",
+    "npm --prefix server install --omit=dev",
+    "npm --prefix dashboard-react install"
+]
+
+[phases.build]
+cmds = ["npm --prefix dashboard-react run build"]
+
+[start]
+cmd = "node server/index.js"
+
+[variables]
+NODE_ENV = "production"
+NPM_CONFIG_PRODUCTION = "false"

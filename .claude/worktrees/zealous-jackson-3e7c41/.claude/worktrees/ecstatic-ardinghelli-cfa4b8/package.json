@@ -1,0 +1,8 @@
+{
+  "name": "omniflow-whatsapp-crm",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd dashboard-react && npm install && npm run build",
+    "start": "cd server && npm install && node index.js"
+  }
+}

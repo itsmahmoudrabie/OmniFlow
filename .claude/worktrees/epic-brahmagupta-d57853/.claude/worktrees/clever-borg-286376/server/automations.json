@@ -1,0 +1,20 @@
+[
+    {
+        "id": "auto_1778715496801",
+        "active": true,
+        "created_at": "2026-05-13T23:38:16.801Z",
+        "name": "طلب جديد",
+        "trigger": {
+            "type": "order_created",
+            "value": "shipped"
+        },
+        "steps": [
+            {
+                "wait_hours": 0,
+                "action": "send_template",
+                "text": "مرحباً {{customer_name}}، ",
+                "template_id": "followup"
+            }
+        ]
+    }
+]

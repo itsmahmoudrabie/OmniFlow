@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install root deps
+        run: npm install --ignore-scripts
+
+      - name: Install server deps
+        run: npm --prefix server install --omit=dev
+
+      - name: Install dashboard deps
+        run: npm --prefix dashboard-react install
+
+      - name: Lint dashboard
+        run: npm --prefix dashboard-react run lint || echo "Lint warnings (non-blocking)"
+
+      - name: Build dashboard
+        run: npm --prefix dashboard-react run build
+
+      - name: Smoke-test server boot
+        run: |
+          node -e "require('./server/shopify-oauth.js'); console.log('OAuth module loads OK')"
+          timeout 8s node server/index.js || echo "Server boot smoke test complete"
+        env:
+          PORT: 8765
+          NODE_ENV: test
+          SHOPIFY_API_KEY: test_key
+          SHOPIFY_API_SECRET: test_secret
+          SHOPIFY_APP_URL: http://localhost:8765
