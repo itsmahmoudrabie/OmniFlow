@@ -116,6 +116,32 @@ router.post('/auto-reconnect', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req, res) => {
     const t = req.tenant;
+    
+    // For dev-admin-001, dynamically load config from SystemConfig in MongoDB
+    if (t._id === 'dev-admin-001') {
+        try {
+            const SystemConfig = require('../models/SystemConfig');
+            const sc = (await SystemConfig.findById('main').lean()) || {};
+            t.config = {
+                ...t.config,
+                business_name: sc.business_name || '',
+                shopify_url: sc.shopify_url || '',
+                shopify_access_token: sc.shopify_access_token || '',
+                catalog_id: sc.catalog_id || '',
+                server_url: sc.server_url || '',
+                gemini_api_key: sc.gemini_api_key || '',
+                groq_api_key: sc.groq_api_key || '',
+                groq_model: sc.groq_model || 'llama-3.3-70b-versatile',
+                woo_url: sc.woo_url || '',
+                woo_consumer_key: sc.woo_consumer_key || '',
+                woo_consumer_secret: sc.woo_consumer_secret || '',
+                webhook_url: sc.webhook_url || '',
+                loyalty_points: sc.loyalty_points || 10,
+                is_configured: sc.is_configured || false,
+            };
+        } catch (_) {}
+    }
+    
     res.json({ id: t._id, name: t.name, email: t.email, plan: t.plan, status: t.status, trialEnds: t.trialEnds, limits: t.limits, cardLastFour: t.cardLastFour, nextBillingDate: t.nextBillingDate, config: t.config, shopifyChargeId: t.shopifyChargeId, shopifyChargeStatus: t.shopifyChargeStatus });
 });
 
