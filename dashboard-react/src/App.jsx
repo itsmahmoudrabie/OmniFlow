@@ -810,7 +810,7 @@ const App = () => {
     if (needsPlan || showPricing) return <PricingPage lang={isEn ? 'en' : 'ar'} onSkip={showPricing ? () => setShowPricing(false) : null} />;
 
     if (!isConfigured) {
-        return <OnboardingScreen lang={lang} onLangChange={setLang} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
+        return <OnboardingScreen lang={lang} onLangChange={setLang} tenant={authTenant} onComplete={(name) => { setBusinessName(name); setIsConfigured(true); }} />;
     }
 
     return (
@@ -4594,13 +4594,6 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
                                 {isEn ? 'Go to Dashboard →' : 'الذهاب للوحة التحكم ←'}
                             </button>
                         </>}
-
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
 
                     </div>
                 </div>
