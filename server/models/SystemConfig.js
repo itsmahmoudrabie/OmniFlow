@@ -23,6 +23,7 @@ const systemConfigSchema = new mongoose.Schema({
     wasender_session_id:    { type: String, default: '' },
     wasender_session_key:   { type: String, default: '' },
     wasender_webhook_secret:{ type: String, default: '' },
+    is_configured:          { type: Boolean, default: false },
 }, { timestamps: true });
 
 module.exports = mongoose.model('SystemConfig', systemConfigSchema);
