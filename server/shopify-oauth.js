@@ -154,9 +154,12 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
                 jwtToken = sign('dev-admin-001');
             }
 
-            // Redirect to dashboard with JWT — React reads it from hash and logs in
-            const tokenParam = jwtToken ? `#shopify_token=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}` : '';
-            res.redirect(`/${tokenParam}`);
+            // Redirect to embedded page (shown inside Shopify Admin iframe)
+            if (jwtToken) {
+                res.redirect(`/embedded#jwt=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}`);
+            } else {
+                res.redirect('/');
+            }
         } catch (err) {
             console.error('[Shopify OAuth] Token exchange failed:', err.response?.data || err.message);
             res.status(500).send('OAuth token exchange failed');

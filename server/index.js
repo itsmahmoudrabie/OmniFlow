@@ -2576,6 +2576,13 @@ app.get('/api/export/orders', (_req, res) => {
     res.send('﻿' + toCSV(rows));
 });
 
+// Shopify Embedded App: branded info page served inside Shopify Admin iframe
+app.get('/embedded', (req, res) => {
+    res.setHeader('Content-Security-Policy',
+        "frame-ancestors 'self' https://*.myshopify.com https://admin.shopify.com");
+    res.sendFile(path.join(__dirname, 'embedded.html'));
+});
+
 // Catch-all: serve React app for non-API routes (Express 5 syntax: /{*splat})
 // If Shopify opens the app with ?shop=:
 //   - shop already installed → issue JWT and go straight to dashboard
@@ -2598,7 +2605,7 @@ if (fs.existsSync(FRONTEND_DIST)) {
                     });
                     if (tenant?.config?.shopify_access_token) {
                         const jwt = signToken(tenant._id);
-                        return res.redirect(`/#shopify_token=${encodeURIComponent(jwt)}&shop=${encodeURIComponent(shop)}`);
+                        return res.redirect(`/embedded#jwt=${encodeURIComponent(jwt)}&shop=${encodeURIComponent(shop)}`);
                     }
                 }
             } catch (_) {}
