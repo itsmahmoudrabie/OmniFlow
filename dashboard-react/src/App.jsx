@@ -4501,10 +4501,7 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
         if (cached) return cached;
         return tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '';
     });
-    const [shopifyConnected, setShopifyConnected] = React.useState(() => {
-        const hasUrl = !!(tenant?.config?.shopify_url || localStorage.getItem('omni_shop'));
-        return hasUrl;
-    });
+    const [shopifyConnected, setShopifyConnected] = React.useState(false);
     const [connectingShop, setConnectingShop] = React.useState(false);
 
     const connectShopify = async () => {
