@@ -1322,6 +1322,9 @@ app.post('/webhook/wasender', async (req, res) => {
 
     const event = data.event || '';
     console.log(`[WasenderWebhook] event: ${event}`);
+    console.log('\n--- INCOMING WEBHOOK PAYLOAD ---');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('--------------------------------\n');
 
     let targetTenantId = req.query.tenant_id || null;
 
@@ -1400,8 +1403,11 @@ const handleWasenderMessage = async (msgData) => {
     const remoteJid = msgData.key?.remoteJid || '';
     if (remoteJid.includes('@g.us')) return;  // مجموعات — تجاهل
 
-    const phone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
-    if (!phone) return;
+    const phone = msgData.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    if (!phone) {
+        console.warn('[WasenderWebhook] Could not extract phone number from message!');
+        return;
+    }
 
     const name = msgData.pushName || phone;
     const msg  = msgData.message || {};
