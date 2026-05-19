@@ -4469,37 +4469,20 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 //  Onboarding Screen
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
+const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
     const isEn = lang === 'en';
-    const [step, setStep] = React.useState(1); // 1 = business info, 2 = whatsapp, 3 = done
+    const [step, setStep] = React.useState(1); // 1 = business info, 2 = done
     const [saving, setSaving] = React.useState(false);
-    const [testing, setTesting] = React.useState(false);
-    const [waStatus, setWaStatus] = React.useState(null); // null | 'ok' | 'error'
     const [form, setForm] = React.useState({
         business_name: '',
-        wasender_session_id: '',
-        wasender_session_key: '',
-        wasender_webhook_secret: '',
     });
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-    const testWa = async () => {
-        setTesting(true); setWaStatus(null);
-        try {
-            const r = await axios.post(`${API_URL}/config/test-whatsapp`, {
-                wasender_session_id: form.wasender_session_id,
-                wasender_session_key: form.wasender_session_key,
-            });
-            setWaStatus(r.data?.connected ? 'ok' : 'error');
-        } catch { setWaStatus('error'); }
-        setTesting(false);
-    };
 
     const finish = async () => {
         setSaving(true);
         try {
-            await axios.post(`${API_URL}/config/setup`, { ...form, is_configured: true });
-            setStep(3);
+            await axios.post(`${API_URL}/config/setup`, { business_name: form.business_name, is_configured: true });
+            setStep(2);
         } catch { }
         setSaving(false);
     };
@@ -4509,8 +4492,8 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
 
     // Step indicators
     const steps = isEn
-        ? ['Business', 'WhatsApp', 'Done']
-        : ['معلومات المشروع', 'واتساب', 'جاهز'];
+        ? ['Business', 'Done']
+        : ['معلومات المشروع', 'جاهز'];
 
     return (
         <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4" dir={isEn ? 'ltr' : 'rtl'}>
@@ -4551,85 +4534,39 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                     <Building size={22} className="text-brand-accent" />
                                 </div>
                                 <h2 className="text-lg font-black text-brand-egg">{isEn ? 'Your Business' : 'معلومات المشروع'}</h2>
-                                <p className="text-xs text-brand-muted">{isEn ? 'How should we call your business?' : 'ما اسم مشروعك أو متجرك؟'}</p>
+                                <p className="text-xs text-brand-muted">{isEn ? 'Enter your store name and verify Shopify connection' : 'أدخل اسم متجرك وتحقق من ربط شوبيفاي'}</p>
                             </div>
-                            <div>
-                                <label className={labelCls}>{isEn ? 'Business Name' : 'اسم المشروع'}</label>
-                                <input
-                                    className={inputCls}
-                                    placeholder={isEn ? 'e.g. My Store' : 'مثال: متجري'}
-                                    value={form.business_name}
-                                    onChange={e => set('business_name', e.target.value)}
-                                    autoFocus
-                                />
+                            <div className="space-y-4">
+                                <div>
+                                    <label className={labelCls}>{isEn ? 'Business Name' : 'اسم المشروع'}</label>
+                                    <input
+                                        className={inputCls}
+                                        placeholder={isEn ? 'e.g. My Store' : 'مثال: متجري'}
+                                        value={form.business_name}
+                                        onChange={e => set('business_name', e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>{isEn ? 'Connected Shopify Store' : 'متجر Shopify المرتبط'}</label>
+                                    <div className="w-full bg-brand-input/40 border border-brand-border/20 rounded-xl px-3 py-2.5 text-sm text-brand-muted font-mono flex items-center gap-2">
+                                        <span>🏪</span>
+                                        <span>{tenant?.config?.shopify_url || (isEn ? 'Connected via App Store' : 'متصل عبر متجر التطبيقات')}</span>
+                                        <span className="ml-auto text-green-400 text-xs font-bold">✓ {isEn ? 'Connected' : 'مرتبط'}</span>
+                                    </div>
+                                </div>
                             </div>
                             <button
-                                disabled={!form.business_name.trim()}
-                                onClick={() => setStep(2)}
-                                className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40">
+                                disabled={saving || !form.business_name.trim()}
+                                onClick={finish}
+                                className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40 flex items-center justify-center gap-2">
+                                {saving && <Loader2 size={14} className="animate-spin" />}
                                 {isEn ? 'Next →' : 'التالي ←'}
                             </button>
                         </>}
 
-                        {/* ── Step 2: WhatsApp / WasenderAPI ── */}
+                        {/* ── Step 2: Done ── */}
                         {step === 2 && <>
-                            <div className="text-center space-y-1">
-                                <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20 mb-3">
-                                    <MessageCircle size={22} className="text-brand-accent" />
-                                </div>
-                                <h2 className="text-lg font-black text-brand-egg">{isEn ? 'WhatsApp Connection' : 'ربط واتساب'}</h2>
-                                <p className="text-xs text-brand-muted">{isEn ? 'Enter your WasenderAPI credentials' : 'أدخل بيانات WasenderAPI الخاصة بك'}</p>
-                            </div>
-                            <div className="space-y-3">
-                                <div>
-                                    <label className={labelCls}>Session ID</label>
-                                    <input className={inputCls} dir="ltr" placeholder="session_xxxx"
-                                        value={form.wasender_session_id}
-                                        onChange={e => { set('wasender_session_id', e.target.value); setWaStatus(null); }} />
-                                </div>
-                                <div>
-                                    <label className={labelCls}>Session Key / API Key</label>
-                                    <input className={inputCls} dir="ltr" placeholder="wsk_xxxx" type="password"
-                                        value={form.wasender_session_key}
-                                        onChange={e => { set('wasender_session_key', e.target.value); setWaStatus(null); }} />
-                                </div>
-                                <div>
-                                    <label className={labelCls}>{isEn ? 'Webhook Secret (optional)' : 'Webhook Secret (اختياري)'}</label>
-                                    <input className={inputCls} dir="ltr" placeholder="whsec_xxxx" type="password"
-                                        value={form.wasender_webhook_secret}
-                                        onChange={e => set('wasender_webhook_secret', e.target.value)} />
-                                </div>
-                                {/* Test button */}
-                                {form.wasender_session_id && form.wasender_session_key && (
-                                    <button onClick={testWa} disabled={testing}
-                                        className="flex items-center gap-2 text-xs font-bold text-brand-accent hover:opacity-80 transition-all disabled:opacity-50">
-                                        {testing ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
-                                        {isEn ? 'Test connection' : 'اختبر الاتصال'}
-                                        {waStatus === 'ok' && <span className="text-green-400">✓ {isEn ? 'Connected' : 'متصل'}</span>}
-                                        {waStatus === 'error' && <span className="text-red-400">✗ {isEn ? 'Failed' : 'فشل'}</span>}
-                                    </button>
-                                )}
-                            </div>
-                            <div className="flex gap-3">
-                                <button onClick={() => setStep(1)}
-                                    className="flex-1 border border-brand-border/30 text-brand-muted py-3 rounded-xl font-bold hover:text-brand-egg transition-all text-sm">
-                                    {isEn ? '← Back' : '→ رجوع'}
-                                </button>
-                                <button onClick={finish} disabled={saving || !form.wasender_session_id || !form.wasender_session_key}
-                                    className="flex-2 flex-grow bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40 flex items-center justify-center gap-2">
-                                    {saving && <Loader2 size={14} className="animate-spin" />}
-                                    {isEn ? 'Save & Start' : 'حفظ والبدء'}
-                                </button>
-                            </div>
-                            <p className="text-center text-[11px] text-brand-muted">
-                                <button onClick={finish} disabled={saving} className="underline hover:text-brand-egg transition-colors">
-                                    {isEn ? 'Skip for now' : 'تخطي الآن'}
-                                </button>
-                            </p>
-                        </>}
-
-                        {/* ── Step 3: Done ── */}
-                        {step === 3 && <>
                             <div className="text-center space-y-4 py-2">
                                 <div className="w-16 h-16 bg-brand-accent/10 rounded-full flex items-center justify-center mx-auto border-2 border-brand-accent/30">
                                     <CheckCircle size={32} className="text-brand-accent" />
@@ -4644,7 +4581,6 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                     {[
                                         { icon: '🏪', text: isEn ? `Business: ${form.business_name}` : `المشروع: ${form.business_name}` },
                                         { icon: '🛍️', text: isEn ? 'Shopify store connected' : 'تم ربط متجر Shopify' },
-                                        { icon: '💬', text: form.wasender_session_id ? (isEn ? 'WhatsApp configured' : 'تم إعداد واتساب') : (isEn ? 'WhatsApp: configure later in Settings' : 'واتساب: أكمل الإعداد لاحقاً') },
                                     ].map((item, i) => (
                                         <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/15">
                                             <span>{item.icon}</span>
@@ -4658,6 +4594,13 @@ const OnboardingScreen = ({ lang, onLangChange, onComplete }) => {
                                 {isEn ? 'Go to Dashboard →' : 'الذهاب للوحة التحكم ←'}
                             </button>
                         </>}
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
                     </div>
                 </div>
