@@ -413,8 +413,9 @@ const App = () => {
     const [showPricing, setShowPricing] = useState(false);
     const [isConfigured, setIsConfigured] = useState(() => {
         const cached = localStorage.getItem('omni_configured');
-        if (cached !== null) return cached === 'true';
-        return true;
+        if (cached === 'true') return true;
+        if (localStorage.getItem('omni_shop')) return true;
+        return cached === 'null' ? true : cached === 'true';
     });
 
     // ── Loading screen state ─────────────────────────────────────────────────
@@ -433,7 +434,7 @@ const App = () => {
     const handleLogin = (token, tenant, shopDomain = null) => {
         localStorage.setItem('omni_token', token);
         localStorage.setItem('omni_tenant', JSON.stringify(tenant));
-        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name);
+        const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url || shopDomain);
         localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
         if (shopDomain) localStorage.setItem('omni_shop', shopDomain);
         setAuthTenant(tenant);
@@ -512,7 +513,7 @@ const App = () => {
                 persistShop(tenant?.config?.shopify_url || shop);
                 localStorage.setItem('omni_token', token);
                 localStorage.setItem('omni_tenant', JSON.stringify(tenant));
-                const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name);
+                const isConf = !!(tenant?.config?.is_configured || tenant?.config?.business_name || tenant?.config?.shopify_url);
                 localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
                 setAuthTenant(tenant);
                 setIsConfigured(isConf);
@@ -548,7 +549,7 @@ const App = () => {
                     setLoadingStep(2);
                     setAuthTenant(r.data);
                     
-                    const isConf = !!(r.data?.config?.is_configured || r.data?.config?.business_name);
+                    const isConf = !!(r.data?.config?.is_configured || r.data?.config?.business_name || r.data?.config?.shopify_url);
                     setIsConfigured(isConf);
                     localStorage.setItem('omni_configured', isConf ? 'true' : 'false');
                     

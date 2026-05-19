@@ -583,14 +583,25 @@ app.post('/api/shopify/fetch-token', authMiddleware, async (req, res) => {
             const filter = req.tenant?._id && req.tenant._id !== 'dev-admin-001'
                 ? { _id: req.tenant._id }
                 : {};
-            await Tenant.findOneAndUpdate(
-                filter,
-                { $set: { 'config.shopify_url': `https://${domain}`, 'config.shopify_access_token': encryptedToken } },
-                { sort: { createdAt: -1 }, upsert: false }
-            );
-            console.log(`[fetch-token] Saved encrypted token to Tenant for ${domain}`);
+            if (req.tenant?._id && req.tenant._id !== 'dev-admin-001') {
+                await Tenant.findOneAndUpdate(
+                    filter,
+                    { $set: { 'config.shopify_url': `https://${domain}`, 'config.shopify_access_token': encryptedToken } },
+                    { sort: { createdAt: -1 }, upsert: false }
+                );
+                console.log(`[fetch-token] Saved encrypted token to Tenant for ${domain}`);
+            } else {
+                // Save to SystemConfig for dev-admin
+                const SystemConfig = require('./models/SystemConfig');
+                await SystemConfig.findByIdAndUpdate(
+                    'main',
+                    { $set: { shopify_url: domain, shopify_access_token: access_token } },
+                    { upsert: true }
+                );
+                console.log(`[fetch-token] Saved token to SystemConfig for ${domain}`);
+            }
         } catch (dbErr) {
-            console.warn('[fetch-token] Tenant save failed:', dbErr.message);
+            console.warn('[fetch-token] Tenant/SystemConfig save failed:', dbErr.message);
         }
         // Update in-memory CONFIG
         CONFIG.shopify_url          = domain;
