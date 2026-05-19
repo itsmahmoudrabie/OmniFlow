@@ -962,7 +962,7 @@ app.post('/api/abandoned_carts/trigger', async (req, res) => {
 });
 
 // جلب كافة العملاء لحملات الترويج
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', authMiddleware, async (req, res) => {
     try {
         const uniqueCustomers = new Map();
 
@@ -999,8 +999,7 @@ app.get('/api/customers', async (req, res) => {
 
         // 3. من شوبيفاي (طلبات + كل العملاء)
         try {
-            const _sUrl   = CONFIG.shopify_url   || '';
-            const _sToken = CONFIG.shopify_access_token || '';
+            const { shopify_url: _sUrl, shopify_access_token: _sToken } = getShopifyForTenant(req.tenant);
             if (_sUrl && _sToken) {
                 // 3a. من الطلبات (مشترين فعليين)
                 const ordersRes = await axios.get(
