@@ -438,10 +438,11 @@ app.get('/api/config/setup', authMiddleware, async (req, res) => {
         webhook_url:          isNormalTenant ? (req.tenant.config?.webhook_url || '') : (CONFIG.webhook_url || sc.webhook_url || ''),
         loyalty_points:       isNormalTenant ? (req.tenant.config?.loyalty_points || 10) : (CONFIG.loyalty_points || sc.loyalty_points || 10),
         // WasenderAPI credentials
-        wasender_session_id:     (CONFIG.wasender_session_id     || sc.wasender_session_id)     ? mask(CONFIG.wasender_session_id     || sc.wasender_session_id)     : '',
-        wasender_session_key:    (CONFIG.wasender_session_key    || sc.wasender_session_key)    ? mask(CONFIG.wasender_session_key    || sc.wasender_session_key)    : '',
-        wasender_webhook_secret: (CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) ? mask(CONFIG.wasender_webhook_secret || sc.wasender_webhook_secret) : '',
-        wa_configured:           !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
+        // WasenderAPI credentials
+        wasender_session_id:     isNormalTenant && req.tenant.config?.wasender_session_id ? mask(req.tenant.config.wasender_session_id) : '',
+        wasender_session_key:    isNormalTenant && req.tenant.config?.wasender_session_key ? mask(req.tenant.config.wasender_session_key) : '',
+        wasender_webhook_secret: isNormalTenant && req.tenant.config?.wasender_webhook_secret ? mask(req.tenant.config.wasender_webhook_secret) : '',
+        wa_configured:           isNormalTenant ? !!((req.tenant.config?.wasender_session_id && req.tenant.config?.wasender_session_key) || (CONFIG.wasender_session_id && CONFIG.wasender_session_key)) : !!(CONFIG.wasender_session_id && CONFIG.wasender_session_key),
         is_configured:           isConfigured,
     });
 });
@@ -465,7 +466,7 @@ app.post('/api/config/setup', authMiddleware, async (req, res) => {
             const scFields = [
                 'catalog_id', 'server_url', 'groq_api_key', 'gemini_api_key',
                 'groq_model', 'woo_url', 'woo_consumer_key', 'woo_consumer_secret', 'webhook_url',
-                'loyalty_points', 'language'
+                'loyalty_points', 'language', 'wasender_session_id', 'wasender_session_key', 'wasender_webhook_secret'
             ];
             for (const key of scFields) {
                 const v = req.body[key];
