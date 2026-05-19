@@ -1,48 +1,11 @@
 /**
  * Shopify OAuth + Webhooks module for OmniFlow
  * ----------------------------------------------
- * Multi-store install flow for Shopify App Store / Custom Apps.
- *
- * Usage in index.js:
- *   const { mountShopifyOAuth, verifyShopifyWebhook, getShopToken } = require('./shopify-oauth');
- *   mountShopifyOAuth(app, CONFIG);
- *
- * Env vars required:
- *   SHOPIFY_API_KEY        — from Partners dashboard (Client ID)
- *   SHOPIFY_API_SECRET     — from Partners dashboard (Client Secret)
- *   SHOPIFY_APP_URL        — public HTTPS URL of this server (Railway URL)
- *   SHOPIFY_SCOPES         — comma-separated, e.g. read_products,read_orders,write_orders,read_customers
+ * Handles OAuth install flow, webhook verification, and HMAC validation.
+ * Tokens are stored in Tenant.config.shopify_access_token (MongoDB) — the single source of truth.
  */
 const crypto = require('crypto');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-
-const SHOPS_FILE = path.join(__dirname, 'shops.json');
-
-// ─── Shop registry (persisted) ───
-const loadShops = () => {
-    if (!fs.existsSync(SHOPS_FILE)) return {};
-    try { return JSON.parse(fs.readFileSync(SHOPS_FILE, 'utf8') || '{}'); }
-    catch { return {}; }
-};
-const saveShops = (data) => fs.writeFileSync(SHOPS_FILE, JSON.stringify(data, null, 2));
-
-const getShopToken = (shop) => {
-    const shops = loadShops();
-    return shops[shop]?.access_token || null;
-};
-
-const setShopToken = (shop, access_token, scope) => {
-    const shops = loadShops();
-    shops[shop] = {
-        access_token,
-        scope,
-        installed_at: shops[shop]?.installed_at || new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    };
-    saveShops(shops);
-};
 
 // ─── HMAC verification ───
 const verifyOAuthHmac = (query, secret) => {
@@ -116,7 +79,6 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
                 code
             });
             const { access_token, scope } = tokenRes.data;
-            setShopToken(shop, access_token, scope);
 
             // Update CONFIG so existing endpoints work immediately
             if (CONFIG && typeof CONFIG === 'object') {
@@ -204,7 +166,7 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
     // 3) Webhook receiver (raw body required for HMAC).
     //    IMPORTANT: mount `app.use('/webhooks/shopify', express.raw({ type: 'application/json' }))`
     //    BEFORE bodyParser.json in your main file — see index.js patch in setup guide.
-    app.post('/webhooks/shopify/:topic', (req, res) => {
+    app.post('/webhooks/shopify/:topic', async (req, res) => {
         const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
         const shop = req.get('X-Shopify-Shop-Domain');
         const topic = req.params.topic;
@@ -221,12 +183,16 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
             return res.sendStatus(200);
         }
 
-        // App uninstalled — clean up stored token
+        // App uninstalled — clear token from Tenant
         if (topic === 'app/uninstalled') {
-            const shops = loadShops();
-            delete shops[shop];
-            saveShops(shops);
-            console.log(`[Shopify] Uninstalled: ${shop}`);
+            try {
+                const Tenant = require('./models/Tenant');
+                await Tenant.findOneAndUpdate(
+                    { $or: [{ 'config.shopify_url': `https://${shop}` }, { 'config.shopify_url': shop }] },
+                    { $set: { 'config.shopify_access_token': '' } }
+                );
+                console.log(`[Shopify] Uninstalled + token cleared: ${shop}`);
+            } catch (_) {}
             return res.sendStatus(200);
         }
 
@@ -236,15 +202,20 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
         res.sendStatus(200);
     });
 
-    // 4) Helper: shop status (for the dashboard)
-    app.get('/api/shopify/connection', (req, res) => {
-        const shops = loadShops();
-        const list = Object.entries(shops).map(([shop, info]) => ({
-            shop,
-            scope: info.scope,
-            installed_at: info.installed_at
-        }));
-        res.json({ connected: list.length > 0, shops: list });
+    // 4) Helper: shop status (for the dashboard) — reads from Tenant
+    app.get('/api/shopify/connection', async (req, res) => {
+        try {
+            const Tenant = require('./models/Tenant');
+            const tenant = await Tenant.findOne({
+                'config.shopify_access_token': { $regex: /^shpat_/ }
+            }).sort({ updatedAt: -1 }).select('config.shopify_url').lean();
+            const shop = tenant?.config?.shopify_url
+                ? tenant.config.shopify_url.replace(/https?:\/\//i, '').replace(/\/$/, '')
+                : null;
+            res.json({ connected: !!shop, shop });
+        } catch (_) {
+            res.json({ connected: false, shop: null });
+        }
     });
 
     console.log(`[Shopify OAuth] Routes mounted. Install URL: ${APP_URL}/auth?shop=YOUR-STORE.myshopify.com`);
@@ -290,8 +261,5 @@ module.exports = {
     mountShopifyOAuth,
     verifyShopifyWebhook,
     verifyOAuthHmac,
-    getShopToken,
-    setShopToken,
-    loadShops,
-    isValidShopDomain
+    isValidShopDomain,
 };

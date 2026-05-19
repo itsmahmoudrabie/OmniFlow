@@ -85,21 +85,7 @@ router.post('/auto-reconnect', async (req, res) => {
         if (!storedToken || !storedToken.startsWith('shpat_'))
             return res.status(401).json({ error: 'reconnect_failed', reason: 'no_shpat_token' });
 
-        // Validate token is still accepted by Shopify
-        const axiosLib = require('axios');
-        try {
-            await axiosLib.get(`https://${shop}/admin/api/2024-01/shop.json`, {
-                headers: { 'X-Shopify-Access-Token': storedToken },
-                timeout: 8000,
-            });
-        } catch (shopifyErr) {
-            const status = shopifyErr.response?.status;
-            if (status === 401 || status === 403)
-                return res.status(401).json({ error: 'reconnect_failed', reason: 'token_invalid' });
-            // Network blips are non-fatal — still issue JWT
-            console.warn(`[auto-reconnect] Shopify check non-fatal (${status}):`, shopifyErr.message);
-        }
-
+        // shpat_ (offline) tokens never expire — no Shopify API validation needed
         const token = signToken(tenant._id);
         const tenantData = {
             id: tenant._id, name: tenant.name, email: tenant.email,
