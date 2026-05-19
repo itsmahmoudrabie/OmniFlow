@@ -1004,7 +1004,7 @@ const App = () => {
                         !hasFeature('growth') ? (
                             <UpgradePrompt feature="Broadcasts" minPlan="Growth" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
                         ) : (
-                            <CampaignsManager templates={templates} showToast={showToast} lang={lang} />
+                            <CampaignsManager templates={templates} showToast={showToast} lang={lang} setActiveTab={setActiveTab} />
                         )
                     )}
                     {activeTab === 'automations' && (
@@ -2731,7 +2731,7 @@ const StatCard = ({ title, value, color, icon: Icon, badge, badgeColor = 'text-b
     </div>
 );
 
-const CampaignsManager = ({ templates, showToast, lang }) => {
+const CampaignsManager = ({ templates, showToast, lang, setActiveTab }) => {
     const [customers, setCustomers] = useState([]);
     const [selectedPhones, setSelectedPhones] = useState(new Set());
     const [loading, setLoading] = useState(true);
@@ -3159,7 +3159,12 @@ const CampaignsManager = ({ templates, showToast, lang }) => {
                             {/* Template selector */}
                             {campaignType === 'template' && (
                                 <div>
-                                    <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'SELECT TEMPLATE' : 'اختر القالب'}</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-bold text-brand-muted tracking-wider">{isEn ? 'SELECT TEMPLATE' : 'اختر القالب'}</label>
+                                        <button onClick={() => { setShowScheduler(false); setActiveTab?.('settings'); }} className="text-[10px] text-brand-accent font-bold hover:underline transition-all">
+                                            + {isEn ? 'Create new template' : 'إنشاء قالب جديد'}
+                                        </button>
+                                    </div>
                                     <select value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}
                                         className="mt-1.5 w-full bg-brand-input border border-brand-border/30 rounded-xl px-4 py-2.5 text-sm text-brand-egg outline-none focus:border-brand-accent">
                                         <option value="">{isEn ? '— Select a template —' : '— اختر قالب —'}</option>
