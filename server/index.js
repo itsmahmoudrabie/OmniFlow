@@ -8,6 +8,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 const FormData = require('form-data');
 const mongoose = require('mongoose');
+const WhatsAppRouter = require('./models/WhatsAppRouter');
 const { authMiddleware, DEV_TENANT } = require('./middleware/auth');
 const { tenantStorage, getTenantId } = require('./tenantStorage');
 
@@ -261,11 +262,34 @@ const fireWebhook = (event, data) => {
 
 // ── WasenderAPI send helper ────────────────────────────────────────────────────
 const sendViaWasender = async (to, msgObj) => {
-    const sessionId = CONFIG.wasender_session_id;
-    const apiKey    = CONFIG.wasender_session_key;
+    let sessionId = CONFIG.wasender_session_id;
+    let apiKey = CONFIG.wasender_session_key;
+    let isGlobal = true;
+    
+    const tid = getTenantId();
+    if (tid !== 'global') {
+        const Tenant = mongoose.model('Tenant');
+        const t = await Tenant.findById(tid).lean();
+        if (t?.config?.wasender_session_id && t?.config?.wasender_session_key) {
+            sessionId = t.config.wasender_session_id;
+            apiKey = t.config.wasender_session_key;
+            isGlobal = false;
+        }
+    }
+
     if (!sessionId || !apiKey)
         throw new Error('WasenderAPI غير مُهيَّأ — أدخل Session ID و Session Key في الإعدادات');
+        
     const cleanTo = String(to).replace(/[^\d]/g, '');
+    
+    if (isGlobal && tid !== 'global') {
+        await WhatsAppRouter.findOneAndUpdate(
+            { phone: cleanTo },
+            { tenantId: tid, lastInteractedAt: new Date() },
+            { upsert: true, new: true }
+        ).catch(e => console.warn('[WhatsAppRouter] Error saving route:', e.message));
+    }
+
     const url = `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/messages/send`;
     return await axios.post(url, { to: cleanTo, ...msgObj }, {
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -1275,10 +1299,9 @@ app.post('/api/whatsapp/read', (_req, res) => res.json({ success: true }));
 // ─────────────────────────────────────────────
 const crypto = require('crypto');
 
-app.post('/webhook/wasender', (req, res) => {
+app.post('/webhook/wasender', async (req, res) => {
     const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
 
-    // التحقق من التوقيع إن وُجد سر
     if (CONFIG.wasender_webhook_secret) {
         const signature = req.get('X-Wasender-Signature') || req.get('X-Hub-Signature-256') || '';
         const expected  = `sha256=${crypto.createHmac('sha256', CONFIG.wasender_webhook_secret).update(rawBody).digest('hex')}`;
@@ -1295,36 +1318,56 @@ app.post('/webhook/wasender', (req, res) => {
     const event = data.event || '';
     console.log(`[WasenderWebhook] event: ${event}`);
 
-    if (event === 'messages.upsert') {
-        handleWasenderMessage(data.data).catch(e =>
-            console.error('[WasenderWebhook] handler error:', e.message)
-        );
-    } else if (event === 'messages.update') {
-        // تحديث حالة رسالة مرسلة (delivered / read)
-        const updates = Array.isArray(data.data) ? data.data : [data.data];
-        updates.forEach(upd => {
-            const wamid     = upd?.key?.id;
-            const newStatus = upd?.update?.status;
-            if (!wamid || !newStatus) return;
-            let inbox = loadJSON(INBOX_FILE);
-            if (!Array.isArray(inbox)) return;
-            let changed = false;
-            for (const chat of inbox) {
-                for (const m of (chat.messages || [])) {
-                    if (m.wamid === wamid) {
-                        const rank = { sent: 1, delivered: 2, read: 3 };
-                        if ((rank[newStatus] || 0) > (rank[m.status] || 0)) {
-                            m.status = newStatus === 'read' ? 'seen' : newStatus;
-                            changed = true;
+    let targetTenantId = req.query.tenant_id || null;
+
+    if (!targetTenantId) {
+        let incomingPhone = null;
+        if (event === 'messages.upsert') {
+            const remoteJid = data.data?.key?.remoteJid || '';
+            incomingPhone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+        } else if (event === 'messages.update') {
+            const updates = Array.isArray(data.data) ? data.data : [data.data];
+            const remoteJid = updates[0]?.key?.remoteJid || '';
+            incomingPhone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+        }
+        
+        if (incomingPhone) {
+            const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
+            if (route) targetTenantId = route.tenantId;
+        }
+    }
+
+    if (!targetTenantId) targetTenantId = 'global';
+
+    tenantStorage.run({ tenantId: targetTenantId }, async () => {
+        if (event === 'messages.upsert') {
+            await handleWasenderMessage(data.data).catch(e => console.error('[WasenderWebhook] handler error:', e.message));
+        } else if (event === 'messages.update') {
+            const updates = Array.isArray(data.data) ? data.data : [data.data];
+            updates.forEach(upd => {
+                const wamid     = upd?.key?.id;
+                const newStatus = upd?.update?.status;
+                if (!wamid || !newStatus) return;
+                let inbox = loadJSON(INBOX_FILE);
+                if (!Array.isArray(inbox)) return;
+                let changed = false;
+                for (const chat of inbox) {
+                    for (const m of (chat.messages || [])) {
+                        if (m.wamid === wamid) {
+                            const rank = { sent: 1, delivered: 2, read: 3 };
+                            if ((rank[newStatus] || 0) > (rank[m.status] || 0)) {
+                                m.status = newStatus === 'read' ? 'seen' : newStatus;
+                                changed = true;
+                            }
                         }
                     }
                 }
-            }
-            if (changed) saveJSON(INBOX_FILE, inbox);
-        });
-    } else if (event === 'session.status') {
-        console.log('[WasenderWebhook] Session status:', data.data?.status);
-    }
+                if (changed) saveJSON(INBOX_FILE, inbox);
+            });
+        } else if (event === 'session.status') {
+            console.log('[WasenderWebhook] Session status:', data.data?.status);
+        }
+    });
 
     res.sendStatus(200);
 });

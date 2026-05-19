@@ -1020,7 +1020,7 @@ const App = () => {
                         !hasFeature('pro') ? (
                             <UpgradePrompt feature="AI Settings" minPlan="Pro" onUpgrade={() => setShowPricing(true)} isEn={isEn} />
                         ) : (
-                            <SetupManager showToast={showToast} lang={lang} onSave={(name) => setBusinessName(name)} />
+                            <SetupManager showToast={showToast} lang={lang} onSave={(name) => setBusinessName(name)} authTenant={authTenant} />
                         )
                     )}
                     {activeTab === 'abandoned' && <AbandonedCartsManager carts={abandonedCarts} refresh={fetchAbandonedCarts} showToast={showToast} lang={lang} />}
@@ -4931,7 +4931,7 @@ const ShippingSection = ({ phone, customerName, orderId, totalPrice, address, sh
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 // ── WhatsApp Status Card (read-only — credentials are server-only env vars) ──
-const WhatsAppStatusCard = ({ isEn, waConfigured }) => {
+const WhatsAppStatusCard = ({ isEn, waConfigured, ws, set, tenantId }) => {
     const [status, setStatus] = React.useState(null);
     const [checking, setChecking] = React.useState(false);
 
@@ -4992,29 +4992,46 @@ const WhatsAppStatusCard = ({ isEn, waConfigured }) => {
                 </button>
             </div>
 
-            {/* Dedicated number upsell */}
-            <div className="rounded-xl p-4 space-y-2"
-                style={{background:'rgba(140,200,80,0.05)', border:'1px solid rgba(140,200,80,0.15)'}}>
-                <p className="text-[11px] font-black text-brand-egg">
-                    {isEn ? '📞 Want your own dedicated number?' : '📞 تريد رقم واتساب خاص بعلامتك التجارية؟'}
-                </p>
+            {/* Dedicated number config */}
+            <div className="rounded-xl p-4 space-y-4"
+                style={{background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)'}}>
+                <div className="flex justify-between items-center">
+                    <p className="text-[11px] font-black text-brand-egg">
+                        {isEn ? '📞 Use your own dedicated WhatsApp number' : '📞 استخدم رقم واتساب خاص بك'}
+                    </p>
+                </div>
                 <p className="text-[10px] text-brand-muted leading-relaxed">
                     {isEn
-                        ? 'Upgrade to a dedicated WhatsApp number — your brand, your conversations. Contact our support team to get started.'
-                        : 'احصل على رقم واتساب خاص باسم شركتك — تجربة أكثر احترافية ومصداقية. تواصل مع فريق الدعم للترقية.'}
+                        ? 'Enter your WaSender API credentials below to send messages from your own number instead of the shared platform number.'
+                        : 'أدخل بيانات WaSender API الخاصة بك لإرسال الرسائل من رقمك الخاص بدلاً من رقم المنصة المشترك.'}
                 </p>
-                <a href="mailto:support@omniflow.app"
-                    className="inline-flex items-center gap-1.5 mt-1 px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:opacity-90"
-                    style={{background:'linear-gradient(135deg,#5E9433,#8CC850)', color:'#001A11'}}>
-                    {isEn ? '→ Contact Support' : '→ تواصل مع الدعم'}
-                </a>
+                
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="text-[10px] font-bold text-brand-muted uppercase mb-1 block">Session ID</label>
+                        <input value={ws.wasender_session_id} onChange={e => set('wasender_session_id', e.target.value)} className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none text-brand-egg" placeholder="e.g. session-123" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-brand-muted uppercase mb-1 block">Session Key</label>
+                        <input value={ws.wasender_session_key} onChange={e => set('wasender_session_key', e.target.value)} type="password" className="w-full bg-brand-input border border-brand-border/30 rounded-xl px-3 py-2 text-xs focus:border-brand-accent outline-none text-brand-egg" placeholder="sk_..." />
+                    </div>
+                </div>
+
+                {ws.wasender_session_id && ws.wasender_session_key && (
+                    <div className="mt-4 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/20">
+                        <p className="text-[10px] font-bold text-brand-accent uppercase mb-1.5">{isEn ? 'Your Webhook URL (Paste in WaSender):' : 'رابط الويب هوك (ضعه في WaSender):'}</p>
+                        <div className="flex items-center gap-2">
+                            <input readOnly value={`https://omniflow.app/webhook/wasender?tenant_id=${tenantId}`} className="w-full bg-brand-bg/50 border border-brand-accent/20 rounded-lg px-2 py-1.5 text-[10px] font-mono text-brand-egg outline-none" />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
 
 // ── App Settings ─────────────────────────────────────────────────────────────
-const SetupManager = ({ showToast, lang, onSave }) => {
+const SetupManager = ({ showToast, lang, onSave, authTenant }) => {
     const isEn = lang === 'en';
     const [section, setSection] = React.useState('workspace');
     const [saving, setSaving] = React.useState(false);
@@ -5327,7 +5344,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
         );
 
         case 'whatsapp': return (
-            <WhatsAppStatusCard isEn={isEn} waConfigured={ws.wa_configured} />
+            <WhatsAppStatusCard isEn={isEn} waConfigured={ws.wa_configured} ws={ws} set={set} tenantId={authTenant?._id || ''} />
         );
 
         case 'shopify': return (
