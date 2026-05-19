@@ -4915,7 +4915,6 @@ const SetupManager = ({ showToast, lang, onSave }) => {
     const [shopifyAuthUrl, setShopifyAuthUrl] = React.useState('');
     const [shopifyRedirectUrl, setShopifyRedirectUrl] = React.useState('');
     const [shopifyExchanging, setShopifyExchanging] = React.useState(false);
-    const [shopifyTokenMsg, setShopifyTokenMsg] = React.useState('');
 
     // ── Load ────────────────────────────────────────────────────────────────
     React.useEffect(() => {
@@ -5230,16 +5229,12 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                         onClick={async () => {
                             const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
                             if (!shop) return showToast(isEn ? 'Enter store domain first' : 'اكتب دومين المتجر أولاً', 'error');
-                            setShopifyTokenMsg(isEn ? '⏳ Connecting...' : '⏳ جاري الربط...');
                             try {
                                 const r = await axios.post(`${API_URL}/shopify/fetch-token`, { shop });
-                                const expiryStr = r.data.expiry ? new Date(r.data.expiry).toLocaleString() : '24h';
-                                setShopifyTokenMsg(`✅ ${isEn ? 'Connected! Token auto-refreshes every 24h' : 'تم الربط! التوكن يتجدد تلقائياً كل 24 ساعة'}`);
                                 setWs(p => ({...p, shopify_store: shop, shopify_key: r.data.access_token}));
                                 showToast(isEn ? 'Shopify connected ✅' : 'تم ربط Shopify ✅', 'success');
                             } catch (e) {
                                 const err = e.response?.data?.error || e.message;
-                                setShopifyTokenMsg(`❌ ${err}`);
                                 showToast(err, 'error');
                             }
                         }}
