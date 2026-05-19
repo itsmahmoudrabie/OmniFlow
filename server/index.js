@@ -1325,28 +1325,44 @@ app.post('/webhook/wasender', async (req, res) => {
 
     let targetTenantId = req.query.tenant_id || null;
 
-    if (!targetTenantId) {
-        let incomingPhone = null;
-        if (event === 'messages.upsert') {
-            const remoteJid = data.data?.key?.remoteJid || '';
-            incomingPhone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
-        } else if (event === 'messages.update') {
-            const updates = Array.isArray(data.data) ? data.data : [data.data];
-            const remoteJid = updates[0]?.key?.remoteJid || '';
-            incomingPhone = remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    let incomingPhone = null;
+    let messagesToProcess = [];
+
+    if (event === 'messages.upsert' || event === 'messages.received') {
+        const payloadData = data.data;
+        if (Array.isArray(payloadData)) {
+            messagesToProcess = payloadData;
+        } else if (payloadData?.messages) {
+            messagesToProcess = Array.isArray(payloadData.messages) ? payloadData.messages : [payloadData.messages];
+        } else if (payloadData) {
+            messagesToProcess = [payloadData];
         }
-        
-        if (incomingPhone) {
-            const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
-            if (route) targetTenantId = route.tenantId;
-        }
+
+        const firstMsg = messagesToProcess[0];
+        const remoteJid = firstMsg?.key?.remoteJid || '';
+        incomingPhone = firstMsg?.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    } else if (event === 'messages.update') {
+        const updates = Array.isArray(data.data) ? data.data : [data.data];
+        const remoteJid = updates[0]?.key?.remoteJid || '';
+        incomingPhone = updates[0]?.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    }
+    
+    if (!targetTenantId && incomingPhone) {
+        const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
+        if (route) targetTenantId = route.tenantId;
     }
 
     if (!targetTenantId) targetTenantId = 'global';
 
     tenantStorage.run({ tenantId: targetTenantId }, async () => {
-        if (event === 'messages.upsert') {
-            await handleWasenderMessage(data.data).catch(e => console.error('[WasenderWebhook] handler error:', e.message));
+        if (event === 'messages.upsert' || event === 'messages.received') {
+            for (const msg of messagesToProcess) {
+                // Compatibility for WasenderAPI flattened format
+                if (msg.messageBody && !msg.message) {
+                    msg.message = { conversation: msg.messageBody };
+                }
+                await handleWasenderMessage(msg).catch(e => console.error('[WasenderWebhook] handler error:', e.message));
+            }
         } else if (event === 'messages.update') {
             const updates = Array.isArray(data.data) ? data.data : [data.data];
             updates.forEach(upd => {
