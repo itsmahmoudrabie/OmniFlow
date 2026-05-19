@@ -5386,7 +5386,6 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                 )}
             </div>
         );
-        );
 
         case 'ai': return (
             <div className="space-y-4">
