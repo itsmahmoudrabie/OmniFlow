@@ -413,9 +413,13 @@ const App = () => {
     const [showPricing, setShowPricing] = useState(false);
 
     // ── Loading screen state ─────────────────────────────────────────────────
-    const [loadingScreen, setLoadingScreen] = useState(
-        () => !window.location.hash.includes('shopify_token=')
-    );
+    const [loadingScreen, setLoadingScreen] = useState(() => {
+        if (window.location.hash.includes('shopify_token=')) return false;
+        const token = localStorage.getItem('omni_token');
+        const tenant = localStorage.getItem('omni_tenant');
+        if (token && tenant) return false; // Optimistic loading: load instantly!
+        return true;
+    });
     const [loadingStep,   setLoadingStep]   = useState(0);
     const [loadingFading, setLoadingFading] = useState(false);
     const [showWelcome,   setShowWelcome]   = useState(false);
@@ -481,7 +485,7 @@ const App = () => {
 
     // ── Cold-start init: validate JWT or auto-reconnect via stored shop ──────
     useEffect(() => {
-        if (!loadingScreen || window.location.hash.includes('shopify_token=')) return;
+        if (window.location.hash.includes('shopify_token=')) return;
 
         // Extract clean shop domain from a URL and save to localStorage
         const persistShop = (shopUrl) => {
