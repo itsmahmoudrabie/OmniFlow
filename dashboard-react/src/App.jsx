@@ -414,15 +414,8 @@ const App = () => {
     const [isConfigured, setIsConfigured] = useState(() => {
         const cached = localStorage.getItem('omni_configured');
         if (cached === 'true') return true;
-        
-        try {
-            const tenant = JSON.parse(localStorage.getItem('omni_tenant') || 'null');
-            if (tenant?.config?.shopify_url || localStorage.getItem('omni_shop')) {
-                return true;
-            }
-        } catch (e) {}
-
-        if (cached === 'false') return false;
+        if (localStorage.getItem('omni_shop')) return true; // Instantly bypass onboarding flash if shop is linked
+        if (cached !== null) return false;
         return true;
     });
 
@@ -477,33 +470,33 @@ const App = () => {
     }, []);
 
 
-    // Handle Shopify OAuth redirect — pick up JWT from URL hash
+    // ── Global App Initialization ──
     useEffect(() => {
+        // 1. Handle Shopify OAuth redirect if present
         const hash = window.location.hash;
-        if (!hash.includes('shopify_token=')) return;
-        const params = new URLSearchParams(hash.slice(1));
-        const token = params.get('shopify_token');
-        const shop  = params.get('shop');
-        if (!token) return;
-        const planActivated = params.get('plan_activated');
-        window.history.replaceState(null, '', window.location.pathname);
-        if (shop) localStorage.setItem('omni_shop', shop);
-        axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => {
-                handleLogin(token, r.data, shop || null);
-                if (planActivated) setShowPricing(false);
-                setLoadingFading(true);
-                setTimeout(() => setLoadingScreen(false), 600);
-            })
-            .catch(() => {
-                setLoadingFading(true);
-                setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
-            });
-    }, []);
+        if (hash.includes('shopify_token=')) {
+            const params = new URLSearchParams(hash.slice(1));
+            const token = params.get('shopify_token');
+            const shop  = params.get('shop');
+            if (!token) return;
+            const planActivated = params.get('plan_activated');
+            window.history.replaceState(null, '', window.location.pathname);
+            if (shop) localStorage.setItem('omni_shop', shop);
+            axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => {
+                    handleLogin(token, r.data, shop || null);
+                    if (planActivated) setShowPricing(false);
+                    setLoadingFading(true);
+                    setTimeout(() => setLoadingScreen(false), 600);
+                })
+                .catch(() => {
+                    setLoadingFading(true);
+                    setTimeout(() => { setLoadingScreen(false); setAuthScreen('login'); }, 600);
+                });
+            return; // Exit early to prevent race conditions
+        }
 
-    // ── Cold-start init: validate JWT or auto-reconnect via stored shop ──────
-    useEffect(() => {
-        if (window.location.hash.includes('shopify_token=')) return;
+        // 2. Cold-start init: validate JWT or auto-reconnect via stored shop
 
         // Extract clean shop domain from a URL and save to localStorage
         const persistShop = (shopUrl) => {
@@ -4512,9 +4505,7 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
         if (cached) return cached;
         return tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '';
     });
-    const [shopifyConnected, setShopifyConnected] = React.useState(() => {
-        return !!(tenant?.config?.shopify_url || localStorage.getItem('omni_shop'));
-    });
+    const [shopifyConnected, setShopifyConnected] = React.useState(false);
     const [connectingShop, setConnectingShop] = React.useState(false);
 
     const connectShopify = async () => {
