@@ -4487,7 +4487,7 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
     const [step, setStep] = React.useState(1); // 1 = business & shopify, 2 = done
     const [saving, setSaving] = React.useState(false);
     const [form, setForm] = React.useState({
-        business_name: '',
+        business_name: tenant?.config?.business_name || tenant?.name || '',
     });
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -4497,9 +4497,14 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
         if (urlShop) {
             return urlShop.replace(/https?:\/\//i, '').replace(/\/$/, '');
         }
+        const cached = localStorage.getItem('omni_shop');
+        if (cached) return cached;
         return tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '';
     });
-    const [shopifyConnected, setShopifyConnected] = React.useState(!!tenant?.config?.shopify_url || !!(new URLSearchParams(window.location.search).get('shop')));
+    const [shopifyConnected, setShopifyConnected] = React.useState(() => {
+        const hasUrl = !!(tenant?.config?.shopify_url || localStorage.getItem('omni_shop'));
+        return hasUrl;
+    });
     const [connectingShop, setConnectingShop] = React.useState(false);
 
     const connectShopify = async () => {
