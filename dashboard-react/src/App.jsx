@@ -4471,17 +4471,47 @@ const CatalogManager = ({ showToast, lang, inbox = [] }) => {
 // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
     const isEn = lang === 'en';
-    const [step, setStep] = React.useState(1); // 1 = business info, 2 = done
+    const [step, setStep] = React.useState(1); // 1 = business & shopify, 2 = done
     const [saving, setSaving] = React.useState(false);
     const [form, setForm] = React.useState({
         business_name: '',
     });
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+    const [shopUrl, setShopUrl] = React.useState(tenant?.config?.shopify_url?.replace(/https?:\/\//i, '').replace(/\/$/, '') || '');
+    const [shopifyConnected, setShopifyConnected] = React.useState(!!tenant?.config?.shopify_url);
+    const [connectingShop, setConnectingShop] = React.useState(false);
+
+    const connectShopify = async () => {
+        const cleanUrl = shopUrl.replace(/https?:\/\//i, '').replace(/\/$/, '').trim().toLowerCase();
+        if (!cleanUrl) {
+            alert(isEn ? 'Please enter your Shopify store domain first.' : 'برجاء إدخال دومين متجر شوبيفاي أولاً.');
+            return;
+        }
+        if (!cleanUrl.includes('.myshopify.com')) {
+            alert(isEn ? 'Please enter a valid store domain ending in .myshopify.com' : 'برجاء إدخال دومين متجر شوبيفاي صحيح ينتهي بـ .myshopify.com');
+            return;
+        }
+        setConnectingShop(true);
+        try {
+            const r = await axios.post(`${API_URL}/shopify/fetch-token`, { shop: cleanUrl });
+            setShopUrl(cleanUrl);
+            setShopifyConnected(true);
+        } catch (e) {
+            const err = e.response?.data?.error || e.message;
+            alert(isEn ? `Connection failed: ${err}` : `فشل ربط المتجر: ${err}`);
+        }
+        setConnectingShop(false);
+    };
+
     const finish = async () => {
         setSaving(true);
         try {
-            await axios.post(`${API_URL}/config/setup`, { business_name: form.business_name, is_configured: true });
+            await axios.post(`${API_URL}/config/setup`, { 
+                business_name: form.business_name, 
+                shopify_url: shopUrl,
+                is_configured: true 
+            });
             setStep(2);
         } catch { }
         setSaving(false);
@@ -4492,8 +4522,8 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
 
     // Step indicators
     const steps = isEn
-        ? ['Business', 'Done']
-        : ['معلومات المشروع', 'جاهز'];
+        ? ['Setup', 'Done']
+        : ['معلومات المشروع والربط', 'جاهز'];
 
     return (
         <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4" dir={isEn ? 'ltr' : 'rtl'}>
@@ -4527,14 +4557,14 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
                 <div className="glass rounded-2xl overflow-hidden border border-brand-border/20">
                     <div className="p-7 space-y-5">
 
-                        {/* ── Step 1: Business Info ── */}
+                        {/* ── Step 1: Business & Shopify Info ── */}
                         {step === 1 && <>
                             <div className="text-center space-y-1">
                                 <div className="w-12 h-12 bg-brand-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-brand-accent/20 mb-3">
                                     <Building size={22} className="text-brand-accent" />
                                 </div>
-                                <h2 className="text-lg font-black text-brand-egg">{isEn ? 'Your Business' : 'معلومات المشروع'}</h2>
-                                <p className="text-xs text-brand-muted">{isEn ? 'Enter your store name and verify Shopify connection' : 'أدخل اسم متجرك وتحقق من ربط شوبيفاي'}</p>
+                                <h2 className="text-lg font-black text-brand-egg">{isEn ? 'Setup Your Business' : 'تهيئة المشروع والربط'}</h2>
+                                <p className="text-xs text-brand-muted">{isEn ? 'Configure your store name and link your Shopify store' : 'أدخل اسم متجرك وقم بربط متجر شوبيفاي الخاص بك'}</p>
                             </div>
                             <div className="space-y-4">
                                 <div>
@@ -4548,20 +4578,47 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
                                     />
                                 </div>
                                 <div>
-                                    <label className={labelCls}>{isEn ? 'Connected Shopify Store' : 'متجر Shopify المرتبط'}</label>
-                                    <div className="w-full bg-brand-input/40 border border-brand-border/20 rounded-xl px-3 py-2.5 text-sm text-brand-muted font-mono flex items-center gap-2">
-                                        <span>🏪</span>
-                                        <span>{tenant?.config?.shopify_url || (isEn ? 'Connected via App Store' : 'متصل عبر متجر التطبيقات')}</span>
-                                        <span className="ml-auto text-green-400 text-xs font-bold">✓ {isEn ? 'Connected' : 'مرتبط'}</span>
+                                    <label className={labelCls}>{isEn ? 'Shopify Store Domain' : 'دومين متجر Shopify'}</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            className={`${inputCls} flex-grow font-mono`}
+                                            dir="ltr"
+                                            placeholder="my-store.myshopify.com"
+                                            value={shopUrl}
+                                            disabled={shopifyConnected}
+                                            onChange={e => {
+                                                setShopUrl(e.target.value);
+                                                if (shopifyConnected) setShopifyConnected(false);
+                                            }}
+                                        />
+                                        {!shopifyConnected ? (
+                                            <button
+                                                onClick={connectShopify}
+                                                disabled={connectingShop || !shopUrl.trim()}
+                                                className="px-4 rounded-xl text-xs font-bold transition-all bg-brand-accent text-brand-bg hover:opacity-90 disabled:opacity-40 flex items-center justify-center shrink-0">
+                                                {connectingShop ? <Loader2 size={14} className="animate-spin" /> : (isEn ? 'Connect' : 'ربط')}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShopifyConnected(false)}
+                                                className="px-3 rounded-xl text-xs font-bold border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all shrink-0">
+                                                {isEn ? 'Disconnect' : 'إلغاء'}
+                                            </button>
+                                        )}
                                     </div>
+                                    {shopifyConnected && (
+                                        <p className="text-[11px] text-green-400 font-bold mt-1.5 flex items-center gap-1">
+                                            ✓ {isEn ? 'Shopify store connected successfully!' : 'تم ربط متجر Shopify بنجاح!'}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <button
-                                disabled={saving || !form.business_name.trim()}
+                                disabled={saving || !form.business_name.trim() || !shopifyConnected}
                                 onClick={finish}
                                 className="w-full bg-brand-accent text-brand-bg py-3 rounded-xl font-black hover:opacity-90 transition-all text-sm disabled:opacity-40 flex items-center justify-center gap-2">
                                 {saving && <Loader2 size={14} className="animate-spin" />}
-                                {isEn ? 'Next →' : 'التالي ←'}
+                                {isEn ? 'Finish Setup →' : 'إنهاء التهيئة ←'}
                             </button>
                         </>}
 
@@ -4580,7 +4637,7 @@ const OnboardingScreen = ({ lang, onLangChange, tenant, onComplete }) => {
                                 <div className="space-y-2 text-start">
                                     {[
                                         { icon: '🏪', text: isEn ? `Business: ${form.business_name}` : `المشروع: ${form.business_name}` },
-                                        { icon: '🛍️', text: isEn ? 'Shopify store connected' : 'تم ربط متجر Shopify' },
+                                        { icon: '🛍️', text: isEn ? `Shopify Store: ${shopUrl}` : `متجر شوبيفاي: ${shopUrl}` },
                                     ].map((item, i) => (
                                         <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-brand-accent/5 border border-brand-accent/15">
                                             <span>{item.icon}</span>
@@ -5286,46 +5343,31 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                         <p className="text-[14px] font-black text-brand-egg">Shopify Integration</p>
                         <p className="text-[10px] text-brand-muted">ADMIN API · WEBHOOKS · PRODUCT SYNC</p>
                     </div>
-                    <span className={`ml-auto text-[9px] font-black px-2 py-1 rounded-full ${shopConnected ? 'text-blue-400' : 'text-brand-muted'}`}
-                        style={{background: shopConnected ? 'rgba(59,130,246,0.12)' : 'rgba(100,100,100,0.1)'}}>
-                        ● {shopConnected ? 'SYNCED' : 'NOT SET'}
+                    <span className={`ml-auto text-[9px] font-black px-2.5 py-1 rounded-full ${shopConnected ? 'text-green-400 bg-green-500/10 border border-green-500/20' : 'text-brand-muted bg-brand-input/50'}`}>
+                        ● {shopConnected ? (isEn ? 'CONNECTED & SYNCED' : 'متصل ومتزامن') : (isEn ? 'NOT CONNECTED' : 'غير متصل')}
                     </span>
                 </div>
 
-                {/* Store domain + manual token */}
-                <div className="space-y-3">
-                    {renderField({label:(isEn ? 'Store Domain' : 'دومين المتجر'), field:"shopify_store", placeholder:"yourstore.myshopify.com", dir:"ltr"})}
-                    {renderField({label:(isEn ? 'Admin API Access Token' : 'Admin API Token'), field:"shopify_key", placeholder:"shpat_xxxxxxxxxxxxxxxxxxxxxxxx", dir:"ltr", secret:true})}
-                </div>
-
-                {/* ── One-click token fetch (server uses built-in app credentials) ── */}
-                <div className="rounded-xl p-4 space-y-3" style={{background:'rgba(150,191,72,0.07)', border:'1px solid rgba(150,191,72,0.2)'}}>
-                    <p className="text-[11px] font-black text-brand-egg uppercase tracking-wider">
-                        {isEn ? '🔗 Connect Shopify Store' : '🔗 ربط المتجر بـ Shopify'}
-                    </p>
-                    <p className="text-[10px] text-brand-muted leading-relaxed">
-                        {isEn
-                            ? 'Enter your store domain above then click Connect. A permanent token will be fetched and saved automatically — no Postman, no copy-paste.'
-                            : 'اكتب دومين المتجر فوق ثم اضغط ربط. التوكن هيتجيب ويتحفظ تلقائياً ويتجدد كل 24 ساعة.'
-                        }
-                    </p>
-                    <button
-                        onClick={async () => {
-                            const shop = (ws.shopify_store || '').replace(/https?:\/\//, '').replace(/\/$/, '').trim();
-                            if (!shop) return showToast(isEn ? 'Enter store domain first' : 'اكتب دومين المتجر أولاً', 'error');
-                            try {
-                                const r = await axios.post(`${API_URL}/shopify/fetch-token`, { shop });
-                                setWs(p => ({...p, shopify_store: shop, shopify_key: r.data.access_token}));
-                                showToast(isEn ? 'Shopify connected ✅' : 'تم ربط Shopify ✅', 'success');
-                            } catch (e) {
-                                const err = e.response?.data?.error || e.message;
-                                showToast(err, 'error');
-                            }
-                        }}
-                        className="w-full py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wider transition-all hover:opacity-90"
-                        style={{background:'#96BF48', color:'#fff'}}>
-                        {isEn ? '→ Connect Shopify Store' : '→ ربط المتجر'}
-                    </button>
+                {/* Connection Status Details */}
+                <div className="space-y-4">
+                    <div className="p-4 rounded-xl bg-brand-input/40 border border-brand-border/20 space-y-3">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-brand-muted">{isEn ? 'Store Domain' : 'دومين المتجر'}</span>
+                            <span className="font-mono text-brand-egg font-bold">{ws.shopify_store || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs border-t border-brand-border/10 pt-2">
+                            <span className="text-brand-muted">{isEn ? 'API Connection' : 'حالة الاتصال'}</span>
+                            <span className={shopConnected ? "text-green-400 font-bold" : "text-brand-muted font-bold"}>
+                                {shopConnected ? `✓ ${isEn ? 'Active' : 'نشط'}` : `✗ ${isEn ? 'Inactive' : 'غير نشط'}`}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs border-t border-brand-border/10 pt-2">
+                            <span className="text-brand-muted">{isEn ? 'Real-time Webhooks' : 'حالة الويب هوكس'}</span>
+                            <span className={shopConnected ? "text-green-400 font-bold" : "text-brand-muted font-bold"}>
+                                {shopConnected ? `✓ ${isEn ? 'Listening & Ready' : 'مستمع ونشط'}` : `✗ ${isEn ? 'Not listening' : 'غير مفعل'}`}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 {shopConnected && integrations.shopify && (
@@ -5343,6 +5385,7 @@ const SetupManager = ({ showToast, lang, onSave }) => {
                     </div>
                 )}
             </div>
+        );
         );
 
         case 'ai': return (
