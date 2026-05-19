@@ -80,9 +80,15 @@ app.use(cors({
 
 // Raw body for Shopify + WasenderAPI webhooks — MUST be before bodyParser.json
 app.use('/webhooks/shopify', express.raw({ type: 'application/json' }));
-app.use('/webhook/wasender', express.raw({ type: 'application/json' }));
+app.use('/webhook/wasender', express.raw({ type: '*/*', limit: '50mb' }));
 
-app.use(bodyParser.json({ limit: '50mb' }));
+// body-parser 2.x (Express 5) no longer skips already-parsed bodies,
+// so we must explicitly skip JSON parsing for raw-body webhook routes.
+const _jsonParser = bodyParser.json({ limit: '50mb' });
+app.use((req, res, next) => {
+    if (Buffer.isBuffer(req.body)) return next();
+    _jsonParser(req, res, next);
+});
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Shopify OAuth + webhooks — mounted after CONFIG is defined (further below)
@@ -1300,35 +1306,60 @@ app.post('/api/whatsapp/read', (_req, res) => res.json({ success: true }));
 // ─────────────────────────────────────────────
 const crypto = require('crypto');
 
+// GET test endpoint — hit from browser to verify the webhook URL is reachable
+app.get('/webhook/wasender', (_req, res) => {
+    res.json({ ok: true, message: 'WasenderAPI webhook endpoint is reachable', ts: Date.now() });
+});
+
 app.post('/webhook/wasender', async (req, res) => {
-    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+    // Safely get raw body — handle undefined/non-Buffer body
+    let rawBody;
+    if (Buffer.isBuffer(req.body)) {
+        rawBody = req.body;
+    } else if (typeof req.body === 'string') {
+        rawBody = Buffer.from(req.body, 'utf8');
+    } else if (req.body && typeof req.body === 'object') {
+        rawBody = Buffer.from(JSON.stringify(req.body), 'utf8');
+    } else {
+        console.error('[WasenderWebhook] Empty or unreadable body! Content-Type:', req.get('Content-Type'), 'Body type:', typeof req.body);
+        return res.sendStatus(200);
+    }
+
+    console.log('[WasenderWebhook] Received POST, body size:', rawBody.length, 'bytes, Content-Type:', req.get('Content-Type'));
 
     if (CONFIG.wasender_webhook_secret) {
         const signature = req.get('X-Webhook-Signature') || req.get('X-Wasender-Signature') || req.get('X-Hub-Signature-256') || '';
-        
-        // WasenderAPI sends the raw secret string in the header (or sometimes a hash, we check both just in case)
+
         const expectedHash = `sha256=${crypto.createHmac('sha256', CONFIG.wasender_webhook_secret).update(rawBody).digest('hex')}`;
-        
+
         const isRawMatch = signature === CONFIG.wasender_webhook_secret;
         const isHashMatch = signature === expectedHash;
 
         if (!isRawMatch && !isHashMatch) {
-            console.warn('[WasenderWebhook] Invalid signature received! Expected:', CONFIG.wasender_webhook_secret, 'Got:', signature);
+            console.warn('[WasenderWebhook] Signature REJECTED! Header:', signature, '| Expected raw:', CONFIG.wasender_webhook_secret, '| Expected hash:', expectedHash);
             return res.status(401).send('Invalid signature');
         }
+        console.log('[WasenderWebhook] Signature OK');
     }
 
     let data;
     try { data = JSON.parse(rawBody.toString('utf8')); }
-    catch { return res.sendStatus(200); }
+    catch (e) {
+        console.error('[WasenderWebhook] JSON parse failed:', e.message, '| Raw body preview:', rawBody.toString('utf8').slice(0, 200));
+        return res.sendStatus(200);
+    }
 
     const event = data.event || '';
     console.log(`[WasenderWebhook] event: ${event}`);
-    console.log('\n--- INCOMING WEBHOOK PAYLOAD ---');
-    console.log(JSON.stringify(data, null, 2));
-    console.log('--------------------------------\n');
+    console.log('[WasenderWebhook] payload:', JSON.stringify(data, null, 2));
 
     let targetTenantId = req.query.tenant_id || null;
+
+    const extractPhone = (key) => {
+        return key?.cleanedSenderPn
+            || (key?.remoteJid || '').replace(/@(s\.whatsapp\.net|lid)$/i, '').replace(/[^\d]/g, '')
+            || '';
+    };
 
     let incomingPhone = null;
     let messagesToProcess = [];
@@ -1344,14 +1375,12 @@ app.post('/webhook/wasender', async (req, res) => {
         }
 
         const firstMsg = messagesToProcess[0];
-        const remoteJid = firstMsg?.key?.remoteJid || '';
-        incomingPhone = firstMsg?.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+        incomingPhone = extractPhone(firstMsg?.key);
     } else if (event === 'messages.update') {
         const updates = Array.isArray(data.data) ? data.data : [data.data];
-        const remoteJid = updates[0]?.key?.remoteJid || '';
-        incomingPhone = updates[0]?.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+        incomingPhone = extractPhone(updates[0]?.key);
     }
-    
+
     if (!targetTenantId && incomingPhone) {
         const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
         if (route) targetTenantId = route.tenantId;
@@ -1362,7 +1391,6 @@ app.post('/webhook/wasender', async (req, res) => {
     tenantStorage.run({ tenantId: targetTenantId }, async () => {
         if (event === 'messages.upsert' || event === 'messages.received') {
             for (const msg of messagesToProcess) {
-                // Compatibility for WasenderAPI flattened format
                 if (msg.messageBody && !msg.message) {
                     msg.message = { conversation: msg.messageBody };
                 }
@@ -1405,7 +1433,7 @@ const handleWasenderMessage = async (msgData) => {
     const remoteJid = msgData.key?.remoteJid || '';
     if (remoteJid.includes('@g.us')) return;  // مجموعات — تجاهل
 
-    const phone = msgData.key?.cleanedSenderPn || remoteJid.replace('@s.whatsapp.net', '').replace(/[^\d]/g, '');
+    const phone = msgData.key?.cleanedSenderPn || remoteJid.replace(/@(s\.whatsapp\.net|lid)$/i, '').replace(/[^\d]/g, '');
     if (!phone) {
         console.warn('[WasenderWebhook] Could not extract phone number from message!');
         return;
