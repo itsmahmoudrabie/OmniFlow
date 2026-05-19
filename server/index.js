@@ -290,7 +290,7 @@ const sendViaWasender = async (to, msgObj) => {
         ).catch(e => console.warn('[WhatsAppRouter] Error saving route:', e.message));
     }
 
-    const url = `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/messages/send`;
+    const url = `https://www.wasenderapi.com/api/send-message`;
     return await axios.post(url, { to: cleanTo, ...msgObj }, {
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         timeout: 15000
@@ -561,7 +561,7 @@ app.post('/api/config/test-whatsapp', async (req, res) => {
     if (!sessionId || !sessionKey) return res.status(400).json({ error: 'Session ID and Session Key are required' });
     try {
         const r = await axios.get(
-            `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/status`,
+            `https://www.wasenderapi.com/api/status`,
             { headers: { Authorization: `Bearer ${sessionKey}` }, timeout: 8000 }
         );
         const status = r.data?.data?.status || r.data?.status || 'unknown';
@@ -664,7 +664,7 @@ app.get('/api/wasender/session-status', authMiddleware, async (req, res) => {
     if (!sessionId || !sessionKey) return res.json({ connected: false, status: 'not_configured' });
     try {
         const r = await axios.get(
-            `https://wasenderapi.com/api/sessions/${encodeURIComponent(sessionId)}/status`,
+            `https://www.wasenderapi.com/api/status`,
             { headers: { Authorization: `Bearer ${sessionKey}` }, timeout: 8000 }
         );
         const status = r.data?.data?.status || r.data?.status || 'unknown';
