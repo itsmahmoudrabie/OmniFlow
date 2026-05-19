@@ -81,8 +81,10 @@ router.post('/auto-reconnect', async (req, res) => {
         if (!tenant)
             return res.status(401).json({ error: 'reconnect_failed', reason: 'shop_not_found' });
 
+        const { decrypt } = require('../utils/crypto');
         const storedToken = tenant.config?.shopify_access_token || '';
-        if (!storedToken || !storedToken.startsWith('shpat_'))
+        const decryptedToken = decrypt(storedToken);
+        if (!decryptedToken || !decryptedToken.startsWith('shpat_'))
             return res.status(401).json({ error: 'reconnect_failed', reason: 'no_shpat_token' });
 
         // shpat_ (offline) tokens never expire — no Shopify API validation needed

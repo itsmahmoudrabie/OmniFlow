@@ -33,19 +33,20 @@ mongoose.connect(MONGODB_URI)
             console.warn('[Config] Failed to load SystemConfig at startup:', e.message);
         }
 
-        // Load Shopify credentials from most recent tenant (shpat_ tokens never expire)
+        // Load Shopify credentials from most recent tenant (tokens never expire)
         try {
             const Tenant = require('./models/Tenant');
+            const { decrypt } = require('./utils/crypto');
             const t = await Tenant.findOne({
-                'config.shopify_access_token': { $regex: /^shpat_/ }
+                'config.shopify_access_token': { $ne: '' }
             }).sort({ updatedAt: -1 });
             if (t?.config?.shopify_url) {
                 CONFIG.shopify_url = t.config.shopify_url
                     .replace(/https?:\/\//i, '').replace(/\/$/, '').trim();
-                CONFIG.shopify_access_token = t.config.shopify_access_token;
-                console.log(`[Shopify] ✅ Loaded from tenant at startup: ${CONFIG.shopify_url}`);
+                CONFIG.shopify_access_token = decrypt(t.config.shopify_access_token);
+                console.log(`[Shopify] ✅ Loaded and decrypted from tenant at startup: ${CONFIG.shopify_url}`);
             } else {
-                console.log('[Shopify] No tenant with shpat_ token found — user must connect via OAuth.');
+                console.log('[Shopify] No tenant with stored token found — user must connect via OAuth.');
             }
         } catch (e) {
             console.warn('[Shopify] Startup tenant load failed:', e.message);
