@@ -6,6 +6,7 @@
  */
 const crypto = require('crypto');
 const axios = require('axios');
+const { encrypt, decrypt } = require('./utils/crypto');
 
 // ─── HMAC verification ───
 const verifyOAuthHmac = (query, secret) => {
@@ -71,6 +72,24 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
         if (!hmac || !code) return res.status(400).send('Missing hmac/code');
         if (!verifyOAuthHmac(req.query, API_SECRET)) return res.status(400).send('HMAC verification failed');
 
+        // State validation
+        const parseCookies = (cookieHeader) => {
+            const list = {};
+            if (!cookieHeader) return list;
+            cookieHeader.split(';').forEach(cookie => {
+                let parts = cookie.split('=');
+                list[parts.shift().trim()] = decodeURIComponent(parts.join('='));
+            });
+            return list;
+        };
+        const cookies = parseCookies(req.headers.cookie);
+        const cookieState = cookies.shopify_oauth_state;
+
+        if (!state || state !== cookieState) {
+            console.warn('[Shopify OAuth] State mismatch or expired. Query state:', state, 'Cookie state:', cookieState);
+            return res.status(400).send('State validation failed. Please try installing again.');
+        }
+
         try {
             // Exchange code for access token
             const tokenRes = await axios.post(`https://${shop}/admin/oauth/access_token`, {
@@ -80,21 +99,18 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
             });
             const { access_token, scope } = tokenRes.data;
 
-            // Update CONFIG so existing endpoints work immediately
-            if (CONFIG && typeof CONFIG === 'object') {
-                CONFIG.shopify_url = shop; // no https:// prefix
-                CONFIG.shopify_access_token = access_token;
-            }
+            // Encrypt token for database storage
+            const encryptedToken = encrypt(access_token);
 
             // Always persist to MongoDB so token survives Railway redeploys
             try {
                 const Tenant = require('./models/Tenant');
                 await Tenant.findOneAndUpdate(
                     {},
-                    { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': access_token } },
+                    { $set: { 'config.shopify_url': `https://${shop}`, 'config.shopify_access_token': encryptedToken } },
                     { sort: { createdAt: -1 }, upsert: false }
                 );
-                console.log(`[Shopify OAuth] Token saved to MongoDB for ${shop}`);
+                console.log(`[Shopify OAuth] Encrypted token saved to MongoDB for ${shop}`);
             } catch (e) {
                 console.warn('[Shopify OAuth] MongoDB save failed:', e.message);
             }
@@ -133,13 +149,13 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
                             status: 'trial',
                             config: {
                                 shopify_url: `https://${shop}`,
-                                shopify_access_token: access_token,
+                                shopify_access_token: encryptedToken,
                             }
                         });
                         tenant.applyPlanLimits();
                         await tenant.save();
                     } else {
-                        tenant.config.shopify_access_token = access_token;
+                        tenant.config.shopify_access_token = encryptedToken;
                         await tenant.save();
                     }
                     jwtToken = signToken(tenant._id);
@@ -156,7 +172,7 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
 
             // Redirect to embedded page (shown inside Shopify Admin iframe)
             if (jwtToken) {
-                res.redirect(`/embedded#jwt=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}`);
+                res.redirect(`/embedded#jwt=${encodeURIComponent(jwtToken)}&shop=${encodeURIComponent(shop)}&app_url=${encodeURIComponent(APP_URL)}`);
             } else {
                 res.redirect('/');
             }
@@ -210,7 +226,7 @@ const mountShopifyOAuth = (app, CONFIG = {}) => {
         try {
             const Tenant = require('./models/Tenant');
             const tenant = await Tenant.findOne({
-                'config.shopify_access_token': { $regex: /^shpat_/ }
+                'config.shopify_access_token': { $ne: '' }
             }).sort({ updatedAt: -1 }).select('config.shopify_url').lean();
             const shop = tenant?.config?.shopify_url
                 ? tenant.config.shopify_url.replace(/https?:\/\//i, '').replace(/\/$/, '')

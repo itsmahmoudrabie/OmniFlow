@@ -368,7 +368,8 @@ export const LoginPage = ({ lang = 'ar', onLogin }) => {
     const doOAuth = (shopDomain) => {
         let s = cleanShop(shopDomain);
         if (!s.endsWith('.myshopify.com')) s = `${s}.myshopify.com`;
-        const target = `/auth?shop=${encodeURIComponent(s)}`;
+        const backendOrigin = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
+        const target = `${backendOrigin}/auth?shop=${encodeURIComponent(s)}`;
         // Break out of Shopify iframe if needed
         if (window.top !== window.self) window.top.location.href = target;
         else window.location.href = target;

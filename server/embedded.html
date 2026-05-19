@@ -71,7 +71,8 @@
         ? '<div class="row"><span class="label">Trial ends in</span><span class="value trial-days">' + trialDays + ' days</span></div>'
         : '';
 
-      var dashUrl = location.origin + '/#shopify_token=' + encodeURIComponent(jwt) + '&shop=' + encodeURIComponent(shop);
+      var appUrl = params.get('app_url') || location.origin;
+      var dashUrl = appUrl.replace(/\/$/, '') + '/#shopify_token=' + encodeURIComponent(jwt) + '&shop=' + encodeURIComponent(shop);
 
       document.getElementById('root').innerHTML =
         '<div class="card">' +
