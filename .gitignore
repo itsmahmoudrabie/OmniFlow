@@ -69,3 +69,5 @@ coverage/
 *.zip
 .tmp/
 tmp/
+.claude/
+
