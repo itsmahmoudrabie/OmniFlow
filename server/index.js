@@ -1366,8 +1366,9 @@ app.post('/webhook/wasender', async (req, res) => {
     let incomingPhone = null;
     let messagesToProcess = [];
 
-    if (event === 'messages.upsert' || event === 'messages.received') {
-        const payloadData = data.data;
+    const isMessageEvent = typeof event === 'string' && event.includes('message') && !event.includes('update') && !event.includes('status');
+    if (isMessageEvent) {
+        const payloadData = data.data || data;
         if (Array.isArray(payloadData)) {
             messagesToProcess = payloadData;
         } else if (payloadData?.messages) {
@@ -1400,7 +1401,7 @@ app.post('/webhook/wasender', async (req, res) => {
 
     tenantStorage.run({ tenantId: targetTenantId }, async () => {
         console.log('[WasenderWebhook] Inside tenantStorage.run, event:', event, '| msgs:', messagesToProcess.length);
-        if (event === 'messages.upsert' || event === 'messages.received' || event === 'messages-personal.received') {
+        if (isMessageEvent) {
             for (const msg of messagesToProcess) {
                 console.log('[WasenderWebhook] Processing msg:', msg.key?.fromMe ? 'OUTGOING' : 'INCOMING', '| phone:', msg.key?.cleanedSenderPn, '| hasMessage:', !!msg.message, '| hasBody:', !!msg.messageBody);
                 if (msg.messageBody && !msg.message) {
@@ -1439,27 +1440,32 @@ app.post('/webhook/wasender', async (req, res) => {
 });
 
 const handleWasenderMessage = async (msgData) => {
-    console.log('[handleWasenderMessage] ENTERED | fromMe:', msgData?.key?.fromMe, '| remoteJid:', msgData?.key?.remoteJid);
+    console.log('[handleWasenderMessage] ENTERED | msgData:', JSON.stringify(msgData).slice(0, 150));
     if (!msgData) { console.log('[handleWasenderMessage] EXIT: no msgData'); return; }
-    if (msgData.key?.fromMe) { console.log('[handleWasenderMessage] EXIT: fromMe=true'); return; }
+    
+    const fromMe = msgData.key?.fromMe ?? msgData.fromMe ?? false;
+    if (fromMe) { console.log('[handleWasenderMessage] EXIT: fromMe=true'); return; }
 
-    const remoteJid = msgData.key?.remoteJid || '';
-    if (remoteJid.includes('@g.us')) { console.log('[handleWasenderMessage] EXIT: group message'); return; }
+    const remoteJid = msgData.key?.remoteJid || msgData.from || msgData.remoteJid || '';
+    if (remoteJid.includes('@g.us') || remoteJid.includes('-')) { console.log('[handleWasenderMessage] EXIT: group message'); return; }
 
-    const phone = msgData.key?.cleanedSenderPn || remoteJid.replace(/@(s\.whatsapp\.net|lid)$/i, '').replace(/[^\d]/g, '');
+    const phone = msgData.key?.cleanedSenderPn || msgData.cleanedSenderPn || remoteJid.replace(/@(s\.whatsapp\.net|lid|c\.us)$/i, '').replace(/[^\d]/g, '');
     if (!phone) {
         console.warn('[WasenderWebhook] Could not extract phone number from message!');
         return;
     }
 
-    const name = msgData.pushName || phone;
-    const msg  = msgData.message || {};
+    const name = msgData.pushName || msgData.senderName || phone;
+    const msg  = msgData.message || msgData;
 
     let text = '', msgType = 'text';
 
     if (msg.conversation)                        { text = msg.conversation; }
     else if (msg.extendedTextMessage?.text)      { text = msg.extendedTextMessage.text; }
-    else if (msg.imageMessage)                   { text = msg.imageMessage.caption || '📷 صورة'; msgType = 'image'; }
+    else if (msg.text)                           { text = msg.text; }
+    else if (msg.body)                           { text = msg.body; }
+    else if (msg.messageBody)                    { text = msg.messageBody; }
+    else if (msg.imageMessage || msg.type === 'image') { text = msg.imageMessage?.caption || msg.caption || '📷 صورة'; msgType = 'image'; }
     else if (msg.videoMessage)                   { text = msg.videoMessage.caption || '🎬 فيديو'; msgType = 'video'; }
     else if (msg.audioMessage || msg.pttMessage) { text = '🎤 مقطع صوتي'; msgType = 'audio'; }
     else if (msg.documentMessage)                { text = msg.documentMessage.fileName || '📄 مستند'; msgType = 'document'; }
