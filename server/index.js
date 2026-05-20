@@ -1391,7 +1391,7 @@ app.post('/webhook/wasender', async (req, res) => {
     if (!targetTenantId) targetTenantId = 'global';
 
     tenantStorage.run({ tenantId: targetTenantId }, async () => {
-        if (event === 'messages.upsert' || event === 'messages.received') {
+        if (event === 'messages.upsert' || event === 'messages.received' || event === 'messages-personal.received') {
             for (const msg of messagesToProcess) {
                 if (msg.messageBody && !msg.message) {
                     msg.message = { conversation: msg.messageBody };
