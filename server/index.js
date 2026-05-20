@@ -1487,7 +1487,8 @@ const handleWasenderMessage = async (msgData) => {
     const incomingMsgObj = {
         msgType, text, from: 'customer',
         time: new Date().toLocaleString('ar-EG'),
-        wamid: msgData.key?.id || null,
+        timestamp: Date.now(),
+        wamid: msgData.key?.id || msgData.id || msgData.messageId || null,
     };
     if (msgType === 'location') {
         incomingMsgObj.location = {
@@ -1499,6 +1500,19 @@ const handleWasenderMessage = async (msgData) => {
     }
     if (existing) {
         existing.messages = existing.messages || [];
+        
+        const incWamid = incomingMsgObj.wamid;
+        const isDuplicate = existing.messages.some(m => {
+            if (incWamid && m.wamid === incWamid) return true;
+            if (!incWamid && m.text === text && m.from === 'customer' && m.timestamp && (Date.now() - m.timestamp < 10000)) return true;
+            return false;
+        });
+
+        if (isDuplicate) {
+            console.log(`[WasenderWebhook] Ignored duplicate message from ${phone}`);
+            return;
+        }
+
         existing.messages.push(incomingMsgObj);
         existing.lastUpdated = new Date().toLocaleString('ar-EG');
         existing.name = name;
