@@ -1383,20 +1383,30 @@ app.post('/webhook/wasender', async (req, res) => {
         incomingPhone = extractPhone(updates[0]?.key);
     }
 
+    console.log('[WasenderWebhook] messagesToProcess count:', messagesToProcess.length, '| incomingPhone:', incomingPhone);
+
     if (!targetTenantId && incomingPhone) {
-        const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
-        if (route) targetTenantId = route.tenantId;
+        try {
+            const route = await WhatsAppRouter.findOne({ phone: incomingPhone }).lean();
+            if (route) targetTenantId = route.tenantId;
+            console.log('[WasenderWebhook] WhatsAppRouter lookup:', route ? `found tenant ${route.tenantId}` : 'no route, using global');
+        } catch (e) {
+            console.error('[WasenderWebhook] WhatsAppRouter lookup FAILED:', e.message);
+        }
     }
 
     if (!targetTenantId) targetTenantId = 'global';
+    console.log('[WasenderWebhook] Processing with tenantId:', targetTenantId);
 
     tenantStorage.run({ tenantId: targetTenantId }, async () => {
+        console.log('[WasenderWebhook] Inside tenantStorage.run, event:', event, '| msgs:', messagesToProcess.length);
         if (event === 'messages.upsert' || event === 'messages.received' || event === 'messages-personal.received') {
             for (const msg of messagesToProcess) {
+                console.log('[WasenderWebhook] Processing msg:', msg.key?.fromMe ? 'OUTGOING' : 'INCOMING', '| phone:', msg.key?.cleanedSenderPn, '| hasMessage:', !!msg.message, '| hasBody:', !!msg.messageBody);
                 if (msg.messageBody && !msg.message) {
                     msg.message = { conversation: msg.messageBody };
                 }
-                await handleWasenderMessage(msg).catch(e => console.error('[WasenderWebhook] handler error:', e.message));
+                await handleWasenderMessage(msg).catch(e => console.error('[WasenderWebhook] handler error:', e.message, e.stack));
             }
         } else if (event === 'messages.update') {
             const updates = Array.isArray(data.data) ? data.data : [data.data];
@@ -1429,11 +1439,12 @@ app.post('/webhook/wasender', async (req, res) => {
 });
 
 const handleWasenderMessage = async (msgData) => {
-    if (!msgData) return;
-    if (msgData.key?.fromMe) return;          // رسائل صادرة — تجاهل
+    console.log('[handleWasenderMessage] ENTERED | fromMe:', msgData?.key?.fromMe, '| remoteJid:', msgData?.key?.remoteJid);
+    if (!msgData) { console.log('[handleWasenderMessage] EXIT: no msgData'); return; }
+    if (msgData.key?.fromMe) { console.log('[handleWasenderMessage] EXIT: fromMe=true'); return; }
 
     const remoteJid = msgData.key?.remoteJid || '';
-    if (remoteJid.includes('@g.us')) return;  // مجموعات — تجاهل
+    if (remoteJid.includes('@g.us')) { console.log('[handleWasenderMessage] EXIT: group message'); return; }
 
     const phone = msgData.key?.cleanedSenderPn || remoteJid.replace(/@(s\.whatsapp\.net|lid)$/i, '').replace(/[^\d]/g, '');
     if (!phone) {
